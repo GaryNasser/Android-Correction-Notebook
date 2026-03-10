@@ -6,11 +6,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
-import androidx.navigation.compose.*
-import com.github.garynasser.correction_notebook.navigation.Screen
-import com.github.garynasser.correction_notebook.navigation.bottomNavItems
-import com.github.garynasser.correction_notebook.screens.HomeScreen
+import androidx.navigation.compose.* // 必须包含这个，解决 composable 报错
+import com.github.garynasser.correction_notebook.screens.* // 导入 Screen, bottomNavItems 和所有界面函数
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainContainer() {
     val navController = rememberNavController()
@@ -21,6 +20,7 @@ fun MainContainer() {
                 val navBackStackEntry by navController.currentBackStackEntryAsState()
                 val currentDestination = navBackStackEntry?.destination
 
+                // 这里的 bottomNavItems 是从 screens 包里导入的
                 bottomNavItems.forEach { screen ->
                     NavigationBarItem(
                         icon = { Icon(screen.icon, contentDescription = null) },
@@ -28,7 +28,9 @@ fun MainContainer() {
                         selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true,
                         onClick = {
                             navController.navigate(screen.route) {
-                                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
                                 launchSingleTop = true
                                 restoreState = true
                             }
@@ -43,15 +45,11 @@ fun MainContainer() {
             startDestination = Screen.Home.route,
             modifier = Modifier.padding(innerPadding)
         ) {
+            // 注意：这里调用的函数名必须和你 screens 文件夹下定义的一致
             composable(Screen.Home.route) { HomeScreen() }
-            composable(Screen.Workbook.route) { PlaceholderScreen("错题本页面") }
-            composable(Screen.Community.route) { PlaceholderScreen("社交社区") }
-            composable(Screen.Profile.route) { PlaceholderScreen("个人中心") }
+            composable(Screen.StudyCenter.route) { StudyCenterScreen() }
+            composable(Screen.Community.route) { CommunityScreen() }
+            composable(Screen.Profile.route) { ProfileScreen() }
         }
     }
-}
-
-@Composable
-fun PlaceholderScreen(text: String) {
-    Surface { Text(text) }
 }
