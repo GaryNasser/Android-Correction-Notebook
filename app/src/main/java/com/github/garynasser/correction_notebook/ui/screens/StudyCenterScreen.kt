@@ -1,4 +1,4 @@
-package com.github.garynasser.correction_notebook.screens
+package com.github.garynasser.correction_notebook.ui.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
