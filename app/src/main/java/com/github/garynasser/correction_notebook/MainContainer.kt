@@ -7,7 +7,12 @@ import androidx.compose.ui.Modifier
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.* // 必须包含这个，解决 composable 报错
-import com.github.garynasser.correction_notebook.screens.* // 导入 Screen, bottomNavItems 和所有界面函数
+import com.github.garynasser.correction_notebook.ui.screens.CommunityScreen
+import com.github.garynasser.correction_notebook.ui.screens.home.HomeScreen
+import com.github.garynasser.correction_notebook.ui.screens.ProfileScreen
+import com.github.garynasser.correction_notebook.ui.navigation.Screen
+import com.github.garynasser.correction_notebook.ui.screens.StudyCenterScreen
+import com.github.garynasser.correction_notebook.ui.navigation.bottomNavItems
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
