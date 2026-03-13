@@ -19,6 +19,8 @@ import com.github.garynasser.correction_notebook.data.model.auth.AuthState
 import com.github.garynasser.correction_notebook.ui.screens.home.HomeScreen
 import com.github.garynasser.correction_notebook.ui.screens.login.UsernameLoginScreen
 import com.github.garynasser.correction_notebook.ui.screens.main.MainViewModel
+import com.github.garynasser.correction_notebook.MainContainer
+
 
 @Composable
 fun NavGraph(
@@ -35,10 +37,13 @@ fun NavGraph(
         is AuthState.Authenticated, is AuthState.Unauthenticated -> {
             NavHost(
                 navController = navController,
+                // 如果已登录，跳转到 Home 路由（现在这个路由代表整个带底栏的壳子）
                 startDestination = if (state is AuthState.Authenticated) Home else Login
             ) {
+                // 【关键修改点】
                 composable<Home> {
-                    HomeScreen()
+                    // 不要直接调 HomeScreen()，要调用 MainContainer()
+                    MainContainer()
                 }
 
                 composable<Login> {
@@ -48,6 +53,7 @@ fun NavGraph(
         }
     }
 
+    // LaunchedEffect 部分保持逻辑不变，但确保跳转的是 Home
     LaunchedEffect(authState) {
         if (authState is AuthState.Unauthenticated) {
             navController.navigate(Login) {
@@ -55,7 +61,9 @@ fun NavGraph(
             }
         } else if (authState is AuthState.Authenticated) {
             navController.navigate(Home) {
-                popUpTo(Home)
+                // 建议加上这个，防止重复进入主页栈
+                launchSingleTop = true
+                popUpTo(Login) { inclusive = true }
             }
         }
     }
