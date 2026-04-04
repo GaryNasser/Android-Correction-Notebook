@@ -1,0 +1,46 @@
+package com.github.garynasser.correction_notebook.data.remote.api
+
+import com.github.garynasser.correction_notebook.data.model.common.ApiResponse
+import com.github.garynasser.correction_notebook.data.model.yanhe.PaginatedData
+import retrofit2.http.GET
+import retrofit2.http.Header
+import retrofit2.http.Headers
+import retrofit2.http.Query
+
+interface VideoApiService {
+    @Headers(
+        "Origin: https://www.yanhekt.cn",
+        "Referer: https://www.yanhekt.cn/",
+        "xdomain-client: web_user",
+        "Xdomain-Client: web_user",
+        "Xclient-Version: v1",
+        "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    )
+    @GET("https://cbiz.yanhekt.cn/v2/course/list")
+    suspend fun getCourseList(
+        @Header("Authorization") token: String,
+        @Query("semesters[]") semester: String,
+        @Query("page") page: String,
+        @Query("pageSize") pageSize: String,
+        @Query("keyword") keyword: String?
+    ): ApiResponse<PaginatedData>
+
+
+    @Headers(
+        "Origin: https://www.yanhekt.cn",
+        "Referer: https://www.yanhekt.cn/",
+        "xdomain-client: web_user",
+        "Xdomain-Client: web_user",
+        "Xclient-Version: v1",
+        "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    )
+    suspend fun getPersonalCourseList(
+        @Header("Authorization") token: String,
+        @Query("semesters[]") semester: String,
+        @Query("page") page: String,
+        @Query("pageSize") pageSize: String,
+        @Query("keyword") keyword: String?,
+        @Query("user_relationship_type") type: String = "1",
+        @Query("with_introduction") with_introduction: String = "true"
+    ): ApiResponse<PaginatedData>
+}

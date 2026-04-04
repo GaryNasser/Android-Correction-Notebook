@@ -60,8 +60,10 @@ dependencies {
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     implementation("com.google.dagger:hilt-android:2.51.1")
     kapt("com.google.dagger:hilt-android-compiler:2.51.1")
-    // 如果你用 Compose，还需要这个
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:okhttp-urlconnection:4.12.0")
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)

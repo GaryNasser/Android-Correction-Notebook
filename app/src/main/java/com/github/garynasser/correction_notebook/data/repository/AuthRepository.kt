@@ -2,24 +2,21 @@ package com.github.garynasser.correction_notebook.data.repository
 
 import com.github.garynasser.correction_notebook.data.local.TokenManager
 import com.github.garynasser.correction_notebook.data.model.auth.AuthState
+import com.github.garynasser.correction_notebook.data.model.auth.CredentialAuthRequest
 import com.github.garynasser.correction_notebook.data.model.auth.LoginRequest
+import com.github.garynasser.correction_notebook.data.model.auth.UserCredential
 import com.github.garynasser.correction_notebook.data.remote.api.AuthApiService
 import com.github.garynasser.correction_notebook.di.AuthRetrofit
-import com.github.garynasser.correction_notebook.di.NetworkModule
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
+import com.github.garynasser.correction_notebook.utils.RSAUtils
 import retrofit2.Retrofit
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class AuthRepository @Inject constructor(
-    @AuthRetrofit private val retrofit: Retrofit,
     private val tokenManager: TokenManager,
     private val apiService: AuthApiService
 ) {
-    private val authApi = retrofit.create(AuthApiService::class.java)
-
     suspend fun validateSession(): AuthState {
         val refreshToken = tokenManager.getRefreshToken()
         if (refreshToken == null) return AuthState.Unauthenticated
@@ -31,22 +28,22 @@ class AuthRepository @Inject constructor(
                 val accessToken = responseBody.accessToken
                 val refreshToken = responseBody.refreshToken
 
-                tokenManager.saveTokens(accessToken, refreshToken)
+                tokenManager.saveLoginTokens(accessToken, refreshToken)
                 AuthState.Authenticated
             } else {
                 AuthState.Unauthenticated
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             AuthState.Unauthenticated
         }
     }
 
     suspend fun login(username: String, password: String): Result<Unit> {
         return try {
-            val response = authApi.login(LoginRequest(username, password))
+            val response = apiService.login(LoginRequest(username, password))
 
             if (response.code == 200 && response.data != null) {
-                tokenManager.saveTokens(
+                tokenManager.saveLoginTokens(
                     access = response.data.accessToken,
                     refresh = response.data.refreshToken ?: ""
                 )
@@ -60,7 +57,43 @@ class AuthRepository @Inject constructor(
         }
     }
 
+    /*
+    * 新用户注册时调用，认证为本校学生，需要带上用户名和密码
+    * */
+    suspend fun casAuth(studentId: String, password: String): Result<Unit> {
+        return try {
+            val publicKeyResponse = apiService.getRSAPublicKey()
+
+            if (publicKeyResponse.code != 200 || publicKeyResponse.data == null) {
+                return Result.failure(Exception("Can't get RSA public key"))
+            }
+
+            val keyId = publicKeyResponse.data.keyId
+            val publicKeyBase64 = publicKeyResponse.data.publicKey
+
+            val encryptStudentPassword = RSAUtils.encrypt(password, publicKeyBase64)
+
+            val request = CredentialAuthRequest(
+                keyId = keyId,
+                studentId = studentId,
+                encryptStudentPassword = encryptStudentPassword
+            )
+
+            val response = apiService.casAuth(request)
+
+            if (response.code == 200 && response.data != null) {
+
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception("BIT cas failed"))
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(Exception("BIT cas failed"))
+        }
+    }
+
     suspend fun logout() {
-        tokenManager.removeToken()
+        tokenManager.removeLoginToken()
     }
 }
