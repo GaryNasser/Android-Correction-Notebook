@@ -11,9 +11,11 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import okhttp3.JavaNetCookieJar
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import java.net.CookieHandler
 import javax.inject.Qualifier
 import javax.inject.Singleton
 
@@ -24,11 +26,10 @@ annotation class BasicRetrofit
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
 annotation class AuthRetrofit
-
 @Module
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
-    private const val BASE_URL = "https://auth-api.free.beeceptor.com";
+    private const val BASE_URL = "https://auth-api.free.beeceptor.com"
 
     @Provides
     @Singleton

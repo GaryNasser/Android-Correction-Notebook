@@ -29,7 +29,7 @@ class LoginViewModel @Inject constructor (
 
 
     val isLoginEnable: Boolean
-        get() = password.length >= 6 && !isLoading
+        get() = password.length >= 6 && !isLoading && !username.isEmpty()
 
     fun onLoginClick() {
         if (isLoading) return
