@@ -47,6 +47,7 @@ class LoginViewModel @Inject constructor (
             } .onFailure { exception ->
                 errorMessage = exception.message ?: "登录失败，请检查网络"
                 isLoading = false
+                authStateManager.updateState(AuthState.Unauthenticated)
             }
         }
     }

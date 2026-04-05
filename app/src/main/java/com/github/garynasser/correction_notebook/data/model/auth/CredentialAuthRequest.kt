@@ -9,6 +9,6 @@ data class CredentialAuthRequest(
     @SerializedName("studentId")
     val studentId: String,
 
-    @SerializedName("encryptStudentPassword")
+    @SerializedName("encryptStudentPasswordBase64")
     val encryptStudentPassword: String
 )

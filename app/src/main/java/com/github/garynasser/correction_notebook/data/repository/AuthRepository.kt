@@ -4,11 +4,9 @@ import com.github.garynasser.correction_notebook.data.local.TokenManager
 import com.github.garynasser.correction_notebook.data.model.auth.AuthState
 import com.github.garynasser.correction_notebook.data.model.auth.CredentialAuthRequest
 import com.github.garynasser.correction_notebook.data.model.auth.LoginRequest
-import com.github.garynasser.correction_notebook.data.model.auth.UserCredential
+import com.github.garynasser.correction_notebook.data.model.auth.RegisterRequest
 import com.github.garynasser.correction_notebook.data.remote.api.AuthApiService
-import com.github.garynasser.correction_notebook.di.AuthRetrofit
 import com.github.garynasser.correction_notebook.utils.RSAUtils
-import retrofit2.Retrofit
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -60,7 +58,12 @@ class AuthRepository @Inject constructor(
     /*
     * 新用户注册时调用，认证为本校学生，需要带上用户名和密码
     * */
-    suspend fun casAuth(studentId: String, password: String): Result<Unit> {
+    suspend fun casAuth(
+        studentId: String,
+        casPassword: String,
+        username: String,
+        password: String
+        ): Result<Unit> {
         return try {
             val publicKeyResponse = apiService.getRSAPublicKey()
 
@@ -71,15 +74,21 @@ class AuthRepository @Inject constructor(
             val keyId = publicKeyResponse.data.keyId
             val publicKeyBase64 = publicKeyResponse.data.publicKey
 
-            val encryptStudentPassword = RSAUtils.encrypt(password, publicKeyBase64)
+            val encryptStudentPassword = RSAUtils.encrypt(casPassword, publicKeyBase64)
 
-            val request = CredentialAuthRequest(
+            val credential = CredentialAuthRequest(
                 keyId = keyId,
                 studentId = studentId,
                 encryptStudentPassword = encryptStudentPassword
             )
 
-            val response = apiService.casAuth(request)
+            val request = RegisterRequest(
+                username = username,
+                password = password,
+                credentialAuthRequest = credential
+            )
+
+            val response = apiService.register(request)
 
             if (response.code == 200 && response.data != null) {
 

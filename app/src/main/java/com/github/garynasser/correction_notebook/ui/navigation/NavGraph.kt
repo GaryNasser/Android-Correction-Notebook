@@ -64,11 +64,11 @@ fun NavGraph(
                 }
 
                 composable<CasAuth> { backStackEntry ->
-                    val loginEntry = remember(backStackEntry) {
-                        navController.getBackStackEntry<Login>()
+                    val registerEntry = remember(backStackEntry) {
+                        navController.getBackStackEntry<Register>()
                     }
 
-                    val authViewModel: RegistrationViewModel = hiltViewModel(loginEntry)
+                    val authViewModel: RegistrationViewModel = hiltViewModel(registerEntry)
 
                     CasScreen(
                         viewModel = authViewModel
