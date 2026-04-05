@@ -37,12 +37,12 @@ class TokenAuthenticator(
 
             authStateManager.updateState(AuthState.Authenticated)
 
-            return response.request().newBuilder()
+            return response.request.newBuilder()
                 .header("Authorization", newAccessToken)
                 .build()
         } else {
             runBlocking {
-                tokenManager.removeToken()
+                tokenManager.removeLoginToken()
             }
 
             authStateManager.updateState(AuthState.Unauthenticated)

@@ -29,7 +29,7 @@ class LoginViewModel @Inject constructor (
 
 
     val isLoginEnable: Boolean
-        get() = password.length >= 6 && !isLoading
+        get() = password.length >= 6 && !isLoading && !username.isEmpty()
 
     fun onLoginClick() {
         if (isLoading) return
@@ -47,6 +47,7 @@ class LoginViewModel @Inject constructor (
             } .onFailure { exception ->
                 errorMessage = exception.message ?: "登录失败，请检查网络"
                 isLoading = false
+                authStateManager.updateState(AuthState.Unauthenticated)
             }
         }
     }
