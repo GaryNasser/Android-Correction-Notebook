@@ -7,3 +7,9 @@ object Home
 
 @Serializable
 object Login
+
+@Serializable
+object Register
+
+@Serializable
+object CasAuth

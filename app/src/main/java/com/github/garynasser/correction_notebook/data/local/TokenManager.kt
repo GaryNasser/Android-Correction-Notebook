@@ -19,6 +19,8 @@ class TokenManager(private val context: Context) {
     companion object {
         private val ACCESS_TOKEN_KEY = stringPreferencesKey("access_token")
         private val REFRESH_TOKEN_KEY = stringPreferencesKey("refresh_token")
+
+        private val YANHE_LOGIN_TOKEN_KEY = stringPreferencesKey("yanhe_login_key")
     }
 
     val accessToken: Flow<String?> = context.dataStore.data
@@ -45,10 +47,28 @@ class TokenManager(private val context: Context) {
             preferences[REFRESH_TOKEN_KEY]
         }
 
-    suspend fun saveTokens(access: String, refresh: String?) {
+    val yanheLoginToken: Flow<String?> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            preferences[YANHE_LOGIN_TOKEN_KEY]
+        }
+
+    suspend fun saveLoginTokens(access: String, refresh: String?) {
         context.dataStore.edit { preferences ->
             preferences[ACCESS_TOKEN_KEY] = access
             preferences[REFRESH_TOKEN_KEY] = refresh ?: ""
+        }
+    }
+
+    suspend fun saveYanheLoginTokens(token: String) {
+        context.dataStore.edit { preferences ->
+            preferences[YANHE_LOGIN_TOKEN_KEY] = token
         }
     }
 
@@ -58,10 +78,16 @@ class TokenManager(private val context: Context) {
         }
     }
 
-    suspend fun removeToken() {
+    suspend fun removeLoginToken() {
         context.dataStore.edit { preferences ->
             preferences.remove(ACCESS_TOKEN_KEY)
             preferences.remove(REFRESH_TOKEN_KEY)
+        }
+    }
+
+    suspend fun removeYanheLoginToken() {
+        context.dataStore.edit { preferences ->
+            preferences.remove(YANHE_LOGIN_TOKEN_KEY)
         }
     }
 
@@ -71,5 +97,9 @@ class TokenManager(private val context: Context) {
 
     suspend fun getRefreshToken(): String? {
         return refreshToken.first()
+    }
+
+    suspend fun getYanheLoginToken(): String? {
+        return yanheLoginToken.first()
     }
 }

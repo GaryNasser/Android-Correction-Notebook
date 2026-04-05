@@ -1,6 +1,7 @@
 package com.github.garynasser.correction_notebook.di
 
 import android.content.Context
+import android.util.Log
 import com.github.garynasser.correction_notebook.data.local.TokenManager
 import com.github.garynasser.correction_notebook.data.remote.api.AuthApiService
 import com.github.garynasser.correction_notebook.data.remote.network.AuthInterceptor
@@ -12,6 +13,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import okhttp3.OkHttpClient
+import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import javax.inject.Qualifier
@@ -28,7 +30,19 @@ annotation class AuthRetrofit
 @Module
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
-    private const val BASE_URL = "https://auth-api.free.beeceptor.com";
+    private const val BASE_URL = "http://10.0.2.2:8888/"
+
+    // 辅助方法：创建一个日志拦截器
+    private fun createLoggingInterceptor(): HttpLoggingInterceptor {
+        return HttpLoggingInterceptor { message ->
+            // 使用特定的 TAG 方便在 Logcat 中过滤
+            Log.d("OkHttp", message)
+        }.apply {
+            // Level.BODY 会打印请求和响应的所有细节（包括 URL, Method, Body, Header）
+            // 如果觉得内容太多，可以改为 Level.BASIC 或 Level.HEADERS
+            level = HttpLoggingInterceptor.Level.BODY
+        }
+    }
 
     @Provides
     @Singleton
@@ -40,7 +54,9 @@ object NetworkModule {
     @Singleton
     @BasicRetrofit
     fun provideBasicOkHttpClient(): OkHttpClient {
-        return OkHttpClient.Builder().build()
+        return OkHttpClient.Builder()
+            .addInterceptor(createLoggingInterceptor()) // 添加日志
+            .build()
     }
 
     @Provides
@@ -64,9 +80,10 @@ object NetworkModule {
     ): OkHttpClient {
         return OkHttpClient.Builder()
             .addInterceptor(AuthInterceptor(tokenManager))
-            .authenticator(TokenAuthenticator(
-                tokenManager, authApiService, authStateManager
-            ))
+            .addInterceptor(createLoggingInterceptor())
+//            .authenticator(TokenAuthenticator(
+//                tokenManager, authApiService, authStateManager
+//            ))
             .build()
     }
 

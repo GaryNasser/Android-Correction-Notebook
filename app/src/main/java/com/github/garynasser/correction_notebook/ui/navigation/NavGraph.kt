@@ -7,26 +7,30 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.navigation.NavController
-import androidx.navigation.NavGraph
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import com.github.garynasser.correction_notebook.data.model.auth.AuthState
-import com.github.garynasser.correction_notebook.ui.screens.home.HomeScreen
 import com.github.garynasser.correction_notebook.ui.screens.login.UsernameLoginScreen
 import com.github.garynasser.correction_notebook.ui.screens.main.MainViewModel
 import com.github.garynasser.correction_notebook.MainContainer
+import com.github.garynasser.correction_notebook.data.model.auth.AuthEvent
+import com.github.garynasser.correction_notebook.data.repository.AuthStateManager
+import com.github.garynasser.correction_notebook.ui.screens.register.CasScreen
+import com.github.garynasser.correction_notebook.ui.screens.register.RegistrationViewModel
+import com.github.garynasser.correction_notebook.ui.screens.register.RegisterScreen
 
 
 @Composable
 fun NavGraph(
     modifier: Modifier,
     navController: NavHostController,
-    mainViewModel: MainViewModel = hiltViewModel()
+    mainViewModel: MainViewModel = hiltViewModel(),
+    authStateManager: AuthStateManager = AuthStateManager()
 ) {
     val authState by mainViewModel.authState.collectAsState()
 
@@ -37,23 +41,44 @@ fun NavGraph(
         is AuthState.Authenticated, is AuthState.Unauthenticated -> {
             NavHost(
                 navController = navController,
-                // 如果已登录，跳转到 Home 路由（现在这个路由代表整个带底栏的壳子）
                 startDestination = if (state is AuthState.Authenticated) Home else Login
             ) {
-                // 【关键修改点】
                 composable<Home> {
-                    // 不要直接调 HomeScreen()，要调用 MainContainer()
                     MainContainer()
                 }
 
                 composable<Login> {
-                    UsernameLoginScreen()
+                    UsernameLoginScreen(
+                        onNavigateToRegister = { navController.navigate(Register) }
+                    )
+                }
+
+                composable<Register> { backStackEntry ->
+                    val registerViewModel: RegistrationViewModel = hiltViewModel(backStackEntry)
+
+                    RegisterScreen(
+                        onNext = { navController.navigate(CasAuth) },
+                        viewModel = registerViewModel,
+                        onNavigateToLogin = { navController.navigate(Login) }
+                    )
+                }
+
+                composable<CasAuth> { backStackEntry ->
+                    val registerEntry = remember(backStackEntry) {
+                        navController.getBackStackEntry<Register>()
+                    }
+
+                    val authViewModel: RegistrationViewModel = hiltViewModel(registerEntry)
+
+                    CasScreen(
+                        viewModel = authViewModel,
+                        onBackButtonClick = { navController.popBackStack() }
+                    )
                 }
             }
         }
     }
 
-    // LaunchedEffect 部分保持逻辑不变，但确保跳转的是 Home
     LaunchedEffect(authState) {
         if (authState is AuthState.Unauthenticated) {
             navController.navigate(Login) {
@@ -61,9 +86,23 @@ fun NavGraph(
             }
         } else if (authState is AuthState.Authenticated) {
             navController.navigate(Home) {
-                // 建议加上这个，防止重复进入主页栈
                 launchSingleTop = true
                 popUpTo(Login) { inclusive = true }
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        authStateManager.authEvents.collect { event ->
+            when (event) {
+                AuthEvent.NEEDS_LOGIN -> {
+                    navController.navigate(CasAuth) {
+                        popUpTo(navController.graph.startDestinationId) {
+                            saveState = true
+                        }
+                    }
+                }
+                else -> {}
             }
         }
     }

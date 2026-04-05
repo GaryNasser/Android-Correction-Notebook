@@ -10,7 +10,8 @@ activityCompose = "1.9.1"
 composeBom = "2024.10.01"
 navigationCompose = "2.8.3"
 serialization = "1.6.3"
-composeCompiler = "1.5.14"  # Compose编译器版本
+composeCompiler = "1.5.14"
+material3 = "1.4.0"  # Compose编译器版本
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -29,6 +30,7 @@ androidx-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit
 androidx-material3 = { group = "androidx.compose.material3", name = "material3" }
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "serialization" }
+material3 = { group = "androidx.compose.material3", name = "material3", version.ref = "material3" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
