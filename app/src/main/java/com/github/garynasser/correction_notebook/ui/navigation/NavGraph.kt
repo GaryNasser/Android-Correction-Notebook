@@ -71,7 +71,8 @@ fun NavGraph(
                     val authViewModel: RegistrationViewModel = hiltViewModel(registerEntry)
 
                     CasScreen(
-                        viewModel = authViewModel
+                        viewModel = authViewModel,
+                        onBackButtonClick = { navController.popBackStack() }
                     )
                 }
             }
