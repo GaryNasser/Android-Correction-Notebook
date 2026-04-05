@@ -4,20 +4,27 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
-import androidx.navigation.compose.* // 必须包含这个，解决 composable 报错
-import com.github.garynasser.correction_notebook.ui.screens.CommunityScreen
+import androidx.navigation.compose.*
+import com.github.garynasser.correction_notebook.ui.screens.AITutorScreen
 import com.github.garynasser.correction_notebook.ui.screens.home.HomeScreen
-import com.github.garynasser.correction_notebook.ui.screens.ProfileScreen
 import com.github.garynasser.correction_notebook.ui.navigation.Screen
-import com.github.garynasser.correction_notebook.ui.screens.StudyCenterScreen
+import com.github.garynasser.correction_notebook.ui.screens.KnowledgeBaseScreen
+import com.github.garynasser.correction_notebook.ui.screens.ProfileScreen
+import com.github.garynasser.correction_notebook.ui.screens.YanheClassroomScreen
 import com.github.garynasser.correction_notebook.ui.navigation.bottomNavItems
+import com.github.garynasser.correction_notebook.ui.navigation.bottomNavItemsWithAI
+import com.github.garynasser.correction_notebook.ui.screens.main.SettingsViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainContainer() {
+fun MainContainer(
+    settingsViewModel: SettingsViewModel = hiltViewModel()
+) {
     val navController = rememberNavController()
+    val aiEnabled by settingsViewModel.aiEnabled.collectAsState()
+    val navItems = if (aiEnabled) bottomNavItemsWithAI else bottomNavItems
 
     Scaffold(
         bottomBar = {
@@ -25,8 +32,7 @@ fun MainContainer() {
                 val navBackStackEntry by navController.currentBackStackEntryAsState()
                 val currentDestination = navBackStackEntry?.destination
 
-                // 这里的 bottomNavItems 是从 screens 包里导入的
-                bottomNavItems.forEach { screen ->
+                navItems.forEach { screen ->
                     NavigationBarItem(
                         icon = { Icon(screen.icon, contentDescription = null) },
                         label = { Text(screen.title) },
@@ -50,11 +56,13 @@ fun MainContainer() {
             startDestination = Screen.Home.route,
             modifier = Modifier.padding(innerPadding)
         ) {
-            // 注意：这里调用的函数名必须和你 screens 文件夹下定义的一致
             composable(Screen.Home.route) { HomeScreen() }
-            composable(Screen.StudyCenter.route) { StudyCenterScreen() }
-            composable(Screen.Community.route) { CommunityScreen() }
-            composable(Screen.Profile.route) { ProfileScreen() }
+            composable(Screen.YanheClassroom.route) { YanheClassroomScreen() }
+            composable(Screen.KnowledgeBase.route) { KnowledgeBaseScreen() }
+            composable(Screen.AITutor.route) { AITutorScreen() }
+            composable(Screen.Profile.route) {
+                ProfileScreen(settingsViewModel = settingsViewModel)
+            }
         }
     }
 }
