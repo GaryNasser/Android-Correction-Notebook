@@ -60,8 +60,14 @@ class RegistrationViewModel @Inject constructor(
 
         viewModelScope.launch {
             isCasLoading = true
+            authStateManager.updateState(AuthState.Loading)
 
-            val result = authRepository.casAuth(studentId, casPassword)
+            val result = authRepository.casAuth(
+                studentId,
+                casPassword,
+                username,
+                password
+            )
 
             result.onSuccess {
                 isCasLoading = false
@@ -70,6 +76,7 @@ class RegistrationViewModel @Inject constructor(
             } .onFailure { exception ->
                 errorMessage = exception.message ?: "登录失败，请检查网络"
                 isCasLoading = false
+                authStateManager.updateState(AuthState.Unauthenticated)
                 yanheRepository.removeStudentCredential()
             }
         }

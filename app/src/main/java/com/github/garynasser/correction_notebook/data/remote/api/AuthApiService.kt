@@ -3,6 +3,7 @@ package com.github.garynasser.correction_notebook.data.remote.api
 import com.github.garynasser.correction_notebook.data.model.auth.LoginRequest
 import com.github.garynasser.correction_notebook.data.model.auth.RSAResponse
 import com.github.garynasser.correction_notebook.data.model.auth.CredentialAuthRequest
+import com.github.garynasser.correction_notebook.data.model.auth.RegisterRequest
 import com.github.garynasser.correction_notebook.data.model.auth.TokenResponse
 import com.github.garynasser.correction_notebook.data.model.common.ApiResponse
 import retrofit2.Call
@@ -26,6 +27,6 @@ interface AuthApiService {
     @POST("/auth/yanhe-kt")
     suspend fun getYanheToken(@Body request: CredentialAuthRequest): ApiResponse<String>
 
-    @POST("/auth/bit-cas")
-    suspend fun casAuth(@Body request: CredentialAuthRequest): ApiResponse<Unit>
+    @POST("/auth/register")
+    suspend fun register(@Body request: RegisterRequest): ApiResponse<TokenResponse>
 }

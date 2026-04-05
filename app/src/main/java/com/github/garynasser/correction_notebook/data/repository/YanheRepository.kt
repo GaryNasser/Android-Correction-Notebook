@@ -8,8 +8,9 @@ import com.github.garynasser.correction_notebook.data.remote.api.AuthApiService
 import com.github.garynasser.correction_notebook.di.AuthRetrofit
 import com.github.garynasser.correction_notebook.utils.RSAUtils
 import retrofit2.Retrofit
+import javax.inject.Inject
 
-class YanheRepository(
+class YanheRepository @Inject constructor(
     private val tokenManager: TokenManager,
     private val credentialManager: CredentialManager,
     private val authService: AuthApiService
