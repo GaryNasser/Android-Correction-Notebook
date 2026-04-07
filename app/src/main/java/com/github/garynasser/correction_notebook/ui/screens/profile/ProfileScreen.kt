@@ -1,4 +1,4 @@
-package com.github.garynasser.correction_notebook.ui.screens
+package com.github.garynasser.correction_notebook.ui.screens.profile
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -9,8 +9,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.github.garynasser.correction_notebook.ui.screens.main.SettingsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -178,7 +180,7 @@ fun ProfileScreen(
 
 @Composable
 fun SettingsItem(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     title: String,
     subtitle: String,
     onClick: () -> Unit
