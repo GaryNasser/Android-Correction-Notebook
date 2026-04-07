@@ -1,5 +1,6 @@
 package com.github.garynasser.correction_notebook.ui.screens.register
 
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -51,6 +52,10 @@ class RegistrationViewModel @Inject constructor(
         } finally {
             isOnNextLoading = false
         }
+    }
+
+    fun submitReauthentication() {
+        yanheRepository.saveStudentCredential(UserCredential(studentId, casPassword))
     }
 
     fun submit() {
