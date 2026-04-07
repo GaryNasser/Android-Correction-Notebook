@@ -19,3 +19,9 @@ object Profile
 
 @Serializable
 object CourseList
+
+@Serializable
+object KnowledgeBase
+
+@Serializable
+object AITutor
