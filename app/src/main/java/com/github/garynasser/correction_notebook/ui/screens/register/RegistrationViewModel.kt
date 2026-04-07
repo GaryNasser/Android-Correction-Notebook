@@ -72,7 +72,7 @@ class RegistrationViewModel @Inject constructor(
             result.onSuccess {
                 isCasLoading = false
                 authStateManager.updateState(AuthState.Authenticated)
-                yanheRepository.saveStudentCredential(UserCredential(username, password))
+                yanheRepository.saveStudentCredential(UserCredential(studentId, casPassword))
             } .onFailure { exception ->
                 errorMessage = exception.message ?: "登录失败，请检查网络"
                 isCasLoading = false

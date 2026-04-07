@@ -19,9 +19,9 @@ interface VideoApiService {
     @GET("https://cbiz.yanhekt.cn/v2/course/list")
     suspend fun getCourseList(
         @Header("Authorization") token: String,
-        @Query("semesters[]") semester: String,
-        @Query("page") page: String,
-        @Query("pageSize") pageSize: String,
+        @Query("semesters[]") semester: Int?,
+        @Query("page") page: Int,
+        @Query("pageSize") pageSize: Int,
         @Query("keyword") keyword: String?
     ): ApiResponse<PaginatedData>
 
@@ -34,13 +34,14 @@ interface VideoApiService {
         "Xclient-Version: v1",
         "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
     )
+    @GET("https://cbiz.yanhekt.cn/v2/course/list")
     suspend fun getPersonalCourseList(
         @Header("Authorization") token: String,
-        @Query("semesters[]") semester: String,
-        @Query("page") page: String,
-        @Query("pageSize") pageSize: String,
+        @Query("semesters[]") semester: Int?,
+        @Query("page") page: Int,
+        @Query("pageSize") pageSize: Int,
         @Query("keyword") keyword: String?,
-        @Query("user_relationship_type") type: String = "1",
-        @Query("with_introduction") with_introduction: String = "true"
+        @Query("user_relationship_type") type: Int = 1,
+        @Query("with_introduction") introduction: Boolean = true
     ): ApiResponse<PaginatedData>
 }

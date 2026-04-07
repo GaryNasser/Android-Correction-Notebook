@@ -13,3 +13,9 @@ object Register
 
 @Serializable
 object CasAuth
+
+@Serializable
+object Profile
+
+@Serializable
+object CourseList
