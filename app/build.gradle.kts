@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.serialization)
     id("com.google.dagger.hilt.android")
+    id("org.jetbrains.kotlin.plugin.compose")
     kotlin("kapt") // Hilt 需要 kapt 插件
 }
 
@@ -40,10 +41,10 @@ android {
         compose = true
     }
 
-    // 对于 Kotlin 1.9.24，需要在这里配置 Compose 编译器
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.14"  // 与 Kotlin 1.9.24 兼容的版本
-    }
+//    // 对于 Kotlin 1.9.24，需要在这里配置 Compose 编译器
+//    composeOptions {
+//        kotlinCompilerExtensionVersion = "1.5.14"  // 与 Kotlin 1.9.24 兼容的版本
+//    }
 }
 
 dependencies {
@@ -51,6 +52,7 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.navigation.compose)
+    implementation("io.coil-kt:coil-compose:2.6.0")
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.androidx.activity.compose)
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
@@ -59,6 +61,10 @@ dependencies {
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     implementation("com.google.dagger:hilt-android:2.51.1")
+    implementation(libs.androidx.foundation.layout)
+    implementation(libs.ui)
+    implementation(libs.androidx.foundation)
+    implementation(libs.androidx.ui.text)
     kapt("com.google.dagger:hilt-android-compiler:2.51.1")
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")

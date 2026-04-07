@@ -24,7 +24,7 @@ interface AuthApiService {
     @GET("/auth/public-key")
     suspend fun getRSAPublicKey(): ApiResponse<RSAResponse>
 
-    @POST("/auth/yanhe-kt")
+    @POST("/auth/yanhe-token")
     suspend fun getYanheToken(@Body request: CredentialAuthRequest): ApiResponse<String>
 
     @POST("/auth/register")

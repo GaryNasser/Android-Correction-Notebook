@@ -19,6 +19,10 @@ class YanheRepository @Inject constructor(
         credentialManager.saveCredentials(credential)
     }
 
+    fun getStudentCredential(): UserCredential? {
+        return credentialManager.getCredentials();
+    }
+
     fun removeStudentCredential() {
         credentialManager.removeCredentials()
     }

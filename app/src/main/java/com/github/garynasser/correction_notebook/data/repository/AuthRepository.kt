@@ -5,6 +5,7 @@ import com.github.garynasser.correction_notebook.data.model.auth.AuthState
 import com.github.garynasser.correction_notebook.data.model.auth.CredentialAuthRequest
 import com.github.garynasser.correction_notebook.data.model.auth.LoginRequest
 import com.github.garynasser.correction_notebook.data.model.auth.RegisterRequest
+import com.github.garynasser.correction_notebook.data.model.auth.UserCredential
 import com.github.garynasser.correction_notebook.data.remote.api.AuthApiService
 import com.github.garynasser.correction_notebook.utils.RSAUtils
 import javax.inject.Inject
@@ -71,15 +72,10 @@ class AuthRepository @Inject constructor(
                 return Result.failure(Exception("Can't get RSA public key"))
             }
 
-            val keyId = publicKeyResponse.data.keyId
-            val publicKeyBase64 = publicKeyResponse.data.publicKey
-
-            val encryptStudentPassword = RSAUtils.encrypt(casPassword, publicKeyBase64)
-
-            val credential = CredentialAuthRequest(
-                keyId = keyId,
-                studentId = studentId,
-                encryptStudentPassword = encryptStudentPassword
+            val credential = RSAUtils.sendEncryptCredential(
+                userCredential = UserCredential(studentId, casPassword),
+                keyId = publicKeyResponse.data.keyId,
+                publicKeyBase64 = publicKeyResponse.data.publicKey
             )
 
             val request = RegisterRequest(
@@ -91,12 +87,10 @@ class AuthRepository @Inject constructor(
             val response = apiService.register(request)
 
             if (response.code == 200 && response.data != null) {
-
                 Result.success(Unit)
             } else {
                 Result.failure(Exception("BIT cas failed"))
             }
-            Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(Exception("BIT cas failed"))
         }
