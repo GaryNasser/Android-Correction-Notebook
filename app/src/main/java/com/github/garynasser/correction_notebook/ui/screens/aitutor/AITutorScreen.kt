@@ -1,4 +1,4 @@
-package com.github.garynasser.correction_notebook.ui.screens
+package com.github.garynasser.correction_notebook.ui.screens.aitutor
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn

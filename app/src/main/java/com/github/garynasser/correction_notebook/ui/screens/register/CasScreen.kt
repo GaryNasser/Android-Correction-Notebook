@@ -33,7 +33,8 @@ import com.github.garynasser.correction_notebook.ui.screens.register.Registratio
 fun CasScreen(
     modifier: Modifier = Modifier,
     viewModel: RegistrationViewModel,
-    onBackButtonClick: () -> Unit
+    onBackButtonClick: () -> Unit,
+    onConfirm: () -> Unit = { viewModel.submit() },
 ) {
     Box(
         modifier = Modifier.fillMaxWidth()
@@ -50,7 +51,7 @@ fun CasScreen(
             AuthFormTemplate(
                 title = "统一认证",
                 buttonText = "确定",
-                onButtonClick = { viewModel.submit() },
+                onButtonClick = { onConfirm() },
                 isButtonEnabled = viewModel.isCasEnabled,
                 inputFields = {
                     OutlinedTextField(

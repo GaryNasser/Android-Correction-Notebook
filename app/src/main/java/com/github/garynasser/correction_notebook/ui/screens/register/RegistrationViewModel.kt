@@ -1,5 +1,6 @@
 package com.github.garynasser.correction_notebook.ui.screens.register
 
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -53,6 +54,10 @@ class RegistrationViewModel @Inject constructor(
         }
     }
 
+    fun submitReauthentication() {
+        yanheRepository.saveStudentCredential(UserCredential(studentId, casPassword))
+    }
+
     fun submit() {
         if (isCasLoading) return
 
@@ -72,7 +77,7 @@ class RegistrationViewModel @Inject constructor(
             result.onSuccess {
                 isCasLoading = false
                 authStateManager.updateState(AuthState.Authenticated)
-                yanheRepository.saveStudentCredential(UserCredential(username, password))
+                yanheRepository.saveStudentCredential(UserCredential(studentId, casPassword))
             } .onFailure { exception ->
                 errorMessage = exception.message ?: "登录失败，请检查网络"
                 isCasLoading = false

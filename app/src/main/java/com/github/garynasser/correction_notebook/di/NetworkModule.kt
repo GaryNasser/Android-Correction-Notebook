@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.github.garynasser.correction_notebook.data.local.TokenManager
 import com.github.garynasser.correction_notebook.data.remote.api.AuthApiService
+import com.github.garynasser.correction_notebook.data.remote.api.VideoApiService
 import com.github.garynasser.correction_notebook.data.remote.network.AuthInterceptor
 import com.github.garynasser.correction_notebook.data.remote.network.TokenAuthenticator
 import com.github.garynasser.correction_notebook.data.repository.AuthStateManager
@@ -68,6 +69,17 @@ object NetworkModule {
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(AuthApiService::class.java)
+    }
+
+    @Provides
+    @Singleton
+    fun provideVideoApiService(): VideoApiService {
+        val retrofit = Retrofit.Builder()
+            .baseUrl("https://cbiz.yanhekt.cn/")
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+
+        return retrofit.create(VideoApiService::class.java)
     }
 
     @Provides

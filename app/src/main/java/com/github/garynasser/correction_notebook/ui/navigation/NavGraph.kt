@@ -1,5 +1,6 @@
 package com.github.garynasser.correction_notebook.ui.navigation
 
+import android.util.Log
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
@@ -30,8 +31,8 @@ fun NavGraph(
     modifier: Modifier,
     navController: NavHostController,
     mainViewModel: MainViewModel = hiltViewModel(),
-    authStateManager: AuthStateManager = AuthStateManager()
 ) {
+    val authStateManager = mainViewModel.authStateManager
     val authState by mainViewModel.authState.collectAsState()
 
     when(val state = authState) {
@@ -65,14 +66,29 @@ fun NavGraph(
 
                 composable<CasAuth> { backStackEntry ->
                     val registerEntry = remember(backStackEntry) {
-                        navController.getBackStackEntry<Register>()
+                        try {
+                            navController.getBackStackEntry<Register>()
+                        } catch (e: Exception) {
+                            null
+                        }
                     }
 
-                    val authViewModel: RegistrationViewModel = hiltViewModel(registerEntry)
+                    val authViewModel: RegistrationViewModel = if (registerEntry != null) {
+                        hiltViewModel(registerEntry)
+                    } else {
+                        hiltViewModel(backStackEntry)
+                    }
 
                     CasScreen(
                         viewModel = authViewModel,
-                        onBackButtonClick = { navController.popBackStack() }
+                        onBackButtonClick = { navController.popBackStack() },
+                        onConfirm = {
+                            if (registerEntry != null) {
+                                authViewModel.submit()
+                            } else {
+                                authViewModel.submitReauthentication()
+                            }
+                        }
                     )
                 }
             }
@@ -96,6 +112,7 @@ fun NavGraph(
         authStateManager.authEvents.collect { event ->
             when (event) {
                 AuthEvent.NEEDS_LOGIN -> {
+                    Log.d("NEEDS_LOGIN", "接收到信号")
                     navController.navigate(CasAuth) {
                         popUpTo(navController.graph.startDestinationId) {
                             saveState = true

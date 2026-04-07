@@ -1,4 +1,4 @@
-package com.github.garynasser.correction_notebook.ui.screens
+package com.github.garynasser.correction_notebook.ui.screens.knowledgebase
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -10,6 +10,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
@@ -359,7 +360,7 @@ fun StatCard(
     modifier: Modifier = Modifier,
     title: String,
     value: String,
-    color: androidx.compose.ui.graphics.Color
+    color: Color
 ) {
     Surface(
         modifier = modifier,
