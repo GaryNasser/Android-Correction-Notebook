@@ -1,5 +1,6 @@
 package com.github.garynasser.correction_notebook.data.repository
 
+import android.util.Log
 import com.github.garynasser.correction_notebook.data.model.auth.AuthEvent
 import com.github.garynasser.correction_notebook.data.model.auth.AuthState
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -21,6 +22,7 @@ class AuthStateManager @Inject constructor() {
     }
 
     suspend fun onCasLoginRequired() {
+        Log.d("NEEDS_LOGIN", "发出信号")
         _authEvents.emit(AuthEvent.NEEDS_LOGIN)
     }
 

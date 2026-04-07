@@ -20,7 +20,7 @@ import javax.inject.Inject
 @HiltViewModel
 class MainViewModel @Inject constructor(
     private val authRepository: AuthRepository,
-    private val authStateManager: AuthStateManager
+    val authStateManager: AuthStateManager
 ) : ViewModel() {
     val authState = authStateManager.authState
 
