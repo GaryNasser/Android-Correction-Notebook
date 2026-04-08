@@ -1,5 +1,7 @@
 package com.github.garynasser.correction_notebook.ui.screens.yanhe
 
+import android.net.Uri
+import android.util.Log
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,8 +37,10 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -44,12 +48,24 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.github.garynasser.correction_notebook.data.model.yanhe.CourseSection
 import com.github.garynasser.correction_notebook.data.model.yanhe.Video
 
+
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CourseVideoListScreen(
     viewModel: VideoListViewModel = hiltViewModel(),
+    onNavigateToPlayer: (String) -> Unit,
     onBackButtonClick: () -> Unit
 ) {
+    val context = LocalContext.current
+
+    LaunchedEffect(viewModel.playState) {
+        val state = viewModel.playState
+        if (state is PlayState.Success) {
+            onNavigateToPlayer(state.filePath)
+            viewModel.resetPlayState()
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -91,7 +107,12 @@ fun CourseVideoListScreen(
                         items(state.videos) { video ->
                             VideoCard(
                                 section = video,
-                                onPlayClick = {  }
+                                onPlayClick = { videos ->
+                                    Log.i("VIDEO", "Play btn pressed")
+                                    if (videos.isNotEmpty()) {
+                                        viewModel.prepareVideo(videos[0].mainUrl, context)
+                                    }
+                                }
                             )
                         }
                     }
@@ -140,7 +161,7 @@ fun VideoCard(
             )
 
             Spacer(modifier = Modifier.width(16.dp))
-            
+
             val hasVideo = section.videos.isNotEmpty()
 
             FilledIconButton(

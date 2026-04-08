@@ -1,5 +1,6 @@
 package com.github.garynasser.correction_notebook
 
+import android.util.Log
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -8,12 +9,14 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
+import androidx.navigation.toRoute
 import com.github.garynasser.correction_notebook.ui.navigation.AITutor
 import com.github.garynasser.correction_notebook.ui.navigation.CourseList
 import com.github.garynasser.correction_notebook.ui.navigation.Home
 import com.github.garynasser.correction_notebook.ui.navigation.KnowledgeBase
 import com.github.garynasser.correction_notebook.ui.navigation.Profile
 import com.github.garynasser.correction_notebook.ui.navigation.VideoList
+import com.github.garynasser.correction_notebook.ui.navigation.VideoPlayer
 import com.github.garynasser.correction_notebook.ui.navigation.bottomNavList
 import com.github.garynasser.correction_notebook.ui.screens.aitutor.AITutorScreen
 import com.github.garynasser.correction_notebook.ui.screens.home.HomeScreen
@@ -22,6 +25,7 @@ import com.github.garynasser.correction_notebook.ui.screens.main.SettingsViewMod
 import com.github.garynasser.correction_notebook.ui.screens.profile.ProfileScreen
 import com.github.garynasser.correction_notebook.ui.screens.yanhe.CourseListScreen
 import com.github.garynasser.correction_notebook.ui.screens.yanhe.CourseVideoListScreen
+import com.github.garynasser.correction_notebook.ui.screens.yanhe.PlayerScreen
 
 @Composable
 fun MainContainer(
@@ -78,9 +82,21 @@ fun MainContainer(
             composable<KnowledgeBase> { KnowledgeBaseScreen() }
 
             composable<VideoList> {
-                CourseVideoListScreen(onBackButtonClick = {
-                    navController.popBackStack()
-                })
+                CourseVideoListScreen(
+                    onBackButtonClick = {
+                        navController.popBackStack()
+                    },
+                    onNavigateToPlayer = { filePath ->
+                        navController.navigate(VideoPlayer(filePath = filePath))
+                    }
+                )
+            }
+
+            composable<VideoPlayer> { backStackEntry ->
+                val args = backStackEntry.toRoute<VideoPlayer>()
+                Log.i("VIDEO", "agrs $args.filePath")
+
+                PlayerScreen()
             }
 
             composable<Profile> { ProfileScreen(settingsViewModel) }

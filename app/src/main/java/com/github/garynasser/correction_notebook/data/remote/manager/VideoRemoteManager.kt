@@ -6,6 +6,7 @@ import com.github.garynasser.correction_notebook.data.local.TokenManager
 import com.github.garynasser.correction_notebook.data.remote.api.VideoApiService
 import com.github.garynasser.correction_notebook.data.repository.AuthStateManager
 import com.github.garynasser.correction_notebook.data.repository.YanheRepository
+import com.github.garynasser.correction_notebook.utils.SignatureUtils
 import javax.inject.Inject
 
 class VideoRemoteManager @Inject constructor(
@@ -72,6 +73,40 @@ class VideoRemoteManager @Inject constructor(
         videoApiService.getCourseSession(
             token = token,
             courseId = courseId
+        )
+    }
+
+    suspend fun getVideoToken() = safeApiCall { token ->
+        videoApiService.getVideoToken(
+            token = token
+        )
+    }
+
+    suspend fun downloadM3U8File(
+        url: String,
+        videoToken: String,
+    ) = safeApiCall { token ->
+        val sig = SignatureUtils.getSignature()
+
+        videoApiService.downloadYanheFile(
+            url = url,
+            xvideoToken = videoToken,
+            xclientTimestamp = sig["Xclient-Timestamp"] ?: "",
+            xclientSignature = sig["Xclient-Signature"] ?: "",
+        )
+    }
+
+    suspend fun downloadTsFile(
+        url: String,
+        videoToken: String
+    ) = safeApiCall { token ->
+        val sig = SignatureUtils.getSignature()
+
+        videoApiService.downloadYanheFile(
+            url = url,
+            xvideoToken = videoToken,
+            xclientTimestamp = sig["Xclient-Timestamp"] ?: "",
+            xclientSignature = sig["Xclient-Signature"] ?: "",
         )
     }
 }
