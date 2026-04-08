@@ -1,5 +1,7 @@
 package com.github.garynasser.correction_notebook.ui.screens.yanhe
 
+import android.content.Context
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -20,6 +22,12 @@ sealed interface VideoUIState {
     data class Error(val message: String) : VideoUIState
 }
 
+sealed class PlayState {
+    object Idle : PlayState()
+    object Loading : PlayState()
+    data class Success(val filePath: String) : PlayState()
+    data class Error(val message: String) : PlayState()
+}
 @HiltViewModel
 class VideoListViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
@@ -28,11 +36,32 @@ class VideoListViewModel @Inject constructor(
     private val args = savedStateHandle.toRoute<VideoList>()
     val courseId = args.courseId
 
+    var playState by mutableStateOf<PlayState>(PlayState.Idle)
+        private set
+
     var uiState : VideoUIState by mutableStateOf(VideoUIState.Loading)
         private set
 
     init {
         getVideoList(courseId)
+    }
+
+    fun prepareVideo(videoUrl: String, context: Context) {
+        Log.i("VIDEO", "Prepare video")
+        viewModelScope.launch {
+            playState = PlayState.Loading
+            val file = videoRepository.getM3U8File(videoUrl, context)
+
+            playState = if (file != null) {
+                PlayState.Success(file.absolutePath)
+            } else {
+                PlayState.Error("无法加载视频资源")
+            }
+        }
+    }
+
+    fun resetPlayState() {
+        playState = PlayState.Idle
     }
 
     fun getVideoList(courseId: Int) {

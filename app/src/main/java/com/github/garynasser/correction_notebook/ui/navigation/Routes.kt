@@ -28,3 +28,6 @@ object AITutor
 
 @Serializable
 data class VideoList(val courseId: Int)
+
+@Serializable
+data class VideoPlayer(val filePath: String)

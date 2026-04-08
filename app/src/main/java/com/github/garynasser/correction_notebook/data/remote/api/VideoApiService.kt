@@ -3,10 +3,14 @@ package com.github.garynasser.correction_notebook.data.remote.api
 import com.github.garynasser.correction_notebook.data.model.common.ApiResponse
 import com.github.garynasser.correction_notebook.data.model.yanhe.CourseSection
 import com.github.garynasser.correction_notebook.data.model.yanhe.PaginatedData
+import com.github.garynasser.correction_notebook.data.model.yanhe.VideoTokenResponse
+import okhttp3.ResponseBody
+import retrofit2.Response
 import retrofit2.http.GET
 import retrofit2.http.Header
 import retrofit2.http.Headers
 import retrofit2.http.Query
+import retrofit2.http.Url
 
 interface VideoApiService {
     @Headers(
@@ -59,4 +63,36 @@ interface VideoApiService {
         @Header("Authorization") token: String,
         @Query("course_id") courseId: Int
     ): ApiResponse<List<CourseSection>>
+
+    @Headers(
+        "Origin: https://www.yanhekt.cn",
+        "Referer: https://www.yanhekt.cn/",
+        "xdomain-client: web_user",
+        "Xdomain-Client: web_user",
+        "Xclient-Version: v1",
+        "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    )
+    @GET("https://cbiz.yanhekt.cn/v1/auth/video/token")
+    suspend fun getVideoToken(
+        @Header("Authorization") token: String,
+        @Query("id") id: Int = 0
+    ): ApiResponse<VideoTokenResponse>
+
+    @Headers(
+        "Origin: https://www.yanhekt.cn",
+        "Referer: https://www.yanhekt.cn/",
+        "xdomain-client: web_user",
+        "Xdomain-Client: web_user",
+        "Xclient-Version: v1",
+        "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    )
+    @GET
+    suspend fun downloadYanheFile(
+        @Url url: String,
+        @Query("Xvideo_Token") xvideoToken: String,
+        @Query("Xclient_Timestamp") xclientTimestamp: String,
+        @Query("Xclient_Signature") xclientSignature: String,
+        @Query("Platform") platform: String = "yhkt_user",
+        @Query("Xclient_Version") xclientVersion: String = "v1"
+    ): Response<ResponseBody>
 }
