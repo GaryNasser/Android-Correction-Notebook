@@ -67,4 +67,11 @@ class VideoRemoteManager @Inject constructor(
             keyword = keyword
         )
     }
+
+    suspend fun getCourseSession(courseId: Int) = safeApiCall { token ->
+        videoApiService.getCourseSession(
+            token = token,
+            courseId = courseId
+        )
+    }
 }

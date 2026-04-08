@@ -1,6 +1,7 @@
 package com.github.garynasser.correction_notebook.data.repository
 
 import com.github.garynasser.correction_notebook.data.model.yanhe.Course
+import com.github.garynasser.correction_notebook.data.model.yanhe.CourseSection
 import com.github.garynasser.correction_notebook.data.remote.manager.VideoRemoteManager
 import javax.inject.Inject
 
@@ -37,5 +38,11 @@ class VideoRepository @Inject constructor(
         )
 
         return response?.data?.courses ?: emptyList()
+    }
+
+    suspend fun getCourseSession(courseId: Int): List<CourseSection> {
+        val response = videoRemoteManager.getCourseSession(courseId)
+
+        return response?.data ?: emptyList()
     }
 }
