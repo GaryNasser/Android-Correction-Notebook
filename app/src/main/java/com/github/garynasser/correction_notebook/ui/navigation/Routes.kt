@@ -25,3 +25,6 @@ object KnowledgeBase
 
 @Serializable
 object AITutor
+
+@Serializable
+data class VideoList(val courseId: Int)

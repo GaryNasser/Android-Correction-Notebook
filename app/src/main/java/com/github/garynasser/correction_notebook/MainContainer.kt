@@ -1,16 +1,11 @@
 package com.github.garynasser.correction_notebook
 
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavDestination.Companion.hasRoute
-import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
 import com.github.garynasser.correction_notebook.ui.navigation.AITutor
@@ -18,6 +13,7 @@ import com.github.garynasser.correction_notebook.ui.navigation.CourseList
 import com.github.garynasser.correction_notebook.ui.navigation.Home
 import com.github.garynasser.correction_notebook.ui.navigation.KnowledgeBase
 import com.github.garynasser.correction_notebook.ui.navigation.Profile
+import com.github.garynasser.correction_notebook.ui.navigation.VideoList
 import com.github.garynasser.correction_notebook.ui.navigation.bottomNavList
 import com.github.garynasser.correction_notebook.ui.screens.aitutor.AITutorScreen
 import com.github.garynasser.correction_notebook.ui.screens.home.HomeScreen
@@ -25,40 +21,46 @@ import com.github.garynasser.correction_notebook.ui.screens.knowledgebase.Knowle
 import com.github.garynasser.correction_notebook.ui.screens.main.SettingsViewModel
 import com.github.garynasser.correction_notebook.ui.screens.profile.ProfileScreen
 import com.github.garynasser.correction_notebook.ui.screens.yanhe.CourseListScreen
+import com.github.garynasser.correction_notebook.ui.screens.yanhe.CourseVideoListScreen
 
 @Composable
 fun MainContainer(
     settingsViewModel: SettingsViewModel = hiltViewModel()
 ) {
     val navController = rememberNavController()
-
     val aiEnabled by settingsViewModel.aiEnabled.collectAsState()
+
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentDestination = navBackStackEntry?.destination
+
+    val shouldShowBottomBar = bottomNavList.any { item ->
+        currentDestination?.hasRoute(item.route::class) == true
+    }
 
     Scaffold(
         bottomBar = {
-            NavigationBar {
-                val navBackStackEntry by navController.currentBackStackEntryAsState()
-                val currentDestination = navBackStackEntry?.destination
+            if (shouldShowBottomBar) {
+                NavigationBar {
+                    bottomNavList.forEach { item ->
+                        if (item.route is AITutor && !aiEnabled) return@forEach
 
-                bottomNavList.forEach { item ->
-                    if (item.route is AITutor && !aiEnabled) return@forEach
+                        val isSelected = currentDestination?.hasRoute(item.route::class) ?: false
 
-                    val isSelected = currentDestination?.hasRoute(item.route::class) ?: false
-
-                    NavigationBarItem(
-                        icon = { Icon(item.icon, contentDescription = item.title) },
-                        label = { Text(item.title) },
-                        selected = isSelected,
-                        onClick = {
-                            navController.navigate(item.route) {
-                                popUpTo(navController.graph.findStartDestination().id) {
-                                    saveState = true
+                        NavigationBarItem(
+                            icon = { Icon(item.icon, contentDescription = item.title) },
+                            label = { Text(item.title) },
+                            selected = isSelected,
+                            onClick = {
+                                navController.navigate(item.route) {
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
                                 }
-                                launchSingleTop = true
-                                restoreState = true
                             }
-                        }
-                    )
+                        )
+                    }
                 }
             }
         }
@@ -69,9 +71,18 @@ fun MainContainer(
             modifier = Modifier.padding(innerPadding)
         ) {
             composable<Home> { HomeScreen() }
-            composable<CourseList> { CourseListScreen() }
+            composable<CourseList> { CourseListScreen(onCourseCardClick = { courseId ->
+                navController.navigate(VideoList(courseId))
+            }) }
             composable<AITutor> { AITutorScreen() }
             composable<KnowledgeBase> { KnowledgeBaseScreen() }
+
+            composable<VideoList> {
+                CourseVideoListScreen(onBackButtonClick = {
+                    navController.popBackStack()
+                })
+            }
+
             composable<Profile> { ProfileScreen(settingsViewModel) }
         }
     }
