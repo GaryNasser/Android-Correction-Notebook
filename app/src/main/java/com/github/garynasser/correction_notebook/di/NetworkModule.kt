@@ -31,7 +31,7 @@ annotation class AuthRetrofit
 @Module
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
-    private const val BASE_URL = "http://10.0.2.2:8888/"
+    private const val BASE_URL = "http://10.0.2.2:5678/"
 
     // 辅助方法：创建一个日志拦截器
     private fun createLoggingInterceptor(): HttpLoggingInterceptor {

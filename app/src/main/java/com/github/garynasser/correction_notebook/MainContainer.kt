@@ -33,10 +33,12 @@ fun MainContainer(
     val navController = rememberNavController()
 
     val aiEnabled by settingsViewModel.aiEnabled.collectAsState()
+    var hideBottomBar by remember { mutableStateOf(false) }
 
     Scaffold(
         bottomBar = {
-            NavigationBar {
+            if (!hideBottomBar) {
+                NavigationBar {
                 val navBackStackEntry by navController.currentBackStackEntryAsState()
                 val currentDestination = navBackStackEntry?.destination
 
@@ -60,6 +62,7 @@ fun MainContainer(
                         }
                     )
                 }
+                }
             }
         }
     ) { innerPadding ->
@@ -68,7 +71,11 @@ fun MainContainer(
             startDestination = Home,
             modifier = Modifier.padding(innerPadding)
         ) {
-            composable<Home> { HomeScreen() }
+            composable<Home> {
+                HomeScreen(
+                    onImmersiveModeChanged = { hideBottomBar = it }
+                )
+            }
             composable<CourseList> { CourseListScreen() }
             composable<AITutor> { AITutorScreen() }
             composable<KnowledgeBase> { KnowledgeBaseScreen() }

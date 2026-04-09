@@ -46,3 +46,6 @@ Thumbs.db
 
 # --- 日志文件 ---
 *.log
+
+.claude/
+spring-correction-book-master/
