@@ -70,6 +70,7 @@ dependencies {
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:okhttp-urlconnection:4.12.0")
+    implementation("com.patrykandpatrick.vico:compose-m3:1.13.1")
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)

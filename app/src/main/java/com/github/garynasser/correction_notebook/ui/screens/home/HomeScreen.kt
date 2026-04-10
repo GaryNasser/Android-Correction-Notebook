@@ -1,5 +1,8 @@
 package com.github.garynasser.correction_notebook.ui.screens.home
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -15,111 +18,243 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.github.garynasser.correction_notebook.data.model.home.Article
+import com.github.garynasser.correction_notebook.data.model.home.TimerState
+import com.github.garynasser.correction_notebook.data.model.home.TodoItem
+import com.github.garynasser.correction_notebook.ui.screens.statistics.StatisticsScreen
+import com.github.garynasser.correction_notebook.ui.screens.statistics.StatisticsViewModel
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen() {
-    var selectedDate by remember { mutableStateOf(LocalDate.now()) }
-    var isImmersiveMode by remember { mutableStateOf(false) }
-    var showModeSelector by remember { mutableStateOf(false) }
+fun HomeScreen(
+    homeViewModel: HomeViewModel = hiltViewModel(),
+    statisticsViewModel: StatisticsViewModel = hiltViewModel(),
+    onNavigateToStatistics: () -> Unit = {},
+    onImmersiveModeChanged: (Boolean) -> Unit = {}
+) {
+    val uiState by homeViewModel.uiState.collectAsState()
+    val timerState by homeViewModel.timerManager.timerState.collectAsState()
+    var showCustomTimer by remember { mutableStateOf(false) }
+    var showSettingsDialog by remember { mutableStateOf(false) }
 
-    if (isImmersiveMode) {
-        ImmersiveModeScreen(
-            onExit = { isImmersiveMode = false }
-        )
-    } else {
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = { Text("StudyBIT") },
-                    actions = {
-                        IconButton(onClick = { showModeSelector = true }) {
-                            Icon(Icons.Default.Timer, contentDescription = "沉浸模式")
-                        }
-                    }
-                )
-            }
-        ) { innerPadding ->
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                item { Spacer(modifier = Modifier.height(8.dp)) }
+    // Image picker launcher
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            // Take persistent permission
+            homeViewModel.setBackgroundImage(it.toString())
+        }
+    }
 
-                // 当前时间卡片
-                item {
-                    CurrentTimeCard(
-                        onImmersiveModeClick = { showModeSelector = true }
-                    )
-                }
-
-                // 日期切换器
-                item {
-                    DateSelector(
-                        selectedDate = selectedDate,
-                        onDateChange = { selectedDate = it }
-                    )
-                }
-
-                // 日程列表标题
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "今日日程",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        IconButton(onClick = { /* TODO: 添加日程 */ }) {
-                            Icon(Icons.Default.Add, contentDescription = "添加日程")
-                        }
-                    }
-                }
-
-                // 日程列表
-                item {
-                    ScheduleList()
-                }
-
-                // 沉浸模式快捷入口
-                item {
-                    ImmersiveModeCard(
-                        onClick = { showModeSelector = true }
-                    )
-                }
-
-                item { Spacer(modifier = Modifier.height(80.dp)) }
+    // Handle immersive mode
+    if (uiState.selectedMode == StudyMode.IMMERSIVE) {
+        LaunchedEffect(Unit) {
+            onImmersiveModeChanged(true)
+        }
+        DisposableEffect(Unit) {
+            onDispose {
+                onImmersiveModeChanged(false)
             }
         }
+        ImmersiveStudyScreen(
+            timerManager = homeViewModel.timerManager,
+            onExit = {
+                homeViewModel.timerManager.stop()
+                homeViewModel.clearSelectedMode()
+            },
+            backgroundImageUri = uiState.backgroundImageUri,
+            isLandscapeOrientation = uiState.isLandscapeOrientation,
+            onOrientationChange = { homeViewModel.setLandscapeOrientation(it) }
+        )
+        return
+    }
 
-        // 模式选择对话框
-        if (showModeSelector) {
-            ModeSelectorDialog(
-                onDismiss = { showModeSelector = false },
-                onModeSelected = { mode ->
-                    showModeSelector = false
-                    if (mode == "immersive") {
-                        isImmersiveMode = true
+    // Handle statistics screen
+    if (uiState.showStatistics) {
+        StatisticsScreen(
+            viewModel = statisticsViewModel,
+            onBack = { homeViewModel.hideStatistics() }
+        )
+        return
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("StudyBIT") },
+                actions = {
+                    IconButton(onClick = { showSettingsDialog = true }) {
+                        Icon(Icons.Default.Settings, contentDescription = "设置")
+                    }
+                    IconButton(onClick = { homeViewModel.showStatistics() }) {
+                        Icon(Icons.Default.BarChart, contentDescription = "统计")
+                    }
+                    IconButton(onClick = { homeViewModel.showModeSelector() }) {
+                        Icon(Icons.Default.Timer, contentDescription = "学习模式")
                     }
                 }
             )
         }
+    ) { innerPadding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            item { Spacer(modifier = Modifier.height(8.dp)) }
+
+            // Current Time Card (1/3 screen height)
+            item {
+                CurrentTimeCard(
+                    timerState = timerState,
+                    onImmersiveModeClick = { homeViewModel.showModeSelector() }
+                )
+            }
+
+            // Date Selector
+            item {
+                DateSelector(
+                    selectedDate = uiState.selectedDate,
+                    onDateChange = { homeViewModel.setSelectedDate(it) }
+                )
+            }
+
+            // Quick Stats Preview
+            item {
+                QuickStatsPreview(
+                    todayMinutes = uiState.todayStudyMinutes,
+                    completedPomodoros = uiState.completedPomodoros,
+                    onClick = { homeViewModel.showStatistics() }
+                )
+            }
+
+            // Todo Section
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "待办事项",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    IconButton(onClick = { homeViewModel.showAddTodoDialog() }) {
+                        Icon(Icons.Default.Add, contentDescription = "添加待办")
+                    }
+                }
+            }
+
+            if (uiState.todoItems.isEmpty()) {
+                item {
+                    EmptyTodoState(onAddClick = { homeViewModel.showAddTodoDialog() })
+                }
+            } else {
+                items(uiState.todoItems, key = { it.id }) { todo ->
+                    TodoItemCard(
+                        todo = todo,
+                        onToggleComplete = { homeViewModel.toggleTodoComplete(todo.id) },
+                        onDelete = { homeViewModel.deleteTodo(todo.id) }
+                    )
+                }
+            }
+
+            // Articles Section
+            item {
+                ArticlesSection(
+                    articles = uiState.articles,
+                    onArticleClick = { /* Open article */ }
+                )
+            }
+
+            // Immersive Mode Entry Card
+            item {
+                ImmersiveModeCard(
+                    onClick = { homeViewModel.showModeSelector() }
+                )
+            }
+
+            item { Spacer(modifier = Modifier.height(80.dp)) }
+        }
+    }
+
+    // Add Todo Dialog
+    if (uiState.showAddTodoDialog) {
+        AddTodoDialog(
+            onDismiss = { homeViewModel.hideAddTodoDialog() },
+            onAdd = { todo -> homeViewModel.addTodo(todo) }
+        )
+    }
+
+    // Mode Selector Dialog
+    if (uiState.showModeSelector) {
+        ModeSelectorDialog(
+            onDismiss = { homeViewModel.hideModeSelector() },
+            onModeSelected = { mode ->
+                homeViewModel.hideModeSelector()
+                when (mode) {
+                    "pomodoro" -> {
+                        homeViewModel.startPomodoro()
+                        homeViewModel.selectMode(StudyMode.IMMERSIVE)
+                    }
+                    "countdown" -> {
+                        showCustomTimer = true
+                    }
+                    "stopwatch" -> {
+                        homeViewModel.startStopwatch()
+                        homeViewModel.selectMode(StudyMode.IMMERSIVE)
+                    }
+                    "immersive" -> {
+                        homeViewModel.selectMode(StudyMode.IMMERSIVE)
+                    }
+                }
+            }
+        )
+    }
+
+    // Custom Timer Dialog
+    if (showCustomTimer) {
+        CustomTimerDialog(
+            onDismiss = { showCustomTimer = false },
+            onConfirm = { minutes ->
+                homeViewModel.startCountdown(minutes)
+                homeViewModel.selectMode(StudyMode.IMMERSIVE)
+                showCustomTimer = false
+            }
+        )
+    }
+
+    // Settings Dialog
+    if (showSettingsDialog) {
+        SettingsDialog(
+            currentBackgroundUri = uiState.backgroundImageUri,
+            onDismiss = { showSettingsDialog = false },
+            onSelectImage = {
+                imagePickerLauncher.launch("image/*")
+            },
+            onClearImage = {
+                homeViewModel.setBackgroundImage(null)
+            }
+        )
     }
 }
 
 @Composable
-fun CurrentTimeCard(onImmersiveModeClick: () -> Unit) {
+fun CurrentTimeCard(
+    timerState: TimerState,
+    onImmersiveModeClick: () -> Unit
+) {
     val currentTime = remember { mutableStateOf(java.time.LocalTime.now()) }
 
     LaunchedEffect(Unit) {
@@ -130,10 +265,13 @@ fun CurrentTimeCard(onImmersiveModeClick: () -> Unit) {
     }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 180.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.primaryContainer
-        )
+        ),
+        shape = RoundedCornerShape(20.dp)
     ) {
         Column(
             modifier = Modifier
@@ -143,7 +281,7 @@ fun CurrentTimeCard(onImmersiveModeClick: () -> Unit) {
         ) {
             Text(
                 text = currentTime.value.format(DateTimeFormatter.ofPattern("HH:mm:ss")),
-                fontSize = 56.sp,
+                fontSize = 64.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )
@@ -152,9 +290,36 @@ fun CurrentTimeCard(onImmersiveModeClick: () -> Unit) {
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
             )
+
+            // Show timer status if running
+            if (timerState !is TimerState.Idle) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Timer,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = when (timerState) {
+                            is TimerState.Pomodoro -> "番茄钟运行中"
+                            is TimerState.Countdown -> "倒计时运行中"
+                            is TimerState.Stopwatch -> "计时中"
+                            else -> ""
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+
             Spacer(modifier = Modifier.height(16.dp))
             FilledTonalButton(onClick = onImmersiveModeClick) {
-                Icon(Icons.Default.Timer, contentDescription = null)
+                Icon(Icons.Default.Fullscreen, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("进入沉浸模式")
             }
@@ -205,111 +370,11 @@ fun DateSelector(
 }
 
 @Composable
-fun ScheduleList() {
-    // 示例日程数据
-    val schedules = remember {
-        listOf(
-            ScheduleItem("09:00", "11:30", "高等数学", "3号楼301", true),
-            ScheduleItem("14:00", "16:00", "大学物理", "2号楼205", false),
-            ScheduleItem("19:00", "21:00", "自习", "图书馆", false)
-        )
-    }
-
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        schedules.forEach { schedule ->
-            ScheduleCard(schedule)
-        }
-    }
-}
-
-data class ScheduleItem(
-    val startTime: String,
-    val endTime: String,
-    val title: String,
-    val location: String,
-    val isCompleted: Boolean
-)
-
-@Composable
-fun ScheduleCard(schedule: ScheduleItem) {
-    Card(
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // 时间信息
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.width(60.dp)
-            ) {
-                Text(
-                    text = schedule.startTime,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = schedule.endTime,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                )
-            }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            // 竖线装饰
-            Box(
-                modifier = Modifier
-                    .width(4.dp)
-                    .height(40.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(
-                        if (schedule.isCompleted) MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
-                        else MaterialTheme.colorScheme.primary
-                    )
-            )
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            // 课程信息
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = schedule.title,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Medium
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Default.LocationOn,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp),
-                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                    )
-                    Text(
-                        text = schedule.location,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                    )
-                }
-            }
-
-            // 完成状态
-            if (schedule.isCompleted) {
-                Icon(
-                    Icons.Default.CheckCircle,
-                    contentDescription = "已完成",
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun ImmersiveModeCard(onClick: () -> Unit) {
+fun QuickStatsPreview(
+    todayMinutes: Int,
+    completedPomodoros: Int,
+    onClick: () -> Unit
+) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -322,14 +387,126 @@ fun ImmersiveModeCard(onClick: () -> Unit) {
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                Icons.Default.Timer,
-                contentDescription = null,
-                modifier = Modifier.size(32.dp),
-                tint = MaterialTheme.colorScheme.onSecondaryContainer
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(
+                    Icons.Default.Timer,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = formatMinutesToDisplay(todayMinutes),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "今日学习",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                )
+            }
+
+            Divider(
+                modifier = Modifier
+                    .height(48.dp)
+                    .width(1.dp),
+                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.2f)
             )
+
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(
+                    Icons.Default.EmojiEvents,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "$completedPomodoros",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "番茄钟",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun EmptyTodoState(onAddClick: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                Icons.Default.CheckCircle,
+                contentDescription = null,
+                modifier = Modifier.size(48.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = "暂无待办事项",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            TextButton(onClick = onAddClick) {
+                Icon(Icons.Default.Add, contentDescription = null)
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("添加待办")
+            }
+        }
+    }
+}
+
+@Composable
+fun ImmersiveModeCard(onClick: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.tertiary.copy(alpha = 0.2f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.Fullscreen,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onTertiaryContainer
+                )
+            }
             Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -338,9 +515,9 @@ fun ImmersiveModeCard(onClick: () -> Unit) {
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "倒计时 / 正计时 / 番茄钟",
+                    text = "番茄钟 / 倒计时 / 正计时",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                    color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
                 )
             }
             Icon(Icons.Default.ChevronRight, contentDescription = null)
@@ -359,6 +536,12 @@ fun ModeSelectorDialog(
         text = {
             Column {
                 ModeOption(
+                    icon = Icons.Default.Timer,
+                    title = "番茄钟",
+                    description = "25分钟专注，5分钟休息",
+                    onClick = { onModeSelected("pomodoro") }
+                )
+                ModeOption(
                     icon = Icons.Default.HourglassEmpty,
                     title = "倒计时",
                     description = "设定时间，专注完成",
@@ -369,12 +552,6 @@ fun ModeSelectorDialog(
                     title = "正计时",
                     description = "记录学习时长",
                     onClick = { onModeSelected("stopwatch") }
-                )
-                ModeOption(
-                    icon = Icons.Default.Timer,
-                    title = "番茄钟",
-                    description = "25分钟专注，5分钟休息",
-                    onClick = { onModeSelected("pomodoro") }
                 )
                 ModeOption(
                     icon = Icons.Default.Fullscreen,
@@ -420,37 +597,183 @@ fun ModeOption(
     }
 }
 
+private fun formatMinutesToDisplay(minutes: Int): String {
+    return if (minutes >= 60) {
+        val hours = minutes / 60
+        val mins = minutes % 60
+        "${hours}h${mins}m"
+    } else {
+        "${minutes}m"
+    }
+}
+
 @Composable
-fun ImmersiveModeScreen(onExit: () -> Unit) {
-    var currentTime by remember { mutableStateOf(java.time.LocalTime.now()) }
+fun CustomTimerDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (Int) -> Unit
+) {
+    var hours by remember { mutableStateOf("0") }
+    var minutes by remember { mutableStateOf("25") }
 
-    LaunchedEffect(Unit) {
-        while (true) {
-            currentTime = java.time.LocalTime.now()
-            kotlinx.coroutines.delay(1000)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("自定义计时器") },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "设置您想要的学习时长",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Hours input
+                    OutlinedTextField(
+                        value = hours,
+                        onValueChange = { newValue ->
+                            if (newValue.isEmpty() || newValue.all { it.isDigit() }) {
+                                hours = newValue.take(2)
+                            }
+                        },
+                        label = { Text("小时") },
+                        modifier = Modifier.width(80.dp),
+                        singleLine = true
+                    )
+                    Text(":", style = MaterialTheme.typography.headlineMedium)
+                    // Minutes input
+                    OutlinedTextField(
+                        value = minutes,
+                        onValueChange = { newValue ->
+                            if (newValue.isEmpty() || (newValue.all { it.isDigit() } && (newValue.toIntOrNull() ?: 0) <= 59)) {
+                                minutes = newValue.take(2)
+                            }
+                        },
+                        label = { Text("分钟") },
+                        modifier = Modifier.width(80.dp),
+                        singleLine = true
+                    )
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                // Quick presets
+                Text(
+                    text = "快速选择",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf(15, 25, 45, 60).forEach { preset ->
+                        FilterChip(
+                            selected = false,
+                            onClick = {
+                                hours = (preset / 60).toString()
+                                minutes = (preset % 60).toString()
+                            },
+                            label = { Text("${preset}分钟") }
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val totalMinutes = (hours.toIntOrNull() ?: 0) * 60 + (minutes.toIntOrNull() ?: 0)
+                    if (totalMinutes > 0) {
+                        onConfirm(totalMinutes)
+                    }
+                },
+                enabled = ((hours.toIntOrNull() ?: 0) * 60 + (minutes.toIntOrNull() ?: 0)) > 0
+            ) {
+                Text("开始")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
         }
-    }
+    )
+}
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black)
-            .clickable(onClick = onExit),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                text = currentTime.format(DateTimeFormatter.ofPattern("HH:mm:ss")),
-                fontSize = 80.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                text = "点击任意位置退出",
-                color = Color.White.copy(alpha = 0.5f),
-                fontSize = 14.sp
-            )
+@Composable
+fun SettingsDialog(
+    currentBackgroundUri: String?,
+    onDismiss: () -> Unit,
+    onSelectImage: () -> Unit,
+    onClearImage: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("沉浸模式设置") },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    text = "背景图片",
+                    style = MaterialTheme.typography.titleSmall
+                )
+
+                // Current background preview
+                if (currentBackgroundUri != null) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(120.dp)
+                    ) {
+                        coil.compose.AsyncImage(
+                            model = Uri.parse(currentBackgroundUri),
+                            contentDescription = "当前背景",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                        )
+                    }
+                }
+
+                // Image selection buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onSelectImage,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.Image, contentDescription = null)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("选择图片")
+                    }
+
+                    if (currentBackgroundUri != null) {
+                        OutlinedButton(
+                            onClick = onClearImage,
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error
+                            )
+                        ) {
+                            Icon(Icons.Default.Delete, contentDescription = null)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("清除")
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("完成")
+            }
         }
-    }
+    )
 }

@@ -13,20 +13,20 @@ import retrofit2.http.Header
 import retrofit2.http.POST
 
 interface AuthApiService {
-    @POST("/auth/login")
+    @POST("/login")
     suspend fun login(@Body request: LoginRequest): ApiResponse<TokenResponse>
 
-    @POST("/auth/refresh")
+    @POST("/refresh")
     fun refreshToken(
         @Header("Authorization") refreshToken: String
     ): Call<ApiResponse<TokenResponse>>
 
-    @GET("/auth/public-key")
+    @GET("/public-key")
     suspend fun getRSAPublicKey(): ApiResponse<RSAResponse>
 
-    @POST("/auth/yanhe-token")
+    @POST("/yanhe-token")
     suspend fun getYanheToken(@Body request: CredentialAuthRequest): ApiResponse<String>
 
-    @POST("/auth/register")
+    @POST("/register")
     suspend fun register(@Body request: RegisterRequest): ApiResponse<TokenResponse>
 }
