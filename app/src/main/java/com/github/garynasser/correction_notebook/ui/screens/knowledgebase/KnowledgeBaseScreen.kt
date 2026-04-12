@@ -1,44 +1,246 @@
 package com.github.garynasser.correction_notebook.ui.screens.knowledgebase
 
+import android.content.Intent
+import android.webkit.MimeTypeMap
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.DriveFileMove
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.DownloadDone
+import androidx.compose.material.icons.filled.DriveFileMove
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SortByAlpha
+import androidx.compose.material.icons.filled.Update
+import androidx.compose.material.icons.filled.CreateNewFolder
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitShareFileDetail
+import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitShareSearchResult
+import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitShareSortOption
+import com.github.garynasser.correction_notebook.data.model.knowledgebase.KnowledgeBaseFileSummary
+import com.github.garynasser.correction_notebook.data.model.knowledgebase.KnowledgeBaseFolderChoice
+import com.github.garynasser.correction_notebook.data.model.knowledgebase.KnowledgeBaseFolderSummary
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+private enum class FileSortMode {
+    UPDATED,
+    NAME
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun KnowledgeBaseScreen() {
-    var selectedTab by remember { mutableStateOf(0) }
-    val tabs = listOf("我的文件", "错题库", "云端共享")
+fun KnowledgeBaseScreen(
+    viewModel: KnowledgeBaseViewModel = hiltViewModel()
+) {
+    val uiState by viewModel.uiState.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
+
+    var showCreateFolderDialog by rememberSaveable { mutableStateOf(false) }
+    var folderToRename by remember { mutableStateOf<KnowledgeBaseFolderSummary?>(null) }
+    var folderToDelete by remember { mutableStateOf<KnowledgeBaseFolderSummary?>(null) }
+    var fileToRename by remember { mutableStateOf<KnowledgeBaseFileSummary?>(null) }
+    var fileToDelete by remember { mutableStateOf<KnowledgeBaseFileSummary?>(null) }
+    var fileToMove by remember { mutableStateOf<KnowledgeBaseFileSummary?>(null) }
+    var showDownloadFolderPicker by rememberSaveable { mutableStateOf(false) }
+    var fileSortMode by rememberSaveable { mutableStateOf(FileSortMode.UPDATED) }
+
+    val sortedFiles = remember(uiState.folderContent.files, fileSortMode) {
+        when (fileSortMode) {
+            FileSortMode.UPDATED -> uiState.folderContent.files.sortedByDescending { it.downloadedAt ?: 0L }
+            FileSortMode.NAME -> uiState.folderContent.files.sortedBy { it.displayName.lowercase(Locale.getDefault()) }
+        }
+    }
+
+    LaunchedEffect(uiState.snackbarMessage) {
+        val message = uiState.snackbarMessage ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(message)
+        viewModel.consumeSnackbarMessage()
+    }
+
+    if (showCreateFolderDialog) {
+        NameInputDialog(
+            title = "新建文件夹",
+            initialValue = "",
+            confirmText = "创建",
+            onDismiss = { showCreateFolderDialog = false },
+            onConfirm = {
+                viewModel.createFolder(it)
+                showCreateFolderDialog = false
+            }
+        )
+    }
+
+    folderToRename?.let { folder ->
+        NameInputDialog(
+            title = "重命名文件夹",
+            initialValue = folder.name,
+            confirmText = "保存",
+            onDismiss = { folderToRename = null },
+            onConfirm = {
+                viewModel.renameFolder(folder.id, it)
+                folderToRename = null
+            }
+        )
+    }
+
+    fileToRename?.let { file ->
+        NameInputDialog(
+            title = "重命名文件",
+            initialValue = file.displayName,
+            confirmText = "保存",
+            onDismiss = { fileToRename = null },
+            onConfirm = {
+                viewModel.renameFile(file.id, it)
+                fileToRename = null
+            }
+        )
+    }
+
+    folderToDelete?.let { folder ->
+        ConfirmDialog(
+            title = "删除文件夹",
+            message = "仅支持删除空文件夹。确定删除“${folder.name}”吗？",
+            confirmText = "删除",
+            onDismiss = { folderToDelete = null },
+            onConfirm = {
+                viewModel.deleteFolder(folder.id)
+                folderToDelete = null
+            }
+        )
+    }
+
+    fileToDelete?.let { file ->
+        ConfirmDialog(
+            title = "删除文件",
+            message = "确定删除“${file.displayName}”吗？",
+            confirmText = "删除",
+            onDismiss = { fileToDelete = null },
+            onConfirm = {
+                viewModel.deleteFile(file.id)
+                fileToDelete = null
+            }
+        )
+    }
+
+    fileToMove?.let { file ->
+        FolderPickerDialog(
+            title = "移动到",
+            folders = uiState.folderChoices,
+            onDismiss = { fileToMove = null },
+            onSelect = { folderId ->
+                viewModel.moveFile(file.id, folderId)
+                fileToMove = null
+            }
+        )
+    }
+
+    if (showDownloadFolderPicker && uiState.selectedRemoteDetail != null) {
+        FolderPickerDialog(
+            title = "下载到知识库",
+            folders = uiState.folderChoices,
+            onDismiss = { showDownloadFolderPicker = false },
+            onSelect = { folderId ->
+                viewModel.downloadRemoteFileToFolder(folderId)
+                showDownloadFolderPicker = false
+            }
+        )
+    }
+
+    uiState.selectedRemoteDetail?.let { detail ->
+        RemoteDetailDialog(
+            detail = detail,
+            isDownloading = uiState.activeDownloadId == detail.id,
+            onDismiss = { viewModel.dismissRemoteDetail() },
+            onDownloadClick = { showDownloadFolderPicker = true }
+        )
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("知识库") },
                 actions = {
-                    IconButton(onClick = { /* TODO: 搜索 */ }) {
-                        Icon(Icons.Default.Search, contentDescription = "搜索")
-                    }
-                    IconButton(onClick = { /* TODO: 更多 */ }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "更多")
+                    if (uiState.selectedTabIndex == 1) {
+                        IconButton(onClick = { viewModel.searchRemoteResources() }) {
+                            Icon(Icons.Default.Refresh, contentDescription = "刷新搜索")
+                        }
                     }
                 }
             )
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = { /* TODO: 添加文件 */ }
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "添加")
+            if (uiState.selectedTabIndex == 0) {
+                FloatingActionButton(onClick = { showCreateFolderDialog = true }) {
+                    Icon(Icons.Default.CreateNewFolder, contentDescription = "新建文件夹")
+                }
             }
         }
     ) { innerPadding ->
@@ -47,394 +249,738 @@ fun KnowledgeBaseScreen() {
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // Tab 选择器
-            TabRow(selectedTabIndex = selectedTab) {
-                tabs.forEachIndexed { index, title ->
+            TabRow(selectedTabIndex = uiState.selectedTabIndex) {
+                listOf("文件管理", "BITShare 下载").forEachIndexed { index, title ->
                     Tab(
-                        selected = selectedTab == index,
-                        onClick = { selectedTab = index },
+                        selected = uiState.selectedTabIndex == index,
+                        onClick = { viewModel.selectTab(index) },
                         text = { Text(title) }
                     )
                 }
             }
 
-            // 内容区域
-            when (selectedTab) {
-                0 -> MyFilesContent()
-                1 -> WrongQuestionsContent()
-                2 -> CloudSharedContent()
+            when (uiState.selectedTabIndex) {
+                0 -> FileManagementPage(
+                    uiState = uiState,
+                    fileSortMode = fileSortMode,
+                    onToggleSort = {
+                        fileSortMode = when (fileSortMode) {
+                            FileSortMode.UPDATED -> FileSortMode.NAME
+                            FileSortMode.NAME -> FileSortMode.UPDATED
+                        }
+                    },
+                    files = sortedFiles,
+                    onLocalSearchChanged = viewModel::updateLocalSearchQuery,
+                    onBack = viewModel::navigateBack,
+                    onBreadcrumbClick = viewModel::navigateToBreadcrumb,
+                    onFolderClick = viewModel::enterFolder,
+                    onFolderRename = { folderToRename = it },
+                    onFolderDelete = { folderToDelete = it },
+                    onFileRename = { fileToRename = it },
+                    onFileDelete = { fileToDelete = it },
+                    onFileMove = { fileToMove = it },
+                    onFileShare = {
+                        shareFile(
+                            context = context,
+                            localPath = it.localPath,
+                            mimeType = it.mimeType,
+                            title = it.displayName
+                        )
+                    }
+                )
+
+                1 -> BitSharePage(
+                    uiState = uiState,
+                    onQueryChanged = viewModel::updateRemoteQuery,
+                    onSortChanged = {
+                        viewModel.updateRemoteSort(it)
+                        if (uiState.remoteQuery.isNotBlank()) {
+                            viewModel.searchRemoteResources()
+                        }
+                    },
+                    onSearchClick = viewModel::searchRemoteResources,
+                    onOpenDetail = viewModel::loadRemoteDetail
+                )
             }
         }
     }
 }
 
 @Composable
-fun MyFilesContent() {
-    var currentPath by remember { mutableStateOf("根目录") }
-    val folders = remember {
-        listOf(
-            FolderItem("高等数学", 12, true),
-            FolderItem("大学物理", 8, true),
-            FolderItem("线性代数", 5, true),
-            FolderItem("编程资料", 23, true)
-        )
-    }
-    val files = remember {
-        listOf(
-            FileItem("第一章笔记.pdf", "2.3 MB", false),
-            FileItem("课后习题答案.docx", "1.1 MB", true),
-            FileItem("重点公式汇总.jpg", "856 KB", false)
-        )
-    }
-
+private fun FileManagementPage(
+    uiState: KnowledgeBaseUiState,
+    fileSortMode: FileSortMode,
+    files: List<KnowledgeBaseFileSummary>,
+    onToggleSort: () -> Unit,
+    onLocalSearchChanged: (String) -> Unit,
+    onBack: () -> Unit,
+    onBreadcrumbClick: (String?) -> Unit,
+    onFolderClick: (String) -> Unit,
+    onFolderRename: (KnowledgeBaseFolderSummary) -> Unit,
+    onFolderDelete: (KnowledgeBaseFolderSummary) -> Unit,
+    onFileRename: (KnowledgeBaseFileSummary) -> Unit,
+    onFileDelete: (KnowledgeBaseFileSummary) -> Unit,
+    onFileMove: (KnowledgeBaseFileSummary) -> Unit,
+    onFileShare: (KnowledgeBaseFileSummary) -> Unit
+) {
     Column(modifier = Modifier.fillMaxSize()) {
-        // 路径导航
-        ListItem(
-            headlineContent = { Text(currentPath) },
-            leadingContent = {
-                IconButton(onClick = { /* TODO: 返回上级 */ }) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+        Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)) {
+            Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (uiState.currentFolderId != null) {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回上一级")
+                        }
+                    }
+                    uiState.folderContent.breadcrumbs.forEachIndexed { index, breadcrumb ->
+                        TextButton(onClick = { onBreadcrumbClick(breadcrumb.id) }) {
+                            Text(breadcrumb.name)
+                        }
+                        if (index != uiState.folderContent.breadcrumbs.lastIndex) {
+                            Text("/", style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
                 }
-            },
-            trailingContent = {
-                IconButton(onClick = { /* TODO: 排序方式 */ }) {
-                    Icon(Icons.Default.Sort, contentDescription = "排序")
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = uiState.localSearchQuery,
+                        onValueChange = onLocalSearchChanged,
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        leadingIcon = {
+                            Icon(Icons.Default.Search, contentDescription = null)
+                        },
+                        label = { Text("搜索当前目录") }
+                    )
+                    AssistChip(
+                        onClick = onToggleSort,
+                        label = {
+                            Text(if (fileSortMode == FileSortMode.UPDATED) "按最近更新" else "按名称")
+                        },
+                        leadingIcon = {
+                            Icon(
+                                if (fileSortMode == FileSortMode.UPDATED) Icons.Default.Update else Icons.Default.SortByAlpha,
+                                contentDescription = null
+                            )
+                        }
+                    )
                 }
             }
-        )
+        }
 
-        HorizontalDivider()
+        if (uiState.currentFolderId == null &&
+            uiState.localSearchQuery.isBlank() &&
+            uiState.recentFiles.isNotEmpty()
+        ) {
+            RecentDownloadsSection(
+                files = uiState.recentFiles,
+                onShare = onFileShare
+            )
+        }
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // 文件夹
-            items(folders) { folder ->
-                FolderCard(folder)
+            if (uiState.folderContent.folders.isEmpty() && files.isEmpty()) {
+                item {
+                    EmptyStateCard(
+                        title = "目录是空的",
+                        description = "先创建文件夹，或者去 BITShare 页把资料下载进来。"
+                    )
+                }
             }
 
-            item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
+            if (uiState.folderContent.folders.isNotEmpty()) {
+                item {
+                    SectionTitle("文件夹")
+                }
+                items(uiState.folderContent.folders, key = { it.id }) { folder ->
+                    FolderRow(
+                        folder = folder,
+                        onClick = { onFolderClick(folder.id) },
+                        onRename = { onFolderRename(folder) },
+                        onDelete = { onFolderDelete(folder) }
+                    )
+                }
+            }
 
-            // 文件
-            items(files) { file ->
-                FileCard(file)
+            if (files.isNotEmpty()) {
+                item {
+                    SectionTitle("文件")
+                }
+                items(files, key = { it.id }) { file ->
+                    FileRow(
+                        file = file,
+                        onRename = { onFileRename(file) },
+                        onMove = { onFileMove(file) },
+                        onDelete = { onFileDelete(file) },
+                        onShare = { onFileShare(file) }
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-fun WrongQuestionsContent() {
-    val wrongQuestions = remember {
-        listOf(
-            WrongQuestionItem("高数-微分方程", "2024-03-15", "未复习"),
-            WrongQuestionItem("物理-电磁学", "2024-03-14", "已复习"),
-            WrongQuestionItem("线代-矩阵运算", "2024-03-10", "未复习")
-        )
-    }
-
+private fun BitSharePage(
+    uiState: KnowledgeBaseUiState,
+    onQueryChanged: (String) -> Unit,
+    onSortChanged: (BitShareSortOption) -> Unit,
+    onSearchClick: () -> Unit,
+    onOpenDetail: (String) -> Unit
+) {
     Column(modifier = Modifier.fillMaxSize()) {
-        // 统计卡片
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            StatCard(
-                modifier = Modifier.weight(1f),
-                title = "错题总数",
-                value = "45",
-                color = MaterialTheme.colorScheme.primaryContainer
-            )
-            StatCard(
-                modifier = Modifier.weight(1f),
-                title = "本周新增",
-                value = "8",
-                color = MaterialTheme.colorScheme.secondaryContainer
-            )
-            StatCard(
-                modifier = Modifier.weight(1f),
-                title = "已掌握",
-                value = "12",
-                color = MaterialTheme.colorScheme.tertiaryContainer
-            )
-        }
-
-        HorizontalDivider()
-
-        // 错题列表
-        LazyColumn(
-            contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(wrongQuestions) { question ->
-                WrongQuestionCard(question)
+            OutlinedTextField(
+                value = uiState.remoteQuery,
+                onValueChange = onQueryChanged,
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text("搜索课程资料") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                trailingIcon = {
+                    IconButton(onClick = onSearchClick) {
+                        Icon(Icons.Default.CloudDownload, contentDescription = "搜索")
+                    }
+                }
+            )
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(
+                    BitShareSortOption.RELEVANCE to "综合",
+                    BitShareSortOption.DOWNLOADS to "下载量",
+                    BitShareSortOption.LATEST to "最新"
+                ).forEach { (option, label) ->
+                    FilterChip(
+                        selected = uiState.remoteSort == option,
+                        onClick = { onSortChanged(option) },
+                        label = { Text(label) }
+                    )
+                }
             }
-        }
-    }
-}
 
-@Composable
-fun CloudSharedContent() {
-    val sharedItems = remember {
-        listOf(
-            SharedItem("2024年期末复习资料", "张同学", "2024-03-20", true),
-            SharedItem("高数重点笔记", "李同学", "2024-03-18", false),
-            SharedItem("物理公式大全", "王同学", "2024-03-15", false)
-        )
-    }
-
-    Column(modifier = Modifier.fillMaxSize()) {
-        // 提示
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            color = MaterialTheme.colorScheme.secondaryContainer,
-            shape = MaterialTheme.shapes.medium
-        ) {
-            Row(
-                modifier = Modifier.padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                shape = MaterialTheme.shapes.medium
             ) {
-                Icon(
-                    Icons.Default.Info,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSecondaryContainer
-                )
-                Spacer(modifier = Modifier.width(12.dp))
                 Text(
-                    text = "校园网环境下可下载云端共享资料",
+                    text = "公开接口直连 BITShare，仅下载单个公开文件并保存到你的本地知识库。",
+                    modifier = Modifier.padding(12.dp),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSecondaryContainer
                 )
             }
         }
 
-        LazyColumn(
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(sharedItems) { item ->
-                SharedFileCard(item)
+        when {
+            uiState.isRemoteSearching -> {
+                LoadingState("正在搜索资料…")
             }
-        }
-    }
-}
 
-data class FolderItem(
-    val name: String,
-    val fileCount: Int,
-    val hasSubfolders: Boolean
-)
+            uiState.remoteErrorMessage != null && uiState.remoteResults.isEmpty() -> {
+                EmptyStateCard(
+                    title = "搜索失败",
+                    description = uiState.remoteErrorMessage
+                )
+            }
 
-@Composable
-fun FolderCard(folder: FolderItem) {
-    ListItem(
-        headlineContent = { Text(folder.name) },
-        supportingContent = { Text("${folder.fileCount} 个文件") },
-        leadingContent = {
-            Icon(
-                if (folder.hasSubfolders) Icons.Default.Folder else Icons.Default.FolderOpen,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary
-            )
-        },
-        trailingContent = {
-            Icon(Icons.Default.ChevronRight, contentDescription = null)
-        },
-        modifier = Modifier.clickable { /* TODO: 进入文件夹 */ }
-    )
-}
+            uiState.remoteQuery.isBlank() -> {
+                EmptyStateCard(
+                    title = "搜索公开资料",
+                    description = "输入课程名、老师名或关键词后搜索，并下载到自己的知识库。"
+                )
+            }
 
-data class FileItem(
-    val name: String,
-    val size: String,
-    val hasImage: Boolean
-)
+            uiState.remoteResults.isEmpty() -> {
+                EmptyStateCard(
+                    title = "没有找到结果",
+                    description = "换个关键词试试，或者缩短搜索条件。"
+                )
+            }
 
-@Composable
-fun FileCard(file: FileItem) {
-    ListItem(
-        headlineContent = { Text(file.name) },
-        supportingContent = { Text(file.size) },
-        leadingContent = {
-            Icon(
-                when {
-                    file.name.endsWith(".pdf") -> Icons.Default.PictureAsPdf
-                    file.name.endsWith(".docx") || file.name.endsWith(".doc") -> Icons.Default.Description
-                    file.name.endsWith(".jpg") || file.name.endsWith(".png") -> Icons.Default.Image
-                    else -> Icons.Default.InsertDriveFile
-                },
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        },
-        trailingContent = {
-            Row {
-                if (file.hasImage) {
-                    IconButton(onClick = { /* TODO: 预览 */ }) {
-                        Icon(Icons.Default.Visibility, contentDescription = "预览")
+            else -> {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(uiState.remoteResults, key = { it.id }) { result ->
+                        RemoteResultRow(
+                            result = result,
+                            onClick = { onOpenDetail(result.id) }
+                        )
                     }
                 }
-                IconButton(onClick = { /* TODO: 更多操作 */ }) {
-                    Icon(Icons.Default.MoreVert, contentDescription = "更多")
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecentDownloadsSection(
+    files: List<KnowledgeBaseFileSummary>,
+    onShare: (KnowledgeBaseFileSummary) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+    ) {
+        Text(
+            text = "最近下载",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        files.forEach { file ->
+            ElevatedCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp)
+            ) {
+                ListItem(
+                    headlineContent = {
+                        Text(file.displayName, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    },
+                    supportingContent = {
+                        Text(
+                            "${formatFileSize(file.sizeBytes)} · ${formatTimestamp(file.downloadedAt)}"
+                        )
+                    },
+                    leadingContent = {
+                        Icon(Icons.Default.DownloadDone, contentDescription = null)
+                    },
+                    trailingContent = {
+                        IconButton(onClick = { onShare(file) }) {
+                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "导出")
+                        }
+                    }
+                )
+            }
+        }
+        HorizontalDivider()
+    }
+}
+
+@Composable
+private fun FolderRow(
+    folder: KnowledgeBaseFolderSummary,
+    onClick: () -> Unit,
+    onRename: () -> Unit,
+    onDelete: () -> Unit
+) {
+    var menuExpanded by remember { mutableStateOf(false) }
+
+    ElevatedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .clickable(onClick = onClick)
+    ) {
+        ListItem(
+            headlineContent = { Text(folder.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+            supportingContent = { Text("${folder.directFileCount} 个文件") },
+            leadingContent = {
+                Icon(Icons.Default.Folder, contentDescription = null)
+            },
+            trailingContent = {
+                Box {
+                    IconButton(onClick = { menuExpanded = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "更多操作")
+                    }
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("重命名") },
+                            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                            onClick = {
+                                menuExpanded = false
+                                onRename()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("删除") },
+                            leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
+                            onClick = {
+                                menuExpanded = false
+                                onDelete()
+                            }
+                        )
+                    }
                 }
+            }
+        )
+    }
+}
+
+@Composable
+private fun FileRow(
+    file: KnowledgeBaseFileSummary,
+    onRename: () -> Unit,
+    onMove: () -> Unit,
+    onDelete: () -> Unit,
+    onShare: () -> Unit
+) {
+    var menuExpanded by remember { mutableStateOf(false) }
+
+    ElevatedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+    ) {
+        ListItem(
+            headlineContent = {
+                Text(file.displayName, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            },
+            supportingContent = {
+                Text(
+                    listOfNotNull(
+                        formatFileSize(file.sizeBytes),
+                        file.sourceTitle?.takeIf { file.sourceType == "bitshare" }?.let { "来源: BITShare" }
+                    ).joinToString(" · ")
+                )
+            },
+            leadingContent = { Icon(Icons.Default.Description, contentDescription = null) },
+            trailingContent = {
+                Box {
+                    IconButton(onClick = { menuExpanded = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "更多操作")
+                    }
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("重命名") },
+                            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                            onClick = {
+                                menuExpanded = false
+                                onRename()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("移动") },
+                            leadingIcon = { Icon(Icons.AutoMirrored.Filled.DriveFileMove, contentDescription = null) },
+                            onClick = {
+                                menuExpanded = false
+                                onMove()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("导出") },
+                            leadingIcon = { Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null) },
+                            onClick = {
+                                menuExpanded = false
+                                onShare()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("删除") },
+                            leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
+                            onClick = {
+                                menuExpanded = false
+                                onDelete()
+                            }
+                        )
+                    }
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun RemoteResultRow(
+    result: BitShareSearchResult,
+    onClick: () -> Unit
+) {
+    ElevatedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .clickable(onClick = onClick)
+    ) {
+        ListItem(
+            headlineContent = {
+                Text(result.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            },
+            supportingContent = {
+                Text(
+                    "${result.originalName} · ${formatFileSize(result.sizeBytes)} · 下载 ${result.downloadCount}"
+                )
+            },
+            leadingContent = { Icon(Icons.Default.Folder, contentDescription = null) },
+            trailingContent = {
+                Icon(Icons.Default.CloudDownload, contentDescription = "查看详情")
+            }
+        )
+    }
+}
+
+@Composable
+private fun RemoteDetailDialog(
+    detail: BitShareFileDetail,
+    isDownloading: Boolean,
+    onDismiss: () -> Unit,
+    onDownloadClick: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(detail.title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                DetailLine("原始文件名", detail.originalName)
+                DetailLine("文件大小", formatFileSize(detail.sizeBytes))
+                DetailLine("下载量", detail.downloadCount.toString())
+                DetailLine("上传时间", detail.uploadedAt ?: "未知")
+                DetailLine("来源路径", detail.path ?: "未提供")
+                detail.description?.takeIf { it.isNotBlank() }?.let {
+                    DetailLine("说明", it)
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onDownloadClick,
+                enabled = !isDownloading
+            ) {
+                if (isDownloading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text("下载到知识库")
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("关闭")
             }
         }
     )
 }
 
-data class WrongQuestionItem(
-    val title: String,
-    val date: String,
-    val status: String
-)
-
 @Composable
-fun WrongQuestionCard(question: WrongQuestionItem) {
-    Card(
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // 错题图标
-            Surface(
-                modifier = Modifier.size(48.dp),
-                shape = MaterialTheme.shapes.small,
-                color = if (question.status == "已复习")
-                    MaterialTheme.colorScheme.primaryContainer
-                else
-                    MaterialTheme.colorScheme.errorContainer
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        Icons.Default.Error,
-                        contentDescription = null,
-                        tint = if (question.status == "已复习")
-                            MaterialTheme.colorScheme.onPrimaryContainer
-                        else
-                            MaterialTheme.colorScheme.onErrorContainer
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = question.title,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Medium
-                )
-                Text(
-                    text = question.date,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                )
-            }
-
-            AssistChip(
-                onClick = { /* TODO: 状态切换 */ },
-                label = { Text(question.status) },
-                colors = AssistChipDefaults.assistChipColors(
-                    containerColor = if (question.status == "已复习")
-                        MaterialTheme.colorScheme.primaryContainer
-                    else
-                        MaterialTheme.colorScheme.errorContainer
-                )
-            )
-        }
-    }
-}
-
-@Composable
-fun StatCard(
-    modifier: Modifier = Modifier,
+private fun FolderPickerDialog(
     title: String,
-    value: String,
-    color: Color
+    folders: List<KnowledgeBaseFolderChoice>,
+    onDismiss: () -> Unit,
+    onSelect: (String?) -> Unit
 ) {
-    Surface(
-        modifier = modifier,
-        color = color,
-        shape = MaterialTheme.shapes.medium
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            LazyColumn(
+                modifier = Modifier.heightIn(max = 360.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(folders, key = { it.path }) { folder ->
+                    ElevatedCard(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect(folder.id) }
+                    ) {
+                        ListItem(
+                            headlineContent = { Text(folder.name) },
+                            supportingContent = { Text(folder.path) },
+                            leadingContent = { Icon(Icons.Default.Folder, contentDescription = null) }
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        }
+    )
+}
+
+@Composable
+private fun NameInputDialog(
+    title: String,
+    initialValue: String,
+    confirmText: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var text by remember(initialValue) { mutableStateOf(initialValue) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(text) }) {
+                Text(confirmText)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        }
+    )
+}
+
+@Composable
+private fun ConfirmDialog(
+    title: String,
+    message: String,
+    confirmText: String,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { Text(message) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(confirmText)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        }
+    )
+}
+
+@Composable
+private fun DetailLine(label: String, value: String) {
+    Column {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Text(text = value, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+@Composable
+private fun LoadingState(message: String) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
     ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = value,
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-            )
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            CircularProgressIndicator()
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(message)
         }
     }
 }
 
-data class SharedItem(
-    val title: String,
-    val uploader: String,
-    val date: String,
-    val isDownloaded: Boolean
-)
-
 @Composable
-fun SharedFileCard(item: SharedItem) {
-    Card(
-        modifier = Modifier.fillMaxWidth()
+private fun EmptyStateCard(
+    title: String,
+    description: String
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        contentAlignment = Alignment.Center
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                Icons.Default.Cloud,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary
-            )
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = item.title,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Medium
-                )
-                Text(
-                    text = "${item.uploader} · ${item.date}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                )
-            }
-
-            if (item.isDownloaded) {
-                Icon(
-                    Icons.Default.CheckCircle,
-                    contentDescription = "已下载",
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            } else {
-                IconButton(onClick = { /* TODO: 下载 */ }) {
-                    Icon(Icons.Default.Download, contentDescription = "下载")
-                }
+        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Text(text = title, style = MaterialTheme.typography.titleMedium)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(text = description, style = MaterialTheme.typography.bodyMedium)
             }
         }
     }
+}
+
+@Composable
+private fun SectionTitle(text: String) {
+    Text(
+        text = text,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.SemiBold
+    )
+}
+
+private fun formatFileSize(sizeBytes: Long): String {
+    if (sizeBytes <= 0) return "未知大小"
+    val units = listOf("B", "KB", "MB", "GB")
+    var value = sizeBytes.toDouble()
+    var unitIndex = 0
+    while (value >= 1024 && unitIndex < units.lastIndex) {
+        value /= 1024
+        unitIndex++
+    }
+    return String.format(Locale.getDefault(), "%.1f %s", value, units[unitIndex])
+}
+
+private fun formatTimestamp(timestamp: Long?): String {
+    if (timestamp == null || timestamp <= 0) return "刚刚"
+    val formatter = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
+    return formatter.format(Date(timestamp))
+}
+
+private fun shareFile(
+    context: android.content.Context,
+    localPath: String,
+    mimeType: String,
+    title: String
+) {
+    val file = File(localPath)
+    if (!file.exists()) return
+
+    val uri = FileProvider.getUriForFile(
+        context,
+        "${context.packageName}.fileprovider",
+        file
+    )
+
+    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+        type = mimeType.ifBlank {
+            MimeTypeMap.getSingleton()
+                .getMimeTypeFromExtension(file.extension)
+                ?: "*/*"
+        }
+        putExtra(Intent.EXTRA_STREAM, uri)
+        putExtra(Intent.EXTRA_SUBJECT, title)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+
+    context.startActivity(Intent.createChooser(shareIntent, "导出文件"))
 }
