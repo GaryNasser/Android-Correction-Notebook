@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.rememberAsyncImagePainter
 import com.github.garynasser.correction_notebook.data.model.home.PomodoroPhase
 import com.github.garynasser.correction_notebook.data.model.home.TimerState
+import com.github.garynasser.correction_notebook.domain.usecase.AlertManager
 import com.github.garynasser.correction_notebook.domain.usecase.StudyTimerManager
 
 enum class WhiteNoise(val displayName: String) {
@@ -45,9 +46,18 @@ enum class WhiteNoise(val displayName: String) {
 fun ImmersiveStudyScreen(
     timerManager: StudyTimerManager,
     onExit: () -> Unit,
+    onStop: () -> Unit = {},
     backgroundImageUri: String? = null,
     isLandscapeOrientation: Boolean = false,
-    onOrientationChange: (Boolean) -> Unit = {}
+    onOrientationChange: (Boolean) -> Unit = {},
+    onShowPomodoroSettings: () -> Unit = {},
+    soundEnabled: Boolean = true,
+    vibrationEnabled: Boolean = true,
+    onSoundEnabledChange: (Boolean) -> Unit = {},
+    onVibrationEnabledChange: (Boolean) -> Unit = {},
+    pomodoroSettings: com.github.garynasser.correction_notebook.data.model.home.PomodoroSettings = com.github.garynasser.correction_notebook.data.model.home.PomodoroSettings(),
+    onPomodoroSettingsSave: (com.github.garynasser.correction_notebook.data.model.home.PomodoroSettings) -> Unit = {},
+    isPomodoroMode: Boolean = true  // Indicates if currently in pomodoro mode
 ) {
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
@@ -56,6 +66,9 @@ fun ImmersiveStudyScreen(
     var selectedNoise by remember { mutableStateOf<WhiteNoise?>(null) }
     var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
     var isLandscape by remember { mutableStateOf(isLandscapeOrientation) }
+    var alertManager by remember { mutableStateOf<AlertManager?>(null) }
+    var showAlertSettings by remember { mutableStateOf(false) }
+    var showPomodoroSettingsDialog by remember { mutableStateOf(false) }
     var isFullscreen by remember { mutableStateOf(false) }
     var showControls by remember { mutableStateOf(true) }
 
@@ -79,10 +92,25 @@ fun ImmersiveStudyScreen(
 
     // Reset orientation and show controls when exiting
     DisposableEffect(Unit) {
+        alertManager = AlertManager(context)
+
+        // Set up timer finished callback
+        timerManager.onTimerFinished = {
+            if (soundEnabled) {
+                alertManager?.playAlarmSound()
+            }
+            if (vibrationEnabled) {
+                alertManager?.vibrate(AlertManager.VibrationPattern.POMODORO)
+            }
+        }
+
         onDispose {
             val activity = context as? android.app.Activity
             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
             mediaPlayer?.release()
+            alertManager?.stop()
+            timerManager.onTimerFinished = null
+            timerManager.onPomodoroPhaseChanged = null
         }
     }
 
@@ -187,7 +215,17 @@ fun ImmersiveStudyScreen(
                         mediaPlayer?.release()
                         mediaPlayer = null
                         selectedNoise = null
-                    }
+                    },
+                    onSettingsClick = {
+                        if (isPomodoroMode) {
+                            showPomodoroSettingsDialog = true
+                        }
+                    },
+                    soundEnabled = soundEnabled,
+                    vibrationEnabled = vibrationEnabled,
+                    onSoundToggle = { onSoundEnabledChange(!soundEnabled) },
+                    onVibrationToggle = { onVibrationEnabledChange(!vibrationEnabled) },
+                    isPomodoroMode = isPomodoroMode
                 )
             } else {
                 Spacer(modifier = Modifier.height(48.dp))
@@ -223,17 +261,38 @@ fun ImmersiveStudyScreen(
                             is TimerState.Countdown -> {
                                 if (state.isRunning) timerManager.pause() else timerManager.resume()
                             }
+                            is TimerState.CountdownFinished -> {
+                                timerManager.reset()
+                            }
                             is TimerState.Stopwatch -> {
                                 if (state.isRunning) timerManager.pause() else timerManager.resume()
                             }
+                            is TimerState.StopwatchFinished -> {
+                                timerManager.reset()
+                            }
                         }
                     },
-                    onStop = { timerManager.stop() }
+                    onStop = {
+                        onStop()
+                        timerManager.stop()
+                    }
                 )
             } else {
                 Spacer(modifier = Modifier.height(100.dp))
             }
         }
+    }
+
+    // Pomodoro Settings Dialog
+    if (showPomodoroSettingsDialog) {
+        PomodoroSettingsDialog(
+            currentSettings = pomodoroSettings,
+            onDismiss = { showPomodoroSettingsDialog = false },
+            onSave = { settings ->
+                onPomodoroSettingsSave(settings)
+                showPomodoroSettingsDialog = false
+            }
+        )
     }
 }
 
@@ -245,7 +304,13 @@ private fun TopControls(
     onOrientationToggle: () -> Unit,
     onFullscreenToggle: () -> Unit,
     onNoiseSelect: (WhiteNoise) -> Unit,
-    onNoiseNone: () -> Unit
+    onNoiseNone: () -> Unit,
+    onSettingsClick: () -> Unit,
+    soundEnabled: Boolean,
+    vibrationEnabled: Boolean,
+    onSoundToggle: () -> Unit,
+    onVibrationToggle: () -> Unit,
+    isPomodoroMode: Boolean = true
 ) {
     if (isLandscape) {
         // Horizontal layout for landscape
@@ -254,7 +319,7 @@ private fun TopControls(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 IconButton(onClick = onExit, modifier = Modifier.size(40.dp)) {
                     Icon(Icons.Default.Close, "退出", tint = Color.White)
                 }
@@ -263,6 +328,28 @@ private fun TopControls(
                 }
                 IconButton(onClick = onFullscreenToggle, modifier = Modifier.size(40.dp)) {
                     Icon(Icons.Default.Fullscreen, "全屏", tint = Color.White)
+                }
+                // Only show settings button in pomodoro mode
+                if (isPomodoroMode) {
+                    IconButton(onClick = onSettingsClick, modifier = Modifier.size(40.dp)) {
+                        Icon(Icons.Default.Settings, "设置", tint = Color.White)
+                    }
+                }
+                // Sound toggle
+                IconButton(onClick = onSoundToggle, modifier = Modifier.size(40.dp)) {
+                    Icon(
+                        if (soundEnabled) Icons.Default.VolumeUp else Icons.Default.VolumeOff,
+                        "声音",
+                        tint = if (soundEnabled) Color.White else Color.White.copy(alpha = 0.4f)
+                    )
+                }
+                // Vibration toggle
+                IconButton(onClick = onVibrationToggle, modifier = Modifier.size(40.dp)) {
+                    Icon(
+                        if (vibrationEnabled) Icons.Default.Vibration else Icons.Default.PhonelinkErase,
+                        "震动",
+                        tint = if (vibrationEnabled) Color.White else Color.White.copy(alpha = 0.4f)
+                    )
                 }
             }
             WhiteNoiseSelector(
@@ -283,12 +370,34 @@ private fun TopControls(
                 IconButton(onClick = onExit, modifier = Modifier.size(40.dp)) {
                     Icon(Icons.Default.Close, "退出", tint = Color.White)
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                     IconButton(onClick = onOrientationToggle, modifier = Modifier.size(40.dp)) {
                         Icon(Icons.Default.ScreenRotation, "横竖屏", tint = Color.White)
                     }
                     IconButton(onClick = onFullscreenToggle, modifier = Modifier.size(40.dp)) {
                         Icon(Icons.Default.Fullscreen, "全屏", tint = Color.White)
+                    }
+                    // Only show settings button in pomodoro mode
+                    if (isPomodoroMode) {
+                        IconButton(onClick = onSettingsClick, modifier = Modifier.size(40.dp)) {
+                            Icon(Icons.Default.Settings, "设置", tint = Color.White)
+                        }
+                    }
+                    // Sound toggle
+                    IconButton(onClick = onSoundToggle, modifier = Modifier.size(40.dp)) {
+                        Icon(
+                            if (soundEnabled) Icons.Default.VolumeUp else Icons.Default.VolumeOff,
+                            "声音",
+                            tint = if (soundEnabled) Color.White else Color.White.copy(alpha = 0.4f)
+                        )
+                    }
+                    // Vibration toggle
+                    IconButton(onClick = onVibrationToggle, modifier = Modifier.size(40.dp)) {
+                        Icon(
+                            if (vibrationEnabled) Icons.Default.Vibration else Icons.Default.PhonelinkErase,
+                            "震动",
+                            tint = if (vibrationEnabled) Color.White else Color.White.copy(alpha = 0.4f)
+                        )
                     }
                 }
             }
@@ -416,7 +525,9 @@ private fun BottomControls(
                     is TimerState.Idle -> Icons.Default.PlayArrow
                     is TimerState.Pomodoro -> if (timerState.state.isRunning) Icons.Default.Pause else Icons.Default.PlayArrow
                     is TimerState.Countdown -> if (timerState.isRunning) Icons.Default.Pause else Icons.Default.PlayArrow
+                    is TimerState.CountdownFinished -> Icons.Default.Refresh
                     is TimerState.Stopwatch -> if (timerState.isRunning) Icons.Default.Pause else Icons.Default.PlayArrow
+                    is TimerState.StopwatchFinished -> Icons.Default.Refresh
                 },
                 "播放/暂停",
                 tint = Color(0xFF006781),
@@ -467,7 +578,9 @@ private fun TimerDisplay(
         is TimerState.Idle -> "25:00"
         is TimerState.Pomodoro -> formatTime(timerState.state.timeRemainingSeconds)
         is TimerState.Countdown -> formatTime(timerState.remainingSeconds)
+        is TimerState.CountdownFinished -> "00:00"
         is TimerState.Stopwatch -> formatTime(timerState.elapsedSeconds)
+        is TimerState.StopwatchFinished -> formatTime(timerState.elapsedSeconds)
     }
 
     val showPulse = when (timerState) {

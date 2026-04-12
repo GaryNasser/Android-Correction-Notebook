@@ -1,5 +1,8 @@
 package com.github.garynasser.correction_notebook.ui.screens.home
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -13,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
@@ -33,6 +37,16 @@ fun TodoItemCard(
         Priority.LOW -> Color(0xFF43A047)
     }
 
+    // Animation for check icon
+    val scale by animateFloatAsState(
+        targetValue = if (todo.isCompleted) 1f else 0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "checkScale"
+    )
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
@@ -50,13 +64,13 @@ fun TodoItemCard(
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Checkbox
+            // Checkbox with animation
             Box(
                 modifier = Modifier
                     .size(24.dp)
                     .clip(CircleShape)
                     .background(
-                        if (todo.isCompleted) MaterialTheme.colorScheme.primary
+                        if (todo.isCompleted) Color(0xFF43A047)
                         else Color.Transparent
                     )
                     .clickable { onToggleComplete() }
@@ -74,8 +88,13 @@ fun TodoItemCard(
                     Icon(
                         Icons.Default.Check,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(16.dp)
+                        tint = Color.White,
+                        modifier = Modifier
+                            .size(16.dp)
+                            .graphicsLayer {
+                                scaleX = scale
+                                scaleY = scale
+                            }
                     )
                 }
             }
@@ -143,6 +162,33 @@ fun TodoItemCard(
                             } else {
                                 MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                             }
+                        )
+                    }
+                }
+
+                // Show completed time
+                todo.completedAt?.let { completedTime ->
+                    val completedLocalTime = remember(completedTime) {
+                        java.time.Instant.ofEpochMilli(completedTime)
+                            .atZone(java.time.ZoneId.systemDefault())
+                            .toLocalTime()
+                            .format(DateTimeFormatter.ofPattern("HH:mm"))
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Check,
+                            contentDescription = null,
+                            modifier = Modifier.size(12.dp),
+                            tint = Color(0xFF43A047)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "完成于 $completedLocalTime",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFF43A047)
                         )
                     }
                 }

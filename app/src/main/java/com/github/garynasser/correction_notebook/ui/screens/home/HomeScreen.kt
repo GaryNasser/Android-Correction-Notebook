@@ -67,12 +67,22 @@ fun HomeScreen(
         ImmersiveStudyScreen(
             timerManager = homeViewModel.timerManager,
             onExit = {
+                homeViewModel.saveCurrentStudyTime()
                 homeViewModel.timerManager.stop()
                 homeViewModel.clearSelectedMode()
             },
+            onStop = { homeViewModel.saveCurrentStudyTime() },
             backgroundImageUri = uiState.backgroundImageUri,
             isLandscapeOrientation = uiState.isLandscapeOrientation,
-            onOrientationChange = { homeViewModel.setLandscapeOrientation(it) }
+            onOrientationChange = { homeViewModel.setLandscapeOrientation(it) },
+            onShowPomodoroSettings = { homeViewModel.showPomodoroSettingsDialog() },
+            soundEnabled = uiState.soundEnabled,
+            vibrationEnabled = uiState.vibrationEnabled,
+            onSoundEnabledChange = { homeViewModel.setSoundEnabled(it) },
+            onVibrationEnabledChange = { homeViewModel.setVibrationEnabled(it) },
+            pomodoroSettings = uiState.pomodoroSettings,
+            onPomodoroSettingsSave = { settings -> homeViewModel.updatePomodoroSettings(settings) },
+            isPomodoroMode = uiState.activeTimerMode == ActiveTimerMode.POMODORO
         )
         return
     }
@@ -86,10 +96,18 @@ fun HomeScreen(
         return
     }
 
+    // Handle todo history screen
+    if (uiState.showTodoHistory) {
+        TodoHistoryScreen(
+            onBack = { homeViewModel.hideTodoHistory() }
+        )
+        return
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("StudyBIT") },
+                title = { Text("BITStudy") },
                 actions = {
                     IconButton(onClick = { showSettingsDialog = true }) {
                         Icon(Icons.Default.Settings, contentDescription = "设置")
@@ -150,8 +168,13 @@ fun HomeScreen(
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
-                    IconButton(onClick = { homeViewModel.showAddTodoDialog() }) {
-                        Icon(Icons.Default.Add, contentDescription = "添加待办")
+                    Row {
+                        IconButton(onClick = { homeViewModel.showTodoHistory() }) {
+                            Icon(Icons.Default.History, contentDescription = "历史")
+                        }
+                        IconButton(onClick = { homeViewModel.showAddTodoDialog() }) {
+                            Icon(Icons.Default.Add, contentDescription = "添加待办")
+                        }
                     }
                 }
             }
@@ -246,6 +269,15 @@ fun HomeScreen(
             onClearImage = {
                 homeViewModel.setBackgroundImage(null)
             }
+        )
+    }
+
+    // Pomodoro Settings Dialog
+    if (uiState.showPomodoroSettingsDialog) {
+        PomodoroSettingsDialog(
+            currentSettings = uiState.pomodoroSettings,
+            onDismiss = { homeViewModel.hidePomodoroSettingsDialog() },
+            onSave = { settings -> homeViewModel.updatePomodoroSettings(settings) }
         )
     }
 }
@@ -668,7 +700,8 @@ fun CustomTimerDialog(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     listOf(15, 25, 45, 60).forEach { preset ->
                         FilterChip(
@@ -677,7 +710,8 @@ fun CustomTimerDialog(
                                 hours = (preset / 60).toString()
                                 minutes = (preset % 60).toString()
                             },
-                            label = { Text("${preset}分钟") }
+                            label = { Text("${preset}m") },
+                            modifier = Modifier.weight(1f)
                         )
                     }
                 }
