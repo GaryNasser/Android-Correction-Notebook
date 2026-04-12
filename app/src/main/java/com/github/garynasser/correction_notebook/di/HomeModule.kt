@@ -4,6 +4,7 @@ import android.content.Context
 import com.github.garynasser.correction_notebook.data.local.StudyPreferencesManager
 import com.github.garynasser.correction_notebook.data.repository.ArticleRepository
 import com.github.garynasser.correction_notebook.data.repository.StudySessionRepository
+import com.github.garynasser.correction_notebook.data.repository.TodoHistoryRepository
 import com.github.garynasser.correction_notebook.data.repository.TodoRepository
 import dagger.Module
 import dagger.Provides
@@ -30,6 +31,14 @@ object HomeModule {
         @ApplicationContext context: Context
     ): TodoRepository {
         return TodoRepository(context)
+    }
+
+    @Provides
+    @Singleton
+    fun provideTodoHistoryRepository(
+        @ApplicationContext context: Context
+    ): TodoHistoryRepository {
+        return TodoHistoryRepository(context)
     }
 
     @Provides

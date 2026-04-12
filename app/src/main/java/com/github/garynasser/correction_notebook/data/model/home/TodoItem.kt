@@ -9,7 +9,8 @@ data class TodoItem(
     val priority: Priority = Priority.MEDIUM,
     val dueDate: LocalDate? = null,
     val isCompleted: Boolean = false,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val completedAt: Long? = null
 )
 
 enum class Priority {

@@ -12,6 +12,7 @@ import com.github.garynasser.correction_notebook.data.model.home.Priority
 import com.github.garynasser.correction_notebook.data.model.home.TodoItem
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.time.LocalDate
 
@@ -53,11 +54,24 @@ class TodoRepository(private val context: Context) {
         }
     }
 
+    suspend fun getTodoById(todoId: String): TodoItem? {
+        val current = context.todoDataStore.data.first().let { prefs ->
+            prefs[todoItemsKey]?.let { parseTodoItems(it) } ?: emptyList()
+        }
+        return current.find { it.id == todoId }
+    }
+
     suspend fun toggleComplete(todoId: String) {
         context.todoDataStore.edit { prefs ->
             val current = prefs[todoItemsKey]?.let { parseTodoItems(it) } ?: emptyList()
             val updated = current.map {
-                if (it.id == todoId) it.copy(isCompleted = !it.isCompleted) else it
+                if (it.id == todoId) {
+                    if (it.isCompleted) {
+                        it.copy(isCompleted = false, completedAt = null)
+                    } else {
+                        it.copy(isCompleted = true, completedAt = System.currentTimeMillis())
+                    }
+                } else it
             }
             prefs[todoItemsKey] = serializeTodoItems(updated)
         }
@@ -72,7 +86,8 @@ class TodoRepository(private val context: Context) {
                 item.priority.name,
                 item.dueDate?.toString() ?: "",
                 item.isCompleted.toString(),
-                item.createdAt.toString()
+                item.createdAt.toString(),
+                item.completedAt?.toString() ?: ""
             ).joinToString(":::")
         }
     }
@@ -81,7 +96,7 @@ class TodoRepository(private val context: Context) {
         if (json.isBlank()) return emptyList()
         return json.split("|||").mapNotNull { itemStr ->
             val parts = itemStr.split(":::")
-            if (parts.size >= 7) {
+            if (parts.size >= 8) {
                 TodoItem(
                     id = parts[0],
                     title = parts[1],
@@ -89,7 +104,8 @@ class TodoRepository(private val context: Context) {
                     priority = try { Priority.valueOf(parts[3]) } catch (e: Exception) { Priority.MEDIUM },
                     dueDate = if (parts[4].isNotBlank()) LocalDate.parse(parts[4]) else null,
                     isCompleted = parts[5].toBoolean(),
-                    createdAt = parts[6].toLongOrNull() ?: System.currentTimeMillis()
+                    createdAt = parts[6].toLongOrNull() ?: System.currentTimeMillis(),
+                    completedAt = if (parts[7].isNotBlank()) parts[7].toLongOrNull() else null
                 )
             } else null
         }

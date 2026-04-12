@@ -5,9 +5,12 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.garynasser.correction_notebook.data.local.StudyPreferencesManager
 import com.github.garynasser.correction_notebook.data.model.home.Article
+import com.github.garynasser.correction_notebook.data.model.home.PomodoroSettings
+import com.github.garynasser.correction_notebook.data.model.home.TodoHistoryItem
 import com.github.garynasser.correction_notebook.data.model.home.TodoItem
 import com.github.garynasser.correction_notebook.data.repository.ArticleRepository
 import com.github.garynasser.correction_notebook.data.repository.StudySessionRepository
+import com.github.garynasser.correction_notebook.data.repository.TodoHistoryRepository
 import com.github.garynasser.correction_notebook.data.repository.TodoRepository
 import com.github.garynasser.correction_notebook.domain.usecase.StudyTimerManager
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,10 +34,20 @@ data class HomeUiState(
     val showAddTodoDialog: Boolean = false,
     val showModeSelector: Boolean = false,
     val selectedMode: StudyMode? = null,
+    val activeTimerMode: ActiveTimerMode = ActiveTimerMode.NONE,  // Tracks what timer was started
     val showStatistics: Boolean = false,
     val backgroundImageUri: String? = null,
-    val isLandscapeOrientation: Boolean = false
+    val isLandscapeOrientation: Boolean = false,
+    val pomodoroSettings: PomodoroSettings = PomodoroSettings(),
+    val showPomodoroSettingsDialog: Boolean = false,
+    val showTodoHistory: Boolean = false,
+    val soundEnabled: Boolean = true,
+    val vibrationEnabled: Boolean = true
 )
+
+enum class ActiveTimerMode {
+    NONE, POMODORO, COUNTDOWN, STOPWATCH
+}
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -42,6 +55,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val articleRepository = ArticleRepository()
     private val studyPreferencesManager = StudyPreferencesManager(application)
     private val studySessionRepository = StudySessionRepository(application)
+    private val todoHistoryRepository = TodoHistoryRepository(application)
 
     val timerManager = StudyTimerManager(viewModelScope)
 
@@ -50,16 +64,86 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         loadData()
+        loadPomodoroSettings()
+        loadAlertSettings()
+        setupTimerCallbacks()
+    }
+
+    private fun setupTimerCallbacks() {
+        // Handle stopwatch reset - save elapsed time
+        timerManager.onStopwatchReset = { elapsedMinutes ->
+            if (elapsedMinutes > 0) {
+                viewModelScope.launch {
+                    studyPreferencesManager.addStudyMinutes(elapsedMinutes)
+                    refreshTodayMinutes()
+                }
+            }
+        }
+
+        // Handle countdown reset - save elapsed time
+        timerManager.onCountdownReset = { elapsedMinutes ->
+            if (elapsedMinutes > 0) {
+                viewModelScope.launch {
+                    studyPreferencesManager.addStudyMinutes(elapsedMinutes)
+                    refreshTodayMinutes()
+                }
+            }
+        }
+    }
+
+    private suspend fun refreshTodayMinutes() {
+        val todayMinutes = studyPreferencesManager.getTodayStudyMinutes()
+        _uiState.value = _uiState.value.copy(todayStudyMinutes = todayMinutes)
+    }
+
+    private fun loadPomodoroSettings() {
+        viewModelScope.launch {
+            studyPreferencesManager.pomodoroSettings.collect { settings ->
+                _uiState.value = _uiState.value.copy(pomodoroSettings = settings)
+            }
+        }
+    }
+
+    private fun loadAlertSettings() {
+        viewModelScope.launch {
+            studyPreferencesManager.soundEnabled.collect { enabled ->
+                _uiState.value = _uiState.value.copy(soundEnabled = enabled)
+            }
+        }
+        viewModelScope.launch {
+            studyPreferencesManager.vibrationEnabled.collect { enabled ->
+                _uiState.value = _uiState.value.copy(vibrationEnabled = enabled)
+            }
+        }
+    }
+
+    fun setSoundEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            studyPreferencesManager.setSoundEnabled(enabled)
+            _uiState.value = _uiState.value.copy(soundEnabled = enabled)
+        }
+    }
+
+    fun setVibrationEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            studyPreferencesManager.setVibrationEnabled(enabled)
+            _uiState.value = _uiState.value.copy(vibrationEnabled = enabled)
+        }
     }
 
     private fun loadData() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
 
-            // Load todos
+            // Load todos - incomplete first, completed at bottom sorted by completion time
             todoRepository.todoItems.collect { todos ->
+                val sortedTodos = todos
+                    .sortedWith(
+                        compareBy<TodoItem> { it.isCompleted }
+                            .thenByDescending { it.completedAt ?: 0 }
+                    )
                 _uiState.value = _uiState.value.copy(
-                    todoItems = todos.filter { !it.isCompleted }
+                    todoItems = sortedTodos
                 )
             }
         }
@@ -74,11 +158,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             // Load today's stats
             val todayMinutes = studyPreferencesManager.getTodayStudyMinutes()
-            val pomodoros = studyPreferencesManager.pomodorosCompleted.let { flow ->
-                var result = 0
-                flow.collect { result = it }
-                result
-            }
+            val pomodoros = studyPreferencesManager.pomodorosCompleted.first()
             _uiState.value = _uiState.value.copy(
                 todayStudyMinutes = todayMinutes,
                 completedPomodoros = pomodoros,
@@ -118,7 +198,27 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun toggleTodoComplete(todoId: String) {
         viewModelScope.launch {
+            // Get the todo before toggling to add to history if completing
+            val todo = todoRepository.getTodoById(todoId)
+            val wasCompleted = todo?.isCompleted ?: false
+
             todoRepository.toggleComplete(todoId)
+
+            // If we just completed this todo (was not completed, now is), add to history
+            if (!wasCompleted && todo != null) {
+                val completedAt = System.currentTimeMillis()
+                val historyItem = TodoHistoryItem(
+                    id = todo.id,
+                    title = todo.title,
+                    description = todo.description,
+                    priority = todo.priority,
+                    dueDate = todo.dueDate,
+                    createdAt = todo.createdAt,
+                    completedAt = completedAt,
+                    completedDate = java.time.LocalDate.now()
+                )
+                todoHistoryRepository.addHistoryItem(historyItem)
+            }
         }
     }
 
@@ -144,7 +244,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun clearSelectedMode() {
-        _uiState.value = _uiState.value.copy(selectedMode = null)
+        _uiState.value = _uiState.value.copy(selectedMode = null, activeTimerMode = ActiveTimerMode.NONE)
     }
 
     fun showStatistics() {
@@ -156,15 +256,56 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun startPomodoro() {
-        timerManager.startPomodoro()
+        _uiState.value = _uiState.value.copy(activeTimerMode = ActiveTimerMode.POMODORO)
+        timerManager.startPomodoro(_uiState.value.pomodoroSettings)
+    }
+
+    fun updatePomodoroSettings(settings: PomodoroSettings) {
+        viewModelScope.launch {
+            studyPreferencesManager.updatePomodoroSettings(settings)
+            _uiState.value = _uiState.value.copy(
+                pomodoroSettings = settings,
+                showPomodoroSettingsDialog = false
+            )
+        }
+    }
+
+    fun showPomodoroSettingsDialog() {
+        _uiState.value = _uiState.value.copy(showPomodoroSettingsDialog = true)
+    }
+
+    fun hidePomodoroSettingsDialog() {
+        _uiState.value = _uiState.value.copy(showPomodoroSettingsDialog = false)
+    }
+
+    fun showTodoHistory() {
+        _uiState.value = _uiState.value.copy(showTodoHistory = true)
+    }
+
+    fun hideTodoHistory() {
+        _uiState.value = _uiState.value.copy(showTodoHistory = false)
     }
 
     fun startCountdown(minutes: Int) {
+        _uiState.value = _uiState.value.copy(activeTimerMode = ActiveTimerMode.COUNTDOWN)
         timerManager.startCountdown(minutes)
     }
 
     fun startStopwatch() {
+        _uiState.value = _uiState.value.copy(activeTimerMode = ActiveTimerMode.STOPWATCH)
         timerManager.startStopwatch()
+    }
+
+    fun saveCurrentStudyTime() {
+        viewModelScope.launch {
+            val elapsedMinutes = timerManager.getElapsedMinutesForCurrentSession()
+            if (elapsedMinutes > 0) {
+                studyPreferencesManager.addStudyMinutes(elapsedMinutes)
+                // Refresh UI state
+                val todayMinutes = studyPreferencesManager.getTodayStudyMinutes()
+                _uiState.value = _uiState.value.copy(todayStudyMinutes = todayMinutes)
+            }
+        }
     }
 
     fun setBackgroundImage(uri: String?) {

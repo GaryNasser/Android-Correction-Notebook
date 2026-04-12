@@ -28,6 +28,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -67,11 +68,7 @@ class StatisticsViewModel @Inject constructor(
     private fun loadStats() {
         viewModelScope.launch {
             val totalMinutes = studyPreferencesManager.getTotalStudyMinutes()
-            val pomodoros = studyPreferencesManager.pomodorosCompleted.let { flow ->
-                var result = 0
-                flow.collect { result = it }
-                result
-            }
+            val pomodoros = studyPreferencesManager.pomodorosCompleted.first()
 
             val (dailyMinutes, avgMinutes) = when (_uiState.value.period) {
                 StatsPeriod.DAY -> Pair(List(1) { totalMinutes }, totalMinutes)
