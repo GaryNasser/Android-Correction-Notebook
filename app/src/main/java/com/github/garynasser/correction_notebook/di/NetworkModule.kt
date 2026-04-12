@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.github.garynasser.correction_notebook.data.local.TokenManager
 import com.github.garynasser.correction_notebook.data.remote.api.AuthApiService
+import com.github.garynasser.correction_notebook.data.remote.api.BitShareApiService
 import com.github.garynasser.correction_notebook.data.remote.api.VideoApiService
 import com.github.garynasser.correction_notebook.data.remote.network.AuthInterceptor
 import com.github.garynasser.correction_notebook.data.remote.network.TokenAuthenticator
@@ -28,10 +29,15 @@ annotation class BasicRetrofit
 @Retention(AnnotationRetention.BINARY)
 annotation class AuthRetrofit
 
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class BitShareRetrofit
+
 @Module
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
     private const val BASE_URL = "http://10.0.2.2:5678/"
+    private const val BIT_SHARE_BASE_URL = "https://app.bitshare.com.cn/"
 
     // 辅助方法：创建一个日志拦截器
     private fun createLoggingInterceptor(): HttpLoggingInterceptor {
@@ -80,6 +86,17 @@ object NetworkModule {
             .build()
 
         return retrofit.create(VideoApiService::class.java)
+    }
+
+    @Provides
+    @Singleton
+    fun provideBitShareApiService(@BasicRetrofit okHttpClient: OkHttpClient): BitShareApiService {
+        return Retrofit.Builder()
+            .baseUrl(BIT_SHARE_BASE_URL)
+            .client(okHttpClient)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(BitShareApiService::class.java)
     }
 
     @Provides
