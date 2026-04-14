@@ -1,6 +1,7 @@
 package com.github.garynasser.correction_notebook.ui.screens.knowledgebase
 
 import android.content.Intent
+import android.widget.Toast
 import android.webkit.MimeTypeMap
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -914,7 +916,8 @@ private fun EmptyStateCard(
 ) {
     Box(
         modifier = Modifier
-            .fillMaxSize()
+            .fillMaxWidth()
+            .defaultMinSize(minHeight = 240.dp)
             .padding(24.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -963,24 +966,31 @@ private fun shareFile(
     title: String
 ) {
     val file = File(localPath)
-    if (!file.exists()) return
-
-    val uri = FileProvider.getUriForFile(
-        context,
-        "${context.packageName}.fileprovider",
-        file
-    )
-
-    val shareIntent = Intent(Intent.ACTION_SEND).apply {
-        type = mimeType.ifBlank {
-            MimeTypeMap.getSingleton()
-                .getMimeTypeFromExtension(file.extension)
-                ?: "*/*"
-        }
-        putExtra(Intent.EXTRA_STREAM, uri)
-        putExtra(Intent.EXTRA_SUBJECT, title)
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    if (!file.exists()) {
+        Toast.makeText(context, "文件不存在，无法导出", Toast.LENGTH_SHORT).show()
+        return
     }
 
-    context.startActivity(Intent.createChooser(shareIntent, "导出文件"))
+    runCatching {
+        val uri = FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            file
+        )
+
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = mimeType.ifBlank {
+                MimeTypeMap.getSingleton()
+                    .getMimeTypeFromExtension(file.extension)
+                    ?: "*/*"
+            }
+            putExtra(Intent.EXTRA_STREAM, uri)
+            putExtra(Intent.EXTRA_SUBJECT, title)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+
+        context.startActivity(Intent.createChooser(shareIntent, "导出文件"))
+    }.onFailure {
+        Toast.makeText(context, "当前设备无法导出该文件", Toast.LENGTH_SHORT).show()
+    }
 }
