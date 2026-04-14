@@ -27,7 +27,8 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CourseListScreen(
-    viewModel: CourseListViewModel = hiltViewModel()
+    viewModel: CourseListViewModel = hiltViewModel(),
+    onCourseCardClick: (Int) -> Unit
 ) {
     val scope = rememberCoroutineScope()
     val gridState = rememberLazyGridState()
@@ -100,7 +101,10 @@ fun CourseListScreen(
                             modifier = Modifier.fillMaxSize()
                         ) {
                             items(state.courses) { course ->
-                                CourseCard(course = course)
+                                CourseCard(
+                                    course = course,
+                                    onCourseCardClick = onCourseCardClick
+                                )
                             }
 
                             // 底部加载指示器
@@ -169,11 +173,14 @@ fun SearchAndFilterSection(viewModel: CourseListViewModel) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CourseCard(course: Course) {
+fun CourseCard(
+    course: Course,
+    onCourseCardClick: (Int) -> Unit
+) {
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        onClick = { /* TODO: 跳转播放页 */ }
+        onClick = { onCourseCardClick(course.id) }
     ) {
         Column {
             Box(
