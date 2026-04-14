@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.SortByAlpha
 import androidx.compose.material.icons.filled.Update
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -82,6 +83,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitShareFileDetail
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitShareSearchResult
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitShareSortOption
+import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitShareFolderDetail
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.KnowledgeBaseFileSummary
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.KnowledgeBaseFolderChoice
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.KnowledgeBaseFolderSummary
@@ -224,6 +226,13 @@ fun KnowledgeBaseScreen(
         )
     }
 
+    uiState.selectedRemoteFolderDetail?.let { folderDetail ->
+        RemoteFolderDetailDialog(
+            detail = folderDetail,
+            onDismiss = { viewModel.dismissRemoteFolderDetail() }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -301,7 +310,8 @@ fun KnowledgeBaseScreen(
                         }
                     },
                     onSearchClick = viewModel::searchRemoteResources,
-                    onOpenDetail = viewModel::loadRemoteDetail
+                    onOpenDetail = viewModel::loadRemoteDetail,
+                    onOpenFolderDetail = viewModel::loadRemoteFolderDetail
                 )
             }
         }
@@ -443,7 +453,8 @@ private fun BitSharePage(
     onQueryChanged: (String) -> Unit,
     onSortChanged: (BitShareSortOption) -> Unit,
     onSearchClick: () -> Unit,
-    onOpenDetail: (String) -> Unit
+    onOpenDetail: (String) -> Unit,
+    onOpenFolderDetail: (String) -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -482,15 +493,25 @@ private fun BitSharePage(
 
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-                color = MaterialTheme.colorScheme.secondaryContainer,
+                color = MaterialTheme.colorScheme.errorContainer,
                 shape = MaterialTheme.shapes.medium
             ) {
-                Text(
-                    text = "公开接口直连 BITShare，仅下载单个公开文件并保存到你的本地知识库。",
+                Row(
                     modifier = Modifier.padding(12.dp),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer
-                )
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                    Text(
+                        text = "⚠️ 仅支持 BIT 校园网内网访问，请在连接校园 WiFi 或 VPN 后使用",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                }
             }
         }
 
@@ -509,7 +530,7 @@ private fun BitSharePage(
             uiState.remoteQuery.isBlank() -> {
                 EmptyStateCard(
                     title = "搜索公开资料",
-                    description = "输入课程名、老师名或关键词后搜索，并下载到自己的知识库。"
+                    description = "⚠️ 请确保已连接 BIT 校园网（内网 WiFi 或 VPN）\n输入课程名、老师名或关键词后搜索"
                 )
             }
 
@@ -528,7 +549,13 @@ private fun BitSharePage(
                     items(uiState.remoteResults, key = { it.id }) { result ->
                         RemoteResultRow(
                             result = result,
-                            onClick = { onOpenDetail(result.id) }
+                            onClick = {
+                                if (result.entityType == "folder") {
+                                    onOpenFolderDetail(result.id)
+                                } else {
+                                    onOpenDetail(result.id)
+                                }
+                            }
                         )
                     }
                 }
@@ -717,6 +744,8 @@ private fun RemoteResultRow(
     result: BitShareSearchResult,
     onClick: () -> Unit
 ) {
+    val isFolder = result.entityType == "folder"
+
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
@@ -728,13 +757,32 @@ private fun RemoteResultRow(
                 Text(result.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
             },
             supportingContent = {
-                Text(
-                    "${result.originalName} · ${formatFileSize(result.sizeBytes)} · 下载 ${result.downloadCount}"
+                if (isFolder) {
+                    Text(
+                        "目录 · ${result.downloadCount} 次下载",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    Text(
+                        "${result.originalName} · ${formatFileSize(result.sizeBytes)} · 下载 ${result.downloadCount}"
+                    )
+                }
+            },
+            leadingContent = {
+                Icon(
+                    if (isFolder) Icons.Default.Folder else Icons.Default.Description,
+                    contentDescription = if (isFolder) "目录" else "文件"
                 )
             },
-            leadingContent = { Icon(Icons.Default.Folder, contentDescription = null) },
             trailingContent = {
-                Icon(Icons.Default.CloudDownload, contentDescription = "查看详情")
+                if (isFolder) {
+                    AssistChip(
+                        onClick = onClick,
+                        label = { Text("查看", style = MaterialTheme.typography.labelSmall) }
+                    )
+                } else {
+                    Icon(Icons.Default.CloudDownload, contentDescription = "下载")
+                }
             }
         )
     }
@@ -777,6 +825,76 @@ private fun RemoteDetailDialog(
                 }
             }
         },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("关闭")
+            }
+        }
+    )
+}
+
+@Composable
+private fun RemoteFolderDetailDialog(
+    detail: BitShareFolderDetail,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(detail.name) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (!detail.description.isNullOrBlank()) {
+                    DetailLine("目录描述", detail.description)
+                }
+
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    shape = MaterialTheme.shapes.small
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            text = "目录内容统计",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("文件数量: ${detail.fileCount}")
+                        Text("下载次数: ${detail.downloadCount}")
+                        Text("总大小: ${formatFileSize(detail.totalSize)}")
+                    }
+                }
+
+                if (detail.breadcrumbs.isNotEmpty()) {
+                    DetailLine("路径", detail.breadcrumbs.joinToString(" > ") { it.name })
+                }
+
+                // 提示用户无法浏览目录内文件
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f),
+                    shape = MaterialTheme.shapes.small
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.CloudDownload,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                        Text(
+                            text = "无法浏览目录内文件，请通过搜索找到具体文件后下载",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {},
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text("关闭")
