@@ -1,5 +1,8 @@
 package com.github.garynasser.correction_notebook.utils
 
+import androidx.annotation.OptIn
+import androidx.media3.common.util.Log
+import androidx.media3.common.util.UnstableApi
 import java.security.MessageDigest
 
 object SignatureUtils {
@@ -10,6 +13,7 @@ object SignatureUtils {
         return bytes.joinToString("") { "%02x".format(it) }
     }
 
+    @OptIn(UnstableApi::class)
     fun encryptURL(url: String): String {
         // 1. 计算 MD5: MD5(MAGIC + "_100")
         val input = MAGIC + "_100"
@@ -18,18 +22,28 @@ object SignatureUtils {
         val hash = hashBytes.joinToString("") { "%02x".format(it) }
 
         // 2. 切割 URL
-        // 注意：Kotlin 的 split 会保留空字符串，这与 JS 的行为一致
         val urlList = url.split("/").toMutableList()
 
-        // 3. 执行 splice(-1, 0, hash)
-        // 在 JS 中，splice(-1, 0, hash) 是在最后一个元素之前插入
+        // 3. 关键修正：检查是否已经加密过
         if (urlList.isNotEmpty()) {
             val lastIndex = urlList.size - 1
+
+            // 检查倒数第二个元素（即我们要插入的位置）是否已经是这个 hash
+            // 或者检查整个 URL 是否已经包含了这个路径段
+            if (lastIndex >= 1 && urlList[lastIndex - 1] == hash) {
+                // 如果已经存在该 hash 段，直接返回原 URL，不再重复插入
+                Log.d("VIDEO", "检测到路径已加密，跳过: $url")
+                return url
+            }
+
+            // 执行插入逻辑
             urlList.add(lastIndex, hash)
         }
 
         // 4. 重新拼接
-        return urlList.joinToString("/")
+        val finalUrl = urlList.joinToString("/")
+        Log.d("VIDEO", "加密后的 URL: $finalUrl")
+        return finalUrl
     }
 
     fun getSignature(): Map<String, String> {
