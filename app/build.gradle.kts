@@ -67,13 +67,20 @@ dependencies {
     implementation(libs.ui)
     implementation(libs.androidx.foundation)
     implementation(libs.androidx.ui.text)
+    implementation(libs.material3)
+    // 移除这行 - 它可能引入高版本
+    // implementation(libs.androidx.media3.session)
+    implementation(libs.firebase.crashlytics.buildtools)
     kapt("com.google.dagger:hilt-android-compiler:2.51.1")
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // 统一使用 1.2.0
+    implementation("androidx.media3:media3-session:1.2.0")
     implementation("com.squareup.okhttp3:okhttp-urlconnection:4.12.0")
-    implementation("com.patrykandpatrick.vico:compose-m3:1.13.1")
-    kapt(libs.androidx.room.compiler)
+    implementation("androidx.media3:media3-exoplayer:1.2.0")
+    implementation("androidx.media3:media3-ui:1.2.0")
+    implementation("androidx.media3:media3-exoplayer-hls:1.2.0")
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)
