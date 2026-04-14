@@ -33,6 +33,7 @@ fun MainContainer(
 ) {
     val navController = rememberNavController()
     val aiEnabled by settingsViewModel.aiEnabled.collectAsState()
+    var hideBottomBar by remember { mutableStateOf(false) }
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
@@ -43,10 +44,13 @@ fun MainContainer(
 
     Scaffold(
         bottomBar = {
-            if (shouldShowBottomBar) {
+            if (!hideBottomBar) {
                 NavigationBar {
-                    bottomNavList.forEach { item ->
-                        if (item.route is AITutor && !aiEnabled) return@forEach
+                val navBackStackEntry by navController.currentBackStackEntryAsState()
+                val currentDestination = navBackStackEntry?.destination
+
+                bottomNavList.forEach { item ->
+                    if (item.route is AITutor && !aiEnabled) return@forEach
 
                         val isSelected = currentDestination?.hasRoute(item.route::class) ?: false
 
@@ -66,6 +70,7 @@ fun MainContainer(
                         )
                     }
                 }
+                }
             }
         }
     ) { innerPadding ->
@@ -74,10 +79,12 @@ fun MainContainer(
             startDestination = Home,
             modifier = Modifier.padding(innerPadding)
         ) {
-            composable<Home> { HomeScreen() }
-            composable<CourseList> { CourseListScreen(onCourseCardClick = { courseId ->
-                navController.navigate(VideoList(courseId))
-            }) }
+            composable<Home> {
+                HomeScreen(
+                    onImmersiveModeChanged = { hideBottomBar = it }
+                )
+            }
+            composable<CourseList> { CourseListScreen() }
             composable<AITutor> { AITutorScreen() }
             composable<KnowledgeBase> { KnowledgeBaseScreen() }
 
