@@ -43,4 +43,13 @@ object SignatureUtils {
             "Xclient-Signature" to signature
         )
     }
+
+    /**
+     * 计算任意字符串的 MD5 哈希值
+     * @param input 要计算 MD5 的输入字符串
+     * @return 32 位小写 MD5 哈希值
+     */
+    fun getmd5(input: String): String {
+        return input.md5()
+    }
 }

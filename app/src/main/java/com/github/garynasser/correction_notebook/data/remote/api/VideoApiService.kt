@@ -10,6 +10,7 @@ import retrofit2.http.GET
 import retrofit2.http.Header
 import retrofit2.http.Headers
 import retrofit2.http.Query
+import retrofit2.http.Streaming
 import retrofit2.http.Url
 
 interface VideoApiService {
@@ -87,6 +88,7 @@ interface VideoApiService {
         "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
     )
     @GET
+    @Streaming
     suspend fun downloadYanheFile(
         @Url url: String,
         @Query("Xvideo_Token") xvideoToken: String,

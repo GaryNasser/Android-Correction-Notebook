@@ -62,7 +62,7 @@ fun CourseVideoListScreen(
     LaunchedEffect(viewModel.playState) {
         val state = viewModel.playState
         if (state is PlayState.Success) {
-            onNavigateToPlayer(state.filePath)
+            onNavigateToPlayer(state.url)
             viewModel.resetPlayState()
         }
     }
@@ -110,7 +110,7 @@ fun CourseVideoListScreen(
                                 onPlayClick = { videos ->
                                     Log.i("VIDEO", "Play btn pressed")
                                     if (videos.isNotEmpty()) {
-                                        viewModel.prepareVideo(videos[0].mainUrl, context)
+                                        onNavigateToPlayer(videos[0].mainUrl)
                                     }
                                 }
                             )

@@ -82,31 +82,37 @@ class VideoRemoteManager @Inject constructor(
         )
     }
 
-    suspend fun downloadM3U8File(
+    suspend fun downloadFile(
         url: String,
         videoToken: String,
     ) = safeApiCall { token ->
-        val sig = SignatureUtils.getSignature()
+        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+            Log.e("VIDEO_MANAGER", "拒绝非网络地址的请求: $url")
+            return@safeApiCall null
+        }
 
-        videoApiService.downloadYanheFile(
+        if (url.contains(".m3u8") && url.contains("/cache/")) {
+            Log.e("VIDEO_MANAGER", "拒绝缓存文件路径: $url")
+            return@safeApiCall null
+        }
+
+        Log.d("VIDEO_MANAGER", "downloadFile 被调用，URL: $url")
+        Log.d("VIDEO_MANAGER", "videoToken: ${videoToken.take(20)}...")
+
+        val sig = SignatureUtils.getSignature()
+        Log.d("VIDEO_MANAGER", "Xclient-Timestamp: ${sig["Xclient-Timestamp"]}")
+        Log.d("VIDEO_MANAGER", "Xclient-Signature: ${sig["Xclient-Signature"]}")
+
+        val response = videoApiService.downloadYanheFile(
             url = url,
             xvideoToken = videoToken,
             xclientTimestamp = sig["Xclient-Timestamp"] ?: "",
             xclientSignature = sig["Xclient-Signature"] ?: "",
         )
-    }
 
-    suspend fun downloadTsFile(
-        url: String,
-        videoToken: String
-    ) = safeApiCall { token ->
-        val sig = SignatureUtils.getSignature()
+        Log.d("VIDEO_MANAGER", "响应码: ${response.code()}")
+        Log.d("VIDEO_MANAGER", "响应头: ${response.headers()}")
 
-        videoApiService.downloadYanheFile(
-            url = url,
-            xvideoToken = videoToken,
-            xclientTimestamp = sig["Xclient-Timestamp"] ?: "",
-            xclientSignature = sig["Xclient-Signature"] ?: "",
-        )
+        response
     }
 }

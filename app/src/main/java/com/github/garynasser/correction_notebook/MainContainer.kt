@@ -86,17 +86,14 @@ fun MainContainer(
                     onBackButtonClick = {
                         navController.popBackStack()
                     },
-                    onNavigateToPlayer = { filePath ->
-                        navController.navigate(VideoPlayer(filePath = filePath))
+                    onNavigateToPlayer = { url ->
+                        navController.navigate(VideoPlayer(url))
                     }
                 )
             }
 
-            composable<VideoPlayer> { backStackEntry ->
-                val args = backStackEntry.toRoute<VideoPlayer>()
-                Log.i("VIDEO", "agrs $args.filePath")
-
-                PlayerScreen()
+            composable<VideoPlayer> {
+                PlayerScreen(onBack = { navController.popBackStack() })
             }
 
             composable<Profile> { ProfileScreen(settingsViewModel) }
