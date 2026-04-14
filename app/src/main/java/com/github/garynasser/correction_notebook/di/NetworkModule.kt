@@ -9,6 +9,7 @@ import com.github.garynasser.correction_notebook.data.remote.api.VideoApiService
 import com.github.garynasser.correction_notebook.data.remote.network.AuthInterceptor
 import com.github.garynasser.correction_notebook.data.remote.network.TokenAuthenticator
 import com.github.garynasser.correction_notebook.data.repository.AuthStateManager
+import com.github.garynasser.correction_notebook.utils.BitShareNetworkDetector
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -37,7 +38,10 @@ annotation class BitShareRetrofit
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
     private const val BASE_URL = "http://10.0.2.2:5678/"
-    private const val BIT_SHARE_BASE_URL = "https://app.bitshare.com.cn/"
+
+    // BITShare 服务器地址常量
+    private const val BITSHARE_INTRANET_URL = "http://10.170.35.57:8890/"
+    private const val BITSHARE_INTERNET_URL = "https://app.bitshare.com.cn/"
 
     // 辅助方法：创建一个日志拦截器
     private fun createLoggingInterceptor(): HttpLoggingInterceptor {
@@ -55,6 +59,12 @@ object NetworkModule {
     @Singleton
     fun provideTokenManager(@ApplicationContext context: Context): TokenManager {
         return TokenManager(context)
+    }
+
+    @Provides
+    @Singleton
+    fun provideBitShareNetworkDetector(@ApplicationContext context: Context): BitShareNetworkDetector {
+        return BitShareNetworkDetector(context)
     }
 
     @Provides
@@ -90,9 +100,16 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideBitShareApiService(@BasicRetrofit okHttpClient: OkHttpClient): BitShareApiService {
+    fun provideBitShareApiService(
+        @BasicRetrofit okHttpClient: OkHttpClient,
+        networkDetector: BitShareNetworkDetector
+    ): BitShareApiService {
+        // 根据网络环境自动选择 URL
+        val baseUrl = networkDetector.getBitShareBaseUrl()
+        Log.d("NetworkModule", "BITShare using URL: $baseUrl")
+
         return Retrofit.Builder()
-            .baseUrl(BIT_SHARE_BASE_URL)
+            .baseUrl(baseUrl)
             .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
