@@ -25,7 +25,7 @@ sealed interface VideoUIState {
 sealed class PlayState {
     object Idle : PlayState()
     object Loading : PlayState()
-    data class Success(val filePath: String) : PlayState()
+    data class Success(val url: String) : PlayState()
     data class Error(val message: String) : PlayState()
 }
 @HiltViewModel
@@ -44,20 +44,6 @@ class VideoListViewModel @Inject constructor(
 
     init {
         getVideoList(courseId)
-    }
-
-    fun prepareVideo(videoUrl: String, context: Context) {
-        Log.i("VIDEO", "Prepare video")
-        viewModelScope.launch {
-            playState = PlayState.Loading
-            val file = videoRepository.getM3U8File(videoUrl, context)
-
-            playState = if (file != null) {
-                PlayState.Success(file.absolutePath)
-            } else {
-                PlayState.Error("无法加载视频资源")
-            }
-        }
     }
 
     fun resetPlayState() {

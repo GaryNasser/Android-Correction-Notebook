@@ -30,4 +30,4 @@ object AITutor
 data class VideoList(val courseId: Int)
 
 @Serializable
-data class VideoPlayer(val filePath: String)
+data class VideoPlayer(val url: String)
