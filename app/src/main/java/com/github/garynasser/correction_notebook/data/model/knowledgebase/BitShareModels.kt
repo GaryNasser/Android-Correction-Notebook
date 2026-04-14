@@ -63,3 +63,60 @@ data class BitShareFileDetail(
     val uploadedAt: String?,
     val downloadCount: Int
 )
+
+// ============ Folder DTOs ============
+
+data class BitShareFolderListResponse(
+    val items: List<BitShareFolderItemDto>
+)
+
+data class BitShareFolderItemDto(
+    val id: String,
+    val name: String,
+    val description: String?,
+    @SerializedName("updated_at") val updatedAt: String?,
+    @SerializedName("file_count") val fileCount: Int,
+    @SerializedName("download_count") val downloadCount: Int,
+    @SerializedName("total_size") val totalSize: Long
+)
+
+data class BitShareFolderDetailDto(
+    val id: String,
+    val name: String,
+    val description: String?,
+    @SerializedName("parent_id") val parentId: String?,
+    val breadcrumbs: List<BitShareBreadcrumbDto>,
+    @SerializedName("file_count") val fileCount: Int,
+    @SerializedName("download_count") val downloadCount: Int,
+    @SerializedName("total_size") val totalSize: Long,
+    @SerializedName("updated_at") val updatedAt: String?
+)
+
+data class BitShareBreadcrumbDto(
+    val id: String,
+    val name: String
+)
+
+// ============ Folder Domain Models ============
+
+data class BitShareFolderSummary(
+    val id: String,
+    val name: String,
+    val description: String?,
+    val updatedAt: String?,
+    val fileCount: Int,
+    val downloadCount: Int,
+    val totalSize: Long
+)
+
+data class BitShareFolderDetail(
+    val id: String,
+    val name: String,
+    val description: String?,
+    val parentId: String?,
+    val breadcrumbs: List<KnowledgeBaseBreadcrumb>,
+    val fileCount: Int,
+    val downloadCount: Int,
+    val totalSize: Long,
+    val updatedAt: String?
+)
