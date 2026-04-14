@@ -18,7 +18,6 @@ foundation = "1.10.6"
 uiText = "1.10.6"
 media3Session = "1.10.0"
 firebaseCrashlyticsBuildtools = "3.0.6"  # Compose编译器版本
-uiText = "1.10.6"  # Compose编译器版本
 room = "2.6.1"
 
 [libraries]

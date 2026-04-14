@@ -38,19 +38,19 @@ fun MainContainer(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
 
+    // 自动判断当前路由是否在底部栏列表中
     val shouldShowBottomBar = bottomNavList.any { item ->
         currentDestination?.hasRoute(item.route::class) == true
     }
 
     Scaffold(
         bottomBar = {
-            if (!hideBottomBar) {
+            // 结合了配置和隐藏逻辑
+            if (!hideBottomBar && shouldShowBottomBar) {
                 NavigationBar {
-                val navBackStackEntry by navController.currentBackStackEntryAsState()
-                val currentDestination = navBackStackEntry?.destination
-
-                bottomNavList.forEach { item ->
-                    if (item.route is AITutor && !aiEnabled) return@forEach
+                    bottomNavList.forEach { item ->
+                        // AI 路由过滤逻辑
+                        if (item.route is AITutor && !aiEnabled) return@forEach
 
                         val isSelected = currentDestination?.hasRoute(item.route::class) ?: false
 
@@ -70,10 +70,9 @@ fun MainContainer(
                         )
                     }
                 }
-                }
             }
-        }
-    ) { innerPadding ->
+        } // 这里是 bottomBar 结束
+    ) { innerPadding -> // 这里是 Scaffold 的 content 启动
         NavHost(
             navController = navController,
             startDestination = Home,
@@ -84,7 +83,9 @@ fun MainContainer(
                     onImmersiveModeChanged = { hideBottomBar = it }
                 )
             }
-            composable<CourseList> { CourseListScreen() }
+            composable<CourseList> { CourseListScreen(onCourseCardClick = { courseId ->
+                navController.navigate(VideoList(courseId))
+            }) }
             composable<AITutor> { AITutorScreen() }
             composable<KnowledgeBase> { KnowledgeBaseScreen() }
 
