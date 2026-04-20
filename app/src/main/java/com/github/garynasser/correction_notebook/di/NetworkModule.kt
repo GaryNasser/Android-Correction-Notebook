@@ -2,7 +2,9 @@ package com.github.garynasser.correction_notebook.di
 
 import android.content.Context
 import android.util.Log
+import com.github.garynasser.correction_notebook.data.local.AISettingsManager
 import com.github.garynasser.correction_notebook.data.local.TokenManager
+import com.github.garynasser.correction_notebook.data.remote.api.AIApiService
 import com.github.garynasser.correction_notebook.data.remote.api.AuthApiService
 import com.github.garynasser.correction_notebook.data.remote.api.BitShareApiService
 import com.github.garynasser.correction_notebook.data.remote.api.VideoApiService
@@ -136,5 +138,22 @@ object NetworkModule {
             .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
+    }
+
+    @Provides
+    @Singleton
+    fun provideAISettingsManager(@ApplicationContext context: Context): AISettingsManager {
+        return AISettingsManager(context)
+    }
+
+    @Provides
+    @Singleton
+    fun provideAIApiService(@BasicRetrofit okHttpClient: OkHttpClient): AIApiService {
+        return Retrofit.Builder()
+            .baseUrl("https://api.openai.com/v1/") // Base URL, actual URL is passed dynamically
+            .client(okHttpClient)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(AIApiService::class.java)
     }
 }
