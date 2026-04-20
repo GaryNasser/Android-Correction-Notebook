@@ -108,6 +108,7 @@ fun HomeScreen(
         topBar = {
             TopAppBar(
                 title = { Text("BITStudy") },
+                windowInsets = WindowInsets(0, 0, 0, 0),
                 actions = {
                     IconButton(onClick = { showSettingsDialog = true }) {
                         Icon(Icons.Default.Settings, contentDescription = "设置")
