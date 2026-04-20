@@ -12,6 +12,7 @@ import com.github.garynasser.correction_notebook.data.remote.network.AuthInterce
 import com.github.garynasser.correction_notebook.data.remote.network.TokenAuthenticator
 import com.github.garynasser.correction_notebook.data.repository.AuthStateManager
 import com.github.garynasser.correction_notebook.utils.BitShareNetworkDetector
+import com.google.gson.Gson
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -50,6 +51,10 @@ object NetworkModule {
             level = HttpLoggingInterceptor.Level.BODY
         }
     }
+
+    @Provides
+    @Singleton
+    fun provideGson(): Gson = Gson()
 
     @Provides
     @Singleton
