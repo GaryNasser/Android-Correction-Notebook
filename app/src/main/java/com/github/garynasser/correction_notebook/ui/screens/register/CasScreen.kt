@@ -30,6 +30,7 @@ fun CasScreen(
         topBar = {
             TopAppBar(
                 title = { },
+                windowInsets = WindowInsets(0, 0, 0, 0),
                 navigationIcon = {
                     IconButton(onClick = onBackButtonClick) {
                         Icon(

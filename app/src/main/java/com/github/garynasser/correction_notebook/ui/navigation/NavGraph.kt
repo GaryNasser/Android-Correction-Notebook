@@ -16,22 +16,18 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.toRoute
-import com.github.garynasser.correction_notebook.data.local.AISettingsManager
 import com.github.garynasser.correction_notebook.data.model.auth.AuthState
 import com.github.garynasser.correction_notebook.ui.screens.login.UsernameLoginScreen
 import com.github.garynasser.correction_notebook.ui.screens.main.MainViewModel
 import com.github.garynasser.correction_notebook.MainContainer
 import com.github.garynasser.correction_notebook.data.model.auth.AuthEvent
-import com.github.garynasser.correction_notebook.data.repository.AuthStateManager
 import com.github.garynasser.correction_notebook.ui.screens.register.CasScreen
 import com.github.garynasser.correction_notebook.ui.screens.register.RegistrationViewModel
 import com.github.garynasser.correction_notebook.ui.screens.register.RegisterScreen
-import com.github.garynasser.correction_notebook.ui.screens.yanhe.CourseVideoListScreen
 
 
 @Composable
 fun NavGraph(
-    modifier: Modifier,
     navController: NavHostController,
     mainViewModel: MainViewModel = hiltViewModel(),
 ) {
