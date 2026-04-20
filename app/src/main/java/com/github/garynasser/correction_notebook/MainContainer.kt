@@ -11,6 +11,7 @@ import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
 import androidx.navigation.toRoute
+import com.github.garynasser.correction_notebook.data.local.AISettingsManager
 import com.github.garynasser.correction_notebook.ui.navigation.AITutor
 import com.github.garynasser.correction_notebook.ui.navigation.CourseList
 import com.github.garynasser.correction_notebook.ui.navigation.Home
@@ -23,7 +24,6 @@ import com.github.garynasser.correction_notebook.ui.navigation.bottomNavList
 import com.github.garynasser.correction_notebook.ui.screens.aitutor.AITutorScreen
 import com.github.garynasser.correction_notebook.ui.screens.home.HomeScreen
 import com.github.garynasser.correction_notebook.ui.screens.knowledgebase.KnowledgeBaseScreen
-import com.github.garynasser.correction_notebook.ui.screens.main.SettingsViewModel
 import com.github.garynasser.correction_notebook.ui.screens.profile.ProfileScreen
 import com.github.garynasser.correction_notebook.ui.screens.yanhe.CourseListScreen
 import com.github.garynasser.correction_notebook.ui.screens.yanhe.CourseVideoListScreen
@@ -31,11 +31,11 @@ import com.github.garynasser.correction_notebook.ui.screens.yanhe.PlayerScreen
 
 @Composable
 fun MainContainer(
-    settingsViewModel: SettingsViewModel = hiltViewModel(),
+    aiSettingsManager: AISettingsManager,
     outerNavController: NavHostController? = null
 ) {
     val navController = rememberNavController()
-    val aiEnabled by settingsViewModel.aiEnabled.collectAsState()
+    val aiEnabled by aiSettingsManager.aiEnabled.collectAsState(initial = false)
     var hideBottomBar by remember { mutableStateOf(false) }
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()

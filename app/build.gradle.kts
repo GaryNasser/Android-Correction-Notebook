@@ -69,9 +69,6 @@ dependencies {
     implementation(libs.androidx.foundation)
     implementation(libs.androidx.ui.text)
     implementation(libs.material3)
-    // 移除这行 - 它可能引入高版本
-    // implementation(libs.androidx.media3.session)
-    implementation(libs.firebase.crashlytics.buildtools)
     kapt("com.google.dagger:hilt-android-compiler:2.51.1")
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
