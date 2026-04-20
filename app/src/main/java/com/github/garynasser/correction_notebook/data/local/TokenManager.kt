@@ -75,6 +75,7 @@ class TokenManager@Inject constructor(
     }
 
     suspend fun saveYanheLoginTokens(token: String) {
+        Log.d("AUTH", "yanhe token: $token")
         context.dataStore.edit { preferences ->
             preferences[YANHE_LOGIN_TOKEN_KEY] = token
         }

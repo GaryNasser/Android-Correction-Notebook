@@ -54,8 +54,10 @@ class RegistrationViewModel @Inject constructor(
         }
     }
 
-    fun submitReauthentication() {
+    fun submitReauthentication(onConfirmClick: () -> Unit) {
+        Log.d("AUTH", "Student credential saved")
         yanheRepository.saveStudentCredential(UserCredential(studentId, casPassword))
+        onConfirmClick()
     }
 
     fun submit() {

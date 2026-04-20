@@ -1,5 +1,6 @@
 package com.github.garynasser.correction_notebook.data.repository
 
+import android.util.Log
 import com.github.garynasser.correction_notebook.data.local.CredentialManager
 import com.github.garynasser.correction_notebook.data.local.TokenManager
 import com.github.garynasser.correction_notebook.data.model.auth.CredentialAuthRequest

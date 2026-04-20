@@ -88,7 +88,9 @@ fun NavGraph(
                             if (registerEntry != null) {
                                 authViewModel.submit()
                             } else {
-                                authViewModel.submitReauthentication()
+                                authViewModel.submitReauthentication(
+                                    onConfirmClick = { navController.popBackStack() }
+                                )
                             }
                         }
                     )
