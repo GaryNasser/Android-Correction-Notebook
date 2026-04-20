@@ -6,6 +6,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavHostController
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
@@ -14,6 +15,7 @@ import com.github.garynasser.correction_notebook.ui.navigation.AITutor
 import com.github.garynasser.correction_notebook.ui.navigation.CourseList
 import com.github.garynasser.correction_notebook.ui.navigation.Home
 import com.github.garynasser.correction_notebook.ui.navigation.KnowledgeBase
+import com.github.garynasser.correction_notebook.ui.navigation.Login
 import com.github.garynasser.correction_notebook.ui.navigation.Profile
 import com.github.garynasser.correction_notebook.ui.navigation.VideoList
 import com.github.garynasser.correction_notebook.ui.navigation.VideoPlayer
@@ -29,7 +31,8 @@ import com.github.garynasser.correction_notebook.ui.screens.yanhe.PlayerScreen
 
 @Composable
 fun MainContainer(
-    settingsViewModel: SettingsViewModel = hiltViewModel()
+    settingsViewModel: SettingsViewModel = hiltViewModel(),
+    outerNavController: NavHostController? = null
 ) {
     val navController = rememberNavController()
     val aiEnabled by settingsViewModel.aiEnabled.collectAsState()
@@ -104,7 +107,14 @@ fun MainContainer(
                 PlayerScreen(onBack = { navController.popBackStack() })
             }
 
-            composable<Profile> { ProfileScreen(settingsViewModel) }
+            composable<Profile> {
+                ProfileScreen(
+                    viewModel = hiltViewModel(),
+                    onNavigateToLogin = {
+                        outerNavController?.navigate(Login)
+                    }
+                )
+            }
         }
     }
 }

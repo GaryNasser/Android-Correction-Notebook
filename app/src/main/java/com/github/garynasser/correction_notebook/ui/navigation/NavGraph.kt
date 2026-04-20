@@ -47,7 +47,9 @@ fun NavGraph(
                 startDestination = if (state is AuthState.Authenticated) Home else Login
             ) {
                 composable<Home> {
-                    MainContainer()
+                    MainContainer(
+                        outerNavController = navController
+                    )
                 }
 
                 composable<Login> {
