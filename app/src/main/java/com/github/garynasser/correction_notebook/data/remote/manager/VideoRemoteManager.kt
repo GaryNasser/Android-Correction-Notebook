@@ -36,7 +36,7 @@ class VideoRemoteManager @Inject constructor(
             }
         }
 
-        return block("Bearer $token")
+        return block(token)
     }
 
     suspend fun getCourseList(

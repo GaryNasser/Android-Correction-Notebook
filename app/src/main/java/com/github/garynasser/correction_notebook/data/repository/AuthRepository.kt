@@ -1,9 +1,11 @@
 package com.github.garynasser.correction_notebook.data.repository
 
+import android.util.Log
 import com.github.garynasser.correction_notebook.data.local.TokenManager
 import com.github.garynasser.correction_notebook.data.model.auth.AuthState
 import com.github.garynasser.correction_notebook.data.model.auth.CredentialAuthRequest
 import com.github.garynasser.correction_notebook.data.model.auth.LoginRequest
+import com.github.garynasser.correction_notebook.data.model.auth.RefreshRequest
 import com.github.garynasser.correction_notebook.data.model.auth.RegisterRequest
 import com.github.garynasser.correction_notebook.data.model.auth.UserCredential
 import com.github.garynasser.correction_notebook.data.remote.api.AuthApiService
@@ -17,22 +19,34 @@ class AuthRepository @Inject constructor(
     private val apiService: AuthApiService
 ) {
     suspend fun validateSession(): AuthState {
+        Log.d("AppLifecycle", "validate session called")
         val refreshToken = tokenManager.getRefreshToken()
+        Log.d("AppLifecycle", "refreshToken: $refreshToken")
         if (refreshToken == null) return AuthState.Unauthenticated
 
         return try {
-            val response = apiService.refreshToken("Bearer $refreshToken").execute()
-            val responseBody = response.body()?.data
-            if (response.isSuccessful && responseBody != null) {
+            val response = apiService.refreshToken(RefreshRequest(refreshToken))
+            Log.d("AppLifecycle", response.toString())
+
+            if (response.code == 200 && response.data != null) {
+                val responseBody = response.data
+
                 val accessToken = responseBody.accessToken
                 val refreshToken = responseBody.refreshToken
 
-                tokenManager.saveLoginTokens(accessToken, refreshToken)
+                if (refreshToken.isNullOrBlank()) {
+                    tokenManager.updateAccessToken(accessToken)
+                } else {
+                    tokenManager.saveLoginTokens(accessToken, refreshToken)
+                    Log.d("AppLifecycle", "refresh success")
+                }
                 AuthState.Authenticated
             } else {
+                Log.d("AppLifecycle", "refresh failed")
                 AuthState.Unauthenticated
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.e("AppLifecycle", "error happened while refresh", e)
             AuthState.Unauthenticated
         }
     }
