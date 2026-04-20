@@ -55,6 +55,7 @@ fun CourseListScreen(
         topBar = {
             TopAppBar(
                 title = { Text(text = "课程资源", fontWeight = FontWeight.Bold) },
+                windowInsets = WindowInsets(0, 0, 0, 0),
                 actions = {
                     IconButton(onClick = { viewModel.toggleCourseMode() }) {
                         Icon(
