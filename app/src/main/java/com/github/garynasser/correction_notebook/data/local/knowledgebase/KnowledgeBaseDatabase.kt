@@ -5,7 +5,7 @@ import androidx.room.RoomDatabase
 
 @Database(
     entities = [KnowledgeBaseFolderEntity::class, KnowledgeBaseFileEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class KnowledgeBaseDatabase : RoomDatabase() {
