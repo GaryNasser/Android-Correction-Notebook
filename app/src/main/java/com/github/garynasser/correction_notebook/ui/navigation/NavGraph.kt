@@ -16,6 +16,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.toRoute
+import com.github.garynasser.correction_notebook.data.local.AISettingsManager
 import com.github.garynasser.correction_notebook.data.model.auth.AuthState
 import com.github.garynasser.correction_notebook.ui.screens.login.UsernameLoginScreen
 import com.github.garynasser.correction_notebook.ui.screens.main.MainViewModel
@@ -36,6 +37,7 @@ fun NavGraph(
 ) {
     val authStateManager = mainViewModel.authStateManager
     val authState by mainViewModel.authState.collectAsState()
+    val aiSettingsManager = mainViewModel.aiSettingsManager
 
     when(val state = authState) {
         is AuthState.Loading -> {
@@ -48,6 +50,7 @@ fun NavGraph(
             ) {
                 composable<Home> {
                     MainContainer(
+                        aiSettingsManager = aiSettingsManager,
                         outerNavController = navController
                     )
                 }

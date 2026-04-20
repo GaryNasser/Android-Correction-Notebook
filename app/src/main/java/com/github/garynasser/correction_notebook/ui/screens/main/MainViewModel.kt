@@ -4,6 +4,7 @@ import androidx.compose.animation.core.rememberTransition
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.github.garynasser.correction_notebook.data.local.AISettingsManager
 import com.github.garynasser.correction_notebook.data.model.auth.AuthState
 import com.github.garynasser.correction_notebook.data.repository.AuthRepository
 import com.github.garynasser.correction_notebook.data.repository.AuthStateManager
@@ -20,7 +21,8 @@ import javax.inject.Inject
 @HiltViewModel
 class MainViewModel @Inject constructor(
     private val authRepository: AuthRepository,
-    val authStateManager: AuthStateManager
+    val authStateManager: AuthStateManager,
+    val aiSettingsManager: AISettingsManager
 ) : ViewModel() {
     val authState = authStateManager.authState
 
