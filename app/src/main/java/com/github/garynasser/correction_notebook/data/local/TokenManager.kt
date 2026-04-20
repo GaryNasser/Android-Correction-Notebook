@@ -1,6 +1,7 @@
 package com.github.garynasser.correction_notebook.data.local
 
 import android.content.Context
+import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.IOException
 import androidx.datastore.preferences.core.Preferences
@@ -8,14 +9,20 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import javax.inject.Inject
+import javax.inject.Singleton
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore("user_prefs")
 
-class TokenManager(private val context: Context) {
+@Singleton
+class TokenManager@Inject constructor(
+    @ApplicationContext private val context: Context
+) {
     companion object {
         private val ACCESS_TOKEN_KEY = stringPreferencesKey("access_token")
         private val REFRESH_TOKEN_KEY = stringPreferencesKey("refresh_token")
@@ -59,10 +66,11 @@ class TokenManager(private val context: Context) {
             preferences[YANHE_LOGIN_TOKEN_KEY]
         }
 
-    suspend fun saveLoginTokens(access: String, refresh: String?) {
+    suspend fun saveLoginTokens(access: String, refresh: String) {
+        Log.d("AppLifecycle", "Refresh saved: $refresh")
         context.dataStore.edit { preferences ->
             preferences[ACCESS_TOKEN_KEY] = access
-            preferences[REFRESH_TOKEN_KEY] = refresh ?: ""
+            preferences[REFRESH_TOKEN_KEY] = refresh
         }
     }
 
@@ -79,6 +87,7 @@ class TokenManager(private val context: Context) {
     }
 
     suspend fun removeLoginToken() {
+        Log.d("AppLifecycle", "Token Cleared")
         context.dataStore.edit { preferences ->
             preferences.remove(ACCESS_TOKEN_KEY)
             preferences.remove(REFRESH_TOKEN_KEY)
