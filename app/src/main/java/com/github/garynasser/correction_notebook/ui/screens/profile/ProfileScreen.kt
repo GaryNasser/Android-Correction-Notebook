@@ -42,7 +42,8 @@ fun ProfileScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("个人中心") }
+                title = { Text("个人中心") },
+                windowInsets = WindowInsets(0, 0, 0, 0)
             )
         }
     ) { innerPadding ->

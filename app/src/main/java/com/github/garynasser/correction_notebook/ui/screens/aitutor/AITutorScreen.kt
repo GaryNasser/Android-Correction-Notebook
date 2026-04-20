@@ -45,6 +45,7 @@ fun AITutorScreen(
         topBar = {
             TopAppBar(
                 title = { Text("AI导师") },
+                windowInsets = WindowInsets(0, 0, 0, 0),
                 actions = {
                     if (aiEnabled) {
                         IconButton(onClick = { showClearDialog = true }) {
