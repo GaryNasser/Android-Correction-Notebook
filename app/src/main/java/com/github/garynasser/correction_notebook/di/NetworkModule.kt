@@ -36,17 +36,14 @@ annotation class BitShareRetrofit
 @Module
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
-    private const val BASE_URL = "http://10.0.2.2:5678/"
+    private const val BASE_URL = "http://bit-study.sadatlab.asia/"
     private const val BIT_SHARE_BASE_URL = "https://app.bitshare.com.cn/"
 
     // 辅助方法：创建一个日志拦截器
     private fun createLoggingInterceptor(): HttpLoggingInterceptor {
         return HttpLoggingInterceptor { message ->
-            // 使用特定的 TAG 方便在 Logcat 中过滤
             Log.d("OkHttp", message)
         }.apply {
-            // Level.BODY 会打印请求和响应的所有细节（包括 URL, Method, Body, Header）
-            // 如果觉得内容太多，可以改为 Level.BASIC 或 Level.HEADERS
             level = HttpLoggingInterceptor.Level.BODY
         }
     }
@@ -110,9 +107,9 @@ object NetworkModule {
         return OkHttpClient.Builder()
             .addInterceptor(AuthInterceptor(tokenManager))
             .addInterceptor(createLoggingInterceptor())
-//            .authenticator(TokenAuthenticator(
-//                tokenManager, authApiService, authStateManager
-//            ))
+            .authenticator(TokenAuthenticator(
+                tokenManager, authApiService, authStateManager
+            ))
             .build()
     }
 
