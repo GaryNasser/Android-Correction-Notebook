@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitShareFileDetail
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitShareSearchResult
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitShareSortOption
+import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitShareFolderDetail
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.KnowledgeBaseFileSummary
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.KnowledgeBaseFolderChoice
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.KnowledgeBaseFolderContent
@@ -39,8 +40,10 @@ data class KnowledgeBaseUiState(
     val remoteSort: BitShareSortOption = BitShareSortOption.RELEVANCE,
     val remoteResults: List<BitShareSearchResult> = emptyList(),
     val selectedRemoteDetail: BitShareFileDetail? = null,
+    val selectedRemoteFolderDetail: BitShareFolderDetail? = null,
     val isRemoteSearching: Boolean = false,
     val isRemoteDetailLoading: Boolean = false,
+    val isRemoteFolderLoading: Boolean = false,
     val remoteErrorMessage: String? = null,
     val isLocalBusy: Boolean = false,
     val activeDownloadId: String? = null,
@@ -61,8 +64,10 @@ private data class RemoteUiSnapshot(
     val remoteSort: BitShareSortOption,
     val remoteResults: List<BitShareSearchResult>,
     val selectedRemoteDetail: BitShareFileDetail?,
+    val selectedRemoteFolderDetail: BitShareFolderDetail?,
     val isRemoteSearching: Boolean,
     val isRemoteDetailLoading: Boolean,
+    val isRemoteFolderLoading: Boolean,
     val remoteErrorMessage: String?,
     val isLocalBusy: Boolean,
     val activeDownloadId: String?,
@@ -85,6 +90,7 @@ class KnowledgeBaseViewModel @Inject constructor(
 
     private val remoteResults = MutableStateFlow<List<BitShareSearchResult>>(emptyList())
     private val selectedRemoteDetail = MutableStateFlow<BitShareFileDetail?>(null)
+    private val selectedRemoteFolderDetail = MutableStateFlow<BitShareFolderDetail?>(null)
     private val isRemoteSearching = MutableStateFlow(false)
     private val isRemoteDetailLoading = MutableStateFlow(false)
     private val remoteErrorMessage = MutableStateFlow<String?>(null)
@@ -143,37 +149,26 @@ class KnowledgeBaseViewModel @Inject constructor(
         combine(remoteQuery, remoteSort, remoteResults) { query, sort, results ->
             Triple(query, sort, results)
         },
-        combine(
-            selectedRemoteDetail,
-            isRemoteSearching,
-            isRemoteDetailLoading,
-            remoteErrorMessage
-        ) { detail, remoteSearching, detailLoading, errorMessage ->
-            RemoteUiSnapshot(
-                remoteQuery = "",
-                remoteSort = BitShareSortOption.RELEVANCE,
-                remoteResults = emptyList(),
-                selectedRemoteDetail = detail,
-                isRemoteSearching = remoteSearching,
-                isRemoteDetailLoading = detailLoading,
-                remoteErrorMessage = errorMessage,
-                isLocalBusy = false,
-                activeDownloadId = null,
-                snackbarMessage = null
-            )
+        combine(selectedRemoteDetail, selectedRemoteFolderDetail) { detail, folderDetail ->
+            Pair(detail, folderDetail)
+        },
+        combine(isRemoteSearching, isRemoteDetailLoading, remoteErrorMessage) { searching, detailLoading, error ->
+            Triple(searching, detailLoading, error)
         },
         combine(isLocalBusy, activeDownloadId, snackbarMessage) { localBusy, downloadId, message ->
             Triple(localBusy, downloadId, message)
         }
-    ) { searchMeta, remoteMeta, localMeta ->
+    ) { searchMeta, detailMeta, loadingMeta, localMeta ->
         RemoteUiSnapshot(
             remoteQuery = searchMeta.first,
             remoteSort = searchMeta.second,
             remoteResults = searchMeta.third,
-            selectedRemoteDetail = remoteMeta.selectedRemoteDetail,
-            isRemoteSearching = remoteMeta.isRemoteSearching,
-            isRemoteDetailLoading = remoteMeta.isRemoteDetailLoading,
-            remoteErrorMessage = remoteMeta.remoteErrorMessage,
+            selectedRemoteDetail = detailMeta.first,
+            selectedRemoteFolderDetail = detailMeta.second,
+            isRemoteSearching = loadingMeta.first,
+            isRemoteDetailLoading = loadingMeta.second,
+            isRemoteFolderLoading = false,
+            remoteErrorMessage = loadingMeta.third,
             isLocalBusy = localMeta.first,
             activeDownloadId = localMeta.second,
             snackbarMessage = localMeta.third
@@ -195,6 +190,7 @@ class KnowledgeBaseViewModel @Inject constructor(
             remoteSort = remote.remoteSort,
             remoteResults = remote.remoteResults,
             selectedRemoteDetail = remote.selectedRemoteDetail,
+            selectedRemoteFolderDetail = remote.selectedRemoteFolderDetail,
             isRemoteSearching = remote.isRemoteSearching,
             isRemoteDetailLoading = remote.isRemoteDetailLoading,
             remoteErrorMessage = remote.remoteErrorMessage,
@@ -276,8 +272,32 @@ class KnowledgeBaseViewModel @Inject constructor(
         }
     }
 
+    /**
+     * 加载文件夹详情
+     * 注意：由于 /api/public/files?folder_id= 接口返回 404，无法获取文件夹内的文件列表，
+     * 因此只能显示文件夹信息，无法列出文件夹内容
+     */
+    fun loadRemoteFolderDetail(folderId: String) {
+        viewModelScope.launch {
+            isRemoteDetailLoading.value = true
+            bitShareRepository.getFolderDetail(folderId)
+                .onSuccess {
+                    selectedRemoteFolderDetail.value = it
+                    remoteErrorMessage.value = null
+                }
+                .onFailure {
+                    remoteErrorMessage.value = it.message ?: "加载目录详情失败"
+                }
+            isRemoteDetailLoading.value = false
+        }
+    }
+
     fun dismissRemoteDetail() {
         selectedRemoteDetail.value = null
+    }
+
+    fun dismissRemoteFolderDetail() {
+        selectedRemoteFolderDetail.value = null
     }
 
     fun createFolder(name: String) {

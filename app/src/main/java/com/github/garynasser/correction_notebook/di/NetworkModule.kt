@@ -9,6 +9,7 @@ import com.github.garynasser.correction_notebook.data.remote.api.VideoApiService
 import com.github.garynasser.correction_notebook.data.remote.network.AuthInterceptor
 import com.github.garynasser.correction_notebook.data.remote.network.TokenAuthenticator
 import com.github.garynasser.correction_notebook.data.repository.AuthStateManager
+import com.github.garynasser.correction_notebook.utils.BitShareNetworkDetector
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -56,6 +57,12 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    fun provideBitShareNetworkDetector(@ApplicationContext context: Context): BitShareNetworkDetector {
+        return BitShareNetworkDetector(context)
+    }
+
+    @Provides
+    @Singleton
     @BasicRetrofit
     fun provideBasicOkHttpClient(): OkHttpClient {
         return OkHttpClient.Builder()
@@ -87,9 +94,16 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideBitShareApiService(@BasicRetrofit okHttpClient: OkHttpClient): BitShareApiService {
+    fun provideBitShareApiService(
+        @BasicRetrofit okHttpClient: OkHttpClient,
+        networkDetector: BitShareNetworkDetector
+    ): BitShareApiService {
+        // 根据网络环境自动选择 URL
+        val baseUrl = networkDetector.getBitShareBaseUrl()
+        Log.d("NetworkModule", "BITShare using URL: $baseUrl")
+
         return Retrofit.Builder()
-            .baseUrl(BIT_SHARE_BASE_URL)
+            .baseUrl(baseUrl)
             .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
