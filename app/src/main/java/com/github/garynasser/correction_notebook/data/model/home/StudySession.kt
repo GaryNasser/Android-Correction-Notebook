@@ -8,7 +8,8 @@ data class StudySession(
     val startTime: LocalDateTime,
     val endTime: LocalDateTime? = null,
     val durationMinutes: Int = 0,
-    val sessionType: SessionType = SessionType.POMODORO
+    val sessionType: SessionType = SessionType.POMODORO,
+    val pomodoroCount: Int = 0
 )
 
 enum class SessionType {
