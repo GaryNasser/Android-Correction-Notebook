@@ -20,9 +20,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
-import com.github.garynasser.correction_notebook.data.model.home.Priority
 import com.github.garynasser.correction_notebook.data.model.home.TodoItem
-import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
 @Composable
@@ -31,13 +29,12 @@ fun TodoItemCard(
     onToggleComplete: () -> Unit,
     onDelete: () -> Unit
 ) {
-    val priorityColor = when (todo.priority) {
-        Priority.HIGH -> Color(0xFFE53935)
-        Priority.MEDIUM -> Color(0xFFFFA000)
-        Priority.LOW -> Color(0xFF43A047)
+    val checkboxModifier = if (todo.isCompleted) {
+        Modifier.background(Color(0xFF43A047), CircleShape)
+    } else {
+        Modifier.background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)
     }
 
-    // Animation for check icon
     val scale by animateFloatAsState(
         targetValue = if (todo.isCompleted) 1f else 0f,
         animationSpec = spring(
@@ -69,19 +66,9 @@ fun TodoItemCard(
                 modifier = Modifier
                     .size(24.dp)
                     .clip(CircleShape)
-                    .background(
-                        if (todo.isCompleted) Color(0xFF43A047)
-                        else Color.Transparent
-                    )
+                    .then(checkboxModifier)
                     .clickable { onToggleComplete() }
-                    .then(
-                        if (!todo.isCompleted) {
-                            Modifier.background(
-                                color = MaterialTheme.colorScheme.surfaceVariant,
-                                shape = CircleShape
-                            )
-                        } else Modifier
-                    ),
+                    ,
                 contentAlignment = Alignment.Center
             ) {
                 if (todo.isCompleted) {
@@ -105,68 +92,28 @@ fun TodoItemCard(
             Column(
                 modifier = Modifier.weight(1f)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Priority indicator
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(priorityColor)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = todo.title,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Medium,
-                        textDecoration = if (todo.isCompleted) TextDecoration.LineThrough else null,
-                        color = if (todo.isCompleted) {
-                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                        } else {
-                            MaterialTheme.colorScheme.onSurface
-                        }
-                    )
-                }
+                Text(
+                    text = todo.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium,
+                    textDecoration = if (todo.isCompleted) TextDecoration.LineThrough else null,
+                    color = if (todo.isCompleted) {
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    }
+                )
 
                 if (todo.description.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = todo.description,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                        maxLines = 1
+                        maxLines = 2
                     )
                 }
 
-                todo.dueDate?.let { date ->
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Default.Schedule,
-                            contentDescription = null,
-                            modifier = Modifier.size(12.dp),
-                            tint = if (date.isBefore(LocalDate.now()) && !todo.isCompleted) {
-                                Color(0xFFE53935)
-                            } else {
-                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                            }
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = date.format(DateTimeFormatter.ofPattern("MM月dd日")),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (date.isBefore(LocalDate.now()) && !todo.isCompleted) {
-                                Color(0xFFE53935)
-                            } else {
-                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                            }
-                        )
-                    }
-                }
-
-                // Show completed time
                 todo.completedAt?.let { completedTime ->
                     val completedLocalTime = remember(completedTime) {
                         java.time.Instant.ofEpochMilli(completedTime)
