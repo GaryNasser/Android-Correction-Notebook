@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.github.garynasser.correction_notebook.data.model.home.DailyStats
+import com.github.garynasser.correction_notebook.data.model.home.SessionType
 import com.github.garynasser.correction_notebook.data.model.home.StudySession
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
@@ -48,16 +49,33 @@ class StudySessionRepository(private val context: Context) {
     suspend fun getWeekSessions(): List<StudySession> {
         val weekAgo = LocalDate.now().minusDays(7)
         return sessions.first().filter {
-            it.startTime.toLocalDate().isAfter(weekAgo)
+            !it.startTime.toLocalDate().isBefore(weekAgo)
+        }
+    }
+
+    suspend fun getSessionsBetween(startDate: LocalDate, endDate: LocalDate): List<StudySession> {
+        return sessions.first().filter {
+            val sessionDate = it.startTime.toLocalDate()
+            !sessionDate.isBefore(startDate) && !sessionDate.isAfter(endDate)
         }
     }
 
     suspend fun getTodayStats(): DailyStats {
         val todaySessions = getTodaySessions()
-        val totalMinutes = todaySessions.sumOf { it.durationMinutes }
-        val pomodoros = todaySessions.count { it.sessionType.name == "POMODORO" }
+        return buildDailyStats(LocalDate.now(), todaySessions)
+    }
+
+    fun buildDailyStats(date: LocalDate, sessions: List<StudySession>): DailyStats {
+        val totalMinutes = sessions.sumOf { it.durationMinutes }
+        val pomodoros = sessions.sumOf { session ->
+            if (session.sessionType == SessionType.POMODORO) {
+                session.pomodoroCount
+            } else {
+                0
+            }
+        }
         return DailyStats(
-            date = LocalDate.now(),
+            date = date,
             totalStudyMinutes = totalMinutes,
             completedPomodoros = pomodoros
         )
@@ -71,7 +89,8 @@ class StudySessionRepository(private val context: Context) {
                 session.startTime.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
                 session.endTime?.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME) ?: "",
                 session.durationMinutes.toString(),
-                session.sessionType.name
+                session.sessionType.name,
+                session.pomodoroCount.toString()
             ).joinToString(":::")
         }
     }
@@ -91,7 +110,8 @@ class StudySessionRepository(private val context: Context) {
                         com.github.garynasser.correction_notebook.data.model.home.SessionType.valueOf(parts[5])
                     } catch (e: Exception) {
                         com.github.garynasser.correction_notebook.data.model.home.SessionType.POMODORO
-                    }
+                    },
+                    pomodoroCount = parts.getOrNull(6)?.toIntOrNull() ?: 0
                 )
             } else null
         }

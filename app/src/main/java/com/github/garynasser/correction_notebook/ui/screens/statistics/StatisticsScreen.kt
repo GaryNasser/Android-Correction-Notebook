@@ -12,26 +12,26 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.github.garynasser.correction_notebook.data.local.StudyPreferencesManager
-import com.github.garynasser.correction_notebook.data.model.home.DailyStats
 import com.github.garynasser.correction_notebook.data.repository.StudySessionRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.time.LocalDate
-import java.time.format.DateTimeFormatter
+import java.time.format.TextStyle
+import java.util.Locale
 import javax.inject.Inject
 
 enum class StatsPeriod {
@@ -44,12 +44,12 @@ data class StatsUiState(
     val averageDailyMinutes: Int = 0,
     val completedPomodoros: Int = 0,
     val dailyMinutes: List<Int> = emptyList(),
+    val chartLabels: List<String> = emptyList(),
     val subjectDistribution: Map<String, Int> = emptyMap()
 )
 
 @HiltViewModel
 class StatisticsViewModel @Inject constructor(
-    private val studyPreferencesManager: StudyPreferencesManager,
     private val studySessionRepository: StudySessionRepository
 ) : ViewModel() {
 
@@ -67,29 +67,51 @@ class StatisticsViewModel @Inject constructor(
 
     private fun loadStats() {
         viewModelScope.launch {
-            val totalMinutes = studyPreferencesManager.getTotalStudyMinutes()
-            val pomodoros = studyPreferencesManager.pomodorosCompleted.first()
-
-            val (dailyMinutes, avgMinutes) = when (_uiState.value.period) {
-                StatsPeriod.DAY -> Pair(List(1) { totalMinutes }, totalMinutes)
-                StatsPeriod.WEEK -> {
-                    val days = 7
-                    val avg = if (days > 0) totalMinutes / days else 0
-                    Pair(List(days) { totalMinutes / days }, avg)
-                }
-                StatsPeriod.MONTH -> {
-                    val days = 30
-                    val avg = if (days > 0) totalMinutes / days else 0
-                    Pair(List(days) { totalMinutes / days }, avg)
-                }
+            val today = LocalDate.now()
+            val (startDate, endDate) = when (_uiState.value.period) {
+                StatsPeriod.DAY -> today to today
+                StatsPeriod.WEEK -> today.minusDays(6) to today
+                StatsPeriod.MONTH -> today.withDayOfMonth(1) to today
             }
+
+            val sessions = studySessionRepository.getSessionsBetween(startDate, endDate)
+            val dateRange = generateSequence(startDate) { current ->
+                current.plusDays(1).takeIf { !it.isAfter(endDate) }
+            }.toList()
+
+            val sessionsByDate = sessions.groupBy { it.startTime.toLocalDate() }
+            val dailyStats = dateRange.map { date ->
+                studySessionRepository.buildDailyStats(date, sessionsByDate[date].orEmpty())
+            }
+            val totalMinutes = dailyStats.sumOf { it.totalStudyMinutes }
+            val pomodoros = dailyStats.sumOf { it.completedPomodoros }
+            val avgMinutes = if (dailyStats.isNotEmpty()) totalMinutes / dailyStats.size else 0
+            val dailyMinutes = dailyStats.map { it.totalStudyMinutes }
+            val chartLabels = buildChartLabels(dateRange, _uiState.value.period)
 
             _uiState.value = _uiState.value.copy(
                 totalStudyMinutes = totalMinutes,
                 averageDailyMinutes = avgMinutes,
                 completedPomodoros = pomodoros,
-                dailyMinutes = dailyMinutes
+                dailyMinutes = dailyMinutes,
+                chartLabels = chartLabels
             )
+        }
+    }
+
+    private fun buildChartLabels(
+        dates: List<LocalDate>,
+        period: StatsPeriod
+    ): List<String> {
+        return when (period) {
+            StatsPeriod.DAY -> listOf("今天")
+            StatsPeriod.WEEK -> dates.map { date ->
+                date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.CHINA)
+            }
+            StatsPeriod.MONTH -> dates.mapIndexed { index, date ->
+                val shouldShow = index == 0 || index == dates.lastIndex || index % 5 == 4
+                if (shouldShow) "${date.dayOfMonth}" else ""
+            }
         }
     }
 }
@@ -191,12 +213,23 @@ fun StatisticsScreen(
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = when (uiState.period) {
+                                StatsPeriod.DAY -> "查看今天的学习时长"
+                                StatsPeriod.WEEK -> "查看最近 7 天的学习分布"
+                                StatsPeriod.MONTH -> "查看本月每日学习趋势"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
                         Spacer(modifier = Modifier.height(16.dp))
                         BarChart(
                             data = uiState.dailyMinutes,
+                            labels = uiState.chartLabels,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(150.dp)
+                                .height(220.dp)
                         )
                     }
                 }
@@ -293,43 +326,133 @@ private fun StatsSummaryCard(
 @Composable
 private fun BarChart(
     data: List<Int>,
+    labels: List<String>,
     modifier: Modifier = Modifier
 ) {
-    val maxValue = data.maxOrNull()?.coerceAtLeast(1) ?: 1
-    val barColor = MaterialTheme.colorScheme.primary
+    val maxValue = data.maxOrNull() ?: 0
+    val hasData = maxValue > 0
+    val chartColor = MaterialTheme.colorScheme.primary
+    val mutedText = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.56f)
 
-    Row(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.SpaceEvenly,
-        verticalAlignment = Alignment.Bottom
-    ) {
-        data.forEachIndexed { index, value ->
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(0.6f),
-                    contentAlignment = Alignment.BottomCenter
-                ) {
-                    val heightFraction = value.toFloat() / maxValue
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .fillMaxHeight(heightFraction.coerceAtLeast(0.05f))
-                            .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
-                            .background(barColor)
+    if (data.isEmpty() || labels.isEmpty()) {
+        EmptyChartState(modifier = modifier, message = "暂无趋势数据")
+        return
+    }
+
+    if (!hasData) {
+        EmptyChartState(modifier = modifier, message = "最近还没有学习记录")
+        return
+    }
+
+    Column(modifier = modifier) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+        ) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val horizontalLines = 3
+                val chartHeight = size.height
+                val chartWidth = size.width
+                val baseLine = chartHeight
+                val stepY = chartHeight / horizontalLines
+
+                repeat(horizontalLines + 1) { index ->
+                    val y = baseLine - (index * stepY)
+                    drawLine(
+                        color = chartColor.copy(alpha = if (index == 0) 0.22f else 0.08f),
+                        start = Offset(0f, y),
+                        end = Offset(chartWidth, y),
+                        strokeWidth = 1.dp.toPx()
                     )
                 }
-                Spacer(modifier = Modifier.height(4.dp))
+            }
+
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.Bottom
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    data.forEachIndexed { index, value ->
+                        val heightFraction = (value.toFloat() / maxValue).coerceAtLeast(0.08f)
+                        val isPeak = value == maxValue
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight(heightFraction),
+                            contentAlignment = Alignment.BottomCenter
+                        ) {
+                            Canvas(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .fillMaxHeight()
+                            ) {
+                                drawRoundRect(
+                                    color = if (isPeak) chartColor else chartColor.copy(alpha = 0.78f),
+                                    topLeft = Offset(0f, 0f),
+                                    size = Size(size.width, size.height),
+                                    cornerRadius = CornerRadius(12.dp.toPx(), 12.dp.toPx())
+                                )
+                            }
+                            if (value > 0 && data.size <= 7) {
+                                Text(
+                                    text = value.toString(),
+                                    modifier = Modifier.padding(bottom = 8.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            labels.forEach { label ->
                 Text(
-                    text = "${index + 1}",
+                    text = label,
+                    modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                    color = mutedText,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun EmptyChartState(
+    modifier: Modifier = Modifier,
+    message: String
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(18.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 24.dp)
+        )
     }
 }
 
