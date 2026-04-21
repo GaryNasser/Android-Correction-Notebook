@@ -5,12 +5,21 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.garynasser.correction_notebook.data.local.StudyPreferencesManager
 import com.github.garynasser.correction_notebook.data.model.home.Article
+import com.github.garynasser.correction_notebook.data.model.home.IcsImportPreview
+import com.github.garynasser.correction_notebook.data.model.home.ImportDecision
+import com.github.garynasser.correction_notebook.data.model.home.PlannerTab
 import com.github.garynasser.correction_notebook.data.model.home.PomodoroSettings
+import com.github.garynasser.correction_notebook.data.model.home.ScheduleEvent
+import com.github.garynasser.correction_notebook.data.model.home.ScheduleOccurrence
+import com.github.garynasser.correction_notebook.data.model.home.ScheduleRange
+import com.github.garynasser.correction_notebook.data.model.home.ScheduleSection
 import com.github.garynasser.correction_notebook.data.model.home.SessionType
 import com.github.garynasser.correction_notebook.data.model.home.StudySession
 import com.github.garynasser.correction_notebook.data.model.home.TodoHistoryItem
 import com.github.garynasser.correction_notebook.data.model.home.TodoItem
 import com.github.garynasser.correction_notebook.data.repository.ArticleRepository
+import com.github.garynasser.correction_notebook.data.repository.IcsImportRepository
+import com.github.garynasser.correction_notebook.data.repository.ScheduleRepository
 import com.github.garynasser.correction_notebook.data.repository.StudySessionRepository
 import com.github.garynasser.correction_notebook.data.repository.TodoHistoryRepository
 import com.github.garynasser.correction_notebook.data.repository.TodoRepository
@@ -33,8 +42,14 @@ data class HomeUiState(
     val articles: List<Article> = emptyList(),
     val todayStudyMinutes: Int = 0,
     val completedPomodoros: Int = 0,
+    val plannerTab: PlannerTab = PlannerTab.SCHEDULE,
+    val scheduleRange: ScheduleRange = ScheduleRange.TODAY,
+    val scheduleSections: List<ScheduleSection> = emptyList(),
+    val selectedScheduleEvent: ScheduleOccurrence? = null,
     val isLoading: Boolean = false,
+    val isImportingSchedule: Boolean = false,
     val showAddTodoDialog: Boolean = false,
+    val showAddScheduleDialog: Boolean = false,
     val showModeSelector: Boolean = false,
     val selectedMode: StudyMode? = null,
     val activeTimerMode: ActiveTimerMode = ActiveTimerMode.NONE,  // Tracks what timer was started
@@ -44,6 +59,7 @@ data class HomeUiState(
     val pomodoroSettings: PomodoroSettings = PomodoroSettings(),
     val showPomodoroSettingsDialog: Boolean = false,
     val showTodoHistory: Boolean = false,
+    val pendingIcsPreview: IcsImportPreview? = null,
     val soundEnabled: Boolean = true,
     val vibrationEnabled: Boolean = true
 )
@@ -59,6 +75,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val studyPreferencesManager = StudyPreferencesManager(application)
     private val studySessionRepository = StudySessionRepository(application)
     private val todoHistoryRepository = TodoHistoryRepository(application)
+    private val scheduleRepository = ScheduleRepository(application)
+    private val icsImportRepository = IcsImportRepository(application, scheduleRepository)
 
     val timerManager = StudyTimerManager(viewModelScope)
     private var sessionPersisted = false
@@ -129,11 +147,17 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 val sortedTodos = todos
                     .sortedWith(
                         compareBy<TodoItem> { it.isCompleted }
-                            .thenByDescending { it.completedAt ?: 0 }
+                            .thenByDescending { it.createdAt }
                     )
                 _uiState.value = _uiState.value.copy(
                     todoItems = sortedTodos
                 )
+            }
+        }
+
+        viewModelScope.launch {
+            scheduleRepository.scheduleEvents.collect {
+                refreshScheduleSections()
             }
         }
 
@@ -165,6 +189,22 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = _uiState.value.copy(selectedDate = date)
     }
 
+    fun setPlannerTab(tab: PlannerTab) {
+        _uiState.value = _uiState.value.copy(plannerTab = tab)
+    }
+
+    fun setScheduleRange(range: ScheduleRange) {
+        _uiState.value = _uiState.value.copy(scheduleRange = range)
+        viewModelScope.launch {
+            refreshScheduleSections()
+        }
+    }
+
+    private suspend fun refreshScheduleSections() {
+        val sections = scheduleRepository.getEventsForRange(_uiState.value.scheduleRange)
+        _uiState.value = _uiState.value.copy(scheduleSections = sections)
+    }
+
     fun showAddTodoDialog() {
         _uiState.value = _uiState.value.copy(showAddTodoDialog = true)
     }
@@ -180,6 +220,59 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun showAddScheduleDialog() {
+        _uiState.value = _uiState.value.copy(showAddScheduleDialog = true)
+    }
+
+    fun hideAddScheduleDialog() {
+        _uiState.value = _uiState.value.copy(showAddScheduleDialog = false)
+    }
+
+    fun addSchedule(event: ScheduleEvent) {
+        viewModelScope.launch {
+            scheduleRepository.addEvent(event)
+            hideAddScheduleDialog()
+            refreshScheduleSections()
+        }
+    }
+
+    fun deleteSchedule(eventId: String) {
+        viewModelScope.launch {
+            scheduleRepository.deleteEvent(eventId)
+            refreshScheduleSections()
+        }
+    }
+
+    fun importIcs(uri: android.net.Uri) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isImportingSchedule = true)
+            runCatching {
+                icsImportRepository.buildPreview(uri)
+            }.onSuccess { preview ->
+                _uiState.value = _uiState.value.copy(
+                    isImportingSchedule = false,
+                    pendingIcsPreview = preview,
+                    plannerTab = PlannerTab.SCHEDULE
+                )
+            }.onFailure {
+                _uiState.value = _uiState.value.copy(isImportingSchedule = false)
+            }
+        }
+    }
+
+    fun dismissIcsPreview() {
+        _uiState.value = _uiState.value.copy(pendingIcsPreview = null)
+    }
+
+    fun applyIcsPreview(decision: ImportDecision) {
+        viewModelScope.launch {
+            val preview = _uiState.value.pendingIcsPreview ?: return@launch
+            scheduleRepository.applyImportPreview(preview, decision)
+            _uiState.value = _uiState.value.copy(pendingIcsPreview = null)
+            refreshScheduleSections()
+        }
+    }
+
     fun toggleTodoComplete(todoId: String) {
         viewModelScope.launch {
             // Get the todo before toggling to add to history if completing
@@ -192,7 +285,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             if (!wasCompleted && todo != null) {
                 val completedAt = System.currentTimeMillis()
                 val historyItem = TodoHistoryItem(
-                    id = todo.id,
+                    id = java.util.UUID.randomUUID().toString(),
                     title = todo.title,
                     description = todo.description,
                     priority = todo.priority,

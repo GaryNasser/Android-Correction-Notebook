@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 import java.time.LocalDate
+import java.util.UUID
 
 private val Context.todoHistoryDataStore: DataStore<Preferences> by preferencesDataStore("todo_history_prefs")
 
@@ -25,14 +26,14 @@ class TodoHistoryRepository(private val context: Context) {
         .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
         .map { prefs ->
             prefs[historyItemsKey]?.let { json ->
-                parseHistoryItems(json)
+                normalizeHistoryItems(parseHistoryItems(json))
             } ?: emptyList()
         }
 
     suspend fun addHistoryItem(item: TodoHistoryItem) {
         context.todoHistoryDataStore.edit { prefs ->
             val current = prefs[historyItemsKey]?.let { parseHistoryItems(it) } ?: emptyList()
-            val updated = current + item
+            val updated = normalizeHistoryItems(current + item)
             prefs[historyItemsKey] = serializeHistoryItems(updated)
         }
     }
@@ -42,6 +43,16 @@ class TodoHistoryRepository(private val context: Context) {
             val current = prefs[historyItemsKey]?.let { parseHistoryItems(it) } ?: emptyList()
             val updated = current.filter { it.id != itemId }
             prefs[historyItemsKey] = serializeHistoryItems(updated)
+        }
+    }
+
+    suspend fun repairDuplicateIds() {
+        context.todoHistoryDataStore.edit { prefs ->
+            val current = prefs[historyItemsKey]?.let { parseHistoryItems(it) } ?: emptyList()
+            val normalized = normalizeHistoryItems(current)
+            if (normalized != current) {
+                prefs[historyItemsKey] = serializeHistoryItems(normalized)
+            }
         }
     }
 
@@ -82,6 +93,17 @@ class TodoHistoryRepository(private val context: Context) {
                     completedDate = try { LocalDate.parse(parts[7]) } catch (e: Exception) { LocalDate.now() }
                 )
             } else null
+        }
+    }
+
+    private fun normalizeHistoryItems(items: List<TodoHistoryItem>): List<TodoHistoryItem> {
+        val usedIds = mutableSetOf<String>()
+        return items.map { item ->
+            if (usedIds.add(item.id)) {
+                item
+            } else {
+                item.copy(id = UUID.randomUUID().toString())
+            }
         }
     }
 }
