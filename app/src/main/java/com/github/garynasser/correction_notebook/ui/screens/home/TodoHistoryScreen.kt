@@ -100,7 +100,7 @@ fun TodoHistoryScreen(
                     item {
                         DateHeader(date = date)
                     }
-                    items(items, key = { it.id }) { historyItem ->
+                    items(items, key = { "${it.id}_${it.completedAt}" }) { historyItem ->
                         TodoHistoryItemCard(
                             item = historyItem,
                             onDelete = { viewModel.deleteHistoryItem(historyItem.id) }

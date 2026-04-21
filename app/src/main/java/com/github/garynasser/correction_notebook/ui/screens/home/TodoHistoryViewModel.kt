@@ -31,6 +31,7 @@ class TodoHistoryViewModel(application: Application) : AndroidViewModel(applicat
     private fun loadHistory() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
+            todoHistoryRepository.repairDuplicateIds()
             todoHistoryRepository.historyItems.collect { items ->
                 val grouped = items
                     .sortedByDescending { it.completedAt }
