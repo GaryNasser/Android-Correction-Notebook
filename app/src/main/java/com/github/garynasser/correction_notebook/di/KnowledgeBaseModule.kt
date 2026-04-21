@@ -9,11 +9,13 @@ import com.github.garynasser.correction_notebook.data.local.knowledgebase.Knowle
 import com.github.garynasser.correction_notebook.data.repository.BitShareRepository
 import com.github.garynasser.correction_notebook.data.repository.KnowledgeBaseRepository
 import com.github.garynasser.correction_notebook.data.remote.api.BitShareApiService
+import com.github.garynasser.correction_notebook.utils.BitShareNetworkDetector
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import okhttp3.OkHttpClient
 import javax.inject.Singleton
 
 @Module
@@ -160,18 +162,21 @@ object KnowledgeBaseModule {
     @Provides
     @Singleton
     fun provideKnowledgeBaseRepository(
+        @ApplicationContext context: Context,
         dao: KnowledgeBaseDao,
         storage: com.github.garynasser.correction_notebook.data.local.knowledgebase.KnowledgeBaseFileStorage
     ): KnowledgeBaseRepository {
-        return KnowledgeBaseRepository(dao, storage)
+        return KnowledgeBaseRepository(dao, storage, context)
     }
 
     @Provides
     @Singleton
     fun provideBitShareRepository(
-        apiService: BitShareApiService
+        apiService: BitShareApiService,
+        @BasicRetrofit okHttpClient: OkHttpClient,
+        networkDetector: BitShareNetworkDetector
     ): BitShareRepository {
-        return BitShareRepository(apiService)
+        return BitShareRepository(apiService, okHttpClient, networkDetector)
     }
 
     private fun SupportSQLiteDatabase.hasTable(tableName: String): Boolean {

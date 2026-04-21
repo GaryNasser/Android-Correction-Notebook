@@ -6,13 +6,18 @@ import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitSha
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitShareFolderDetail
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitShareFolderSummary
 import com.github.garynasser.correction_notebook.data.remote.api.BitShareApiService
+import com.github.garynasser.correction_notebook.utils.BitShareNetworkDetector
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import okhttp3.ResponseBody
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class BitShareRepository @Inject constructor(
-    private val apiService: BitShareApiService
+    private val apiService: BitShareApiService,
+    private val okHttpClient: OkHttpClient,
+    private val networkDetector: BitShareNetworkDetector
 ) {
     /**
      * 搜索 BITShare 资源（文件或目录）
@@ -119,7 +124,77 @@ class BitShareRepository @Inject constructor(
         )
     }
 
-    suspend fun downloadFile(fileId: String): Result<ResponseBody> = runCatching {
-        apiService.downloadFile(fileId)
+    suspend fun downloadFile(fileId: String): Result<ResponseBody> {
+        val primaryAttempt = runCatching { apiService.downloadFile(fileId) }
+            .mapCatching { body ->
+                validateDownloadBody(body)
+                body
+            }
+
+        if (primaryAttempt.isSuccess) {
+            return primaryAttempt
+        }
+
+        val fallbackErrorMessages = mutableListOf<String>()
+        primaryAttempt.exceptionOrNull()?.message?.let(fallbackErrorMessages::add)
+
+        buildDownloadCandidateUrls(fileId).forEach { url ->
+            val attempt = runCatching {
+                okHttpClient.newCall(
+                    Request.Builder()
+                        .url(url)
+                        .get()
+                        .build()
+                ).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        error("HTTP ${response.code}")
+                    }
+                    val body = response.body ?: error("下载响应为空")
+                    val bytes = body.bytes()
+                    if (bytes.isEmpty()) {
+                        error("下载内容为空")
+                    }
+                    bytes
+                }
+            }
+
+            if (attempt.isSuccess) {
+                return Result.success(
+                    ResponseBody.create(null, attempt.getOrThrow())
+                )
+            }
+
+            attempt.exceptionOrNull()?.message?.let { message ->
+                fallbackErrorMessages += "$url -> $message"
+            }
+        }
+
+        return Result.failure(
+            IllegalStateException(
+                buildString {
+                    append("BITShare 下载失败")
+                    if (fallbackErrorMessages.isNotEmpty()) {
+                        append("：")
+                        append(fallbackErrorMessages.joinToString("；"))
+                    }
+                }
+            )
+        )
+    }
+
+    private fun buildDownloadCandidateUrls(fileId: String): List<String> {
+        val preferredBase = networkDetector.getBitShareBaseUrl().trimEnd('/')
+        return listOf(
+            "$preferredBase/api/public/files/$fileId/download",
+            "https://app.bitshare.com.cn/api/public/files/$fileId/download",
+            "http://10.170.35.57:8890/api/public/files/$fileId/download"
+        ).distinct()
+    }
+
+    private fun validateDownloadBody(body: ResponseBody) {
+        val contentType = body.contentType()?.toString().orEmpty().lowercase()
+        if (contentType.contains("application/json") || contentType.contains("text/html")) {
+            error("下载接口返回了非文件内容")
+        }
     }
 }
