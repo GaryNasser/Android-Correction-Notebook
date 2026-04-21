@@ -7,7 +7,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -24,8 +23,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.github.garynasser.correction_notebook.data.model.home.Article
+import com.github.garynasser.correction_notebook.data.model.home.ImportDecision
+import com.github.garynasser.correction_notebook.data.model.home.PlannerTab
 import com.github.garynasser.correction_notebook.data.model.home.TimerState
-import com.github.garynasser.correction_notebook.data.model.home.TodoItem
 import com.github.garynasser.correction_notebook.ui.screens.statistics.StatisticsScreen
 import com.github.garynasser.correction_notebook.ui.screens.statistics.StatisticsViewModel
 import java.time.LocalDate
@@ -54,6 +54,11 @@ fun HomeScreen(
             // Take persistent permission
             homeViewModel.setBackgroundImage(it.toString())
         }
+    }
+    val icsPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let { homeViewModel.importIcs(it) }
     }
 
     // Handle immersive mode
@@ -152,41 +157,19 @@ fun HomeScreen(
                 )
             }
 
-            // Todo Section
             item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "待办事项",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Row {
-                        IconButton(onClick = { homeViewModel.showTodoHistory() }) {
-                            Icon(Icons.Default.History, contentDescription = "历史")
-                        }
-                        IconButton(onClick = { homeViewModel.showAddTodoDialog() }) {
-                            Icon(Icons.Default.Add, contentDescription = "添加待办")
-                        }
-                    }
-                }
-            }
-
-            if (uiState.todoItems.isEmpty()) {
-                item {
-                    EmptyTodoState(onAddClick = { homeViewModel.showAddTodoDialog() })
-                }
-            } else {
-                items(uiState.todoItems, key = { it.id }) { todo ->
-                    TodoItemCard(
-                        todo = todo,
-                        onToggleComplete = { homeViewModel.toggleTodoComplete(todo.id) },
-                        onDelete = { homeViewModel.deleteTodo(todo.id) }
-                    )
-                }
+                PlannerSection(
+                    uiState = uiState,
+                    onPlannerTabChange = { homeViewModel.setPlannerTab(it) },
+                    onScheduleRangeChange = { homeViewModel.setScheduleRange(it) },
+                    onImportIcs = { icsPickerLauncher.launch("*/*") },
+                    onAddSchedule = { homeViewModel.showAddScheduleDialog() },
+                    onAddTodo = { homeViewModel.showAddTodoDialog() },
+                    onShowTodoHistory = { homeViewModel.showTodoHistory() },
+                    onToggleTodo = { homeViewModel.toggleTodoComplete(it) },
+                    onDeleteTodo = { homeViewModel.deleteTodo(it) },
+                    onDeleteSchedule = { homeViewModel.deleteSchedule(it) }
+                )
             }
 
             // Articles Section
@@ -206,6 +189,23 @@ fun HomeScreen(
         AddTodoDialog(
             onDismiss = { homeViewModel.hideAddTodoDialog() },
             onAdd = { todo -> homeViewModel.addTodo(todo) }
+        )
+    }
+
+    if (uiState.showAddScheduleDialog) {
+        AddScheduleDialog(
+            onDismiss = { homeViewModel.hideAddScheduleDialog() },
+            onAdd = { event -> homeViewModel.addSchedule(event) }
+        )
+    }
+
+    uiState.pendingIcsPreview?.let { preview ->
+        IcsImportPreviewDialog(
+            preview = preview,
+            onDismiss = { homeViewModel.dismissIcsPreview() },
+            onApply = { decision: ImportDecision ->
+                homeViewModel.applyIcsPreview(decision)
+            }
         )
     }
 
