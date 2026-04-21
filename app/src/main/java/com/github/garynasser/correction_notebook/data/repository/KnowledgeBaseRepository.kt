@@ -1,5 +1,8 @@
 package com.github.garynasser.correction_notebook.data.repository
 
+import android.content.Context
+import android.net.Uri
+import android.provider.OpenableColumns
 import com.github.garynasser.correction_notebook.data.local.knowledgebase.KnowledgeBaseDao
 import com.github.garynasser.correction_notebook.data.local.knowledgebase.KnowledgeBaseFileEntity
 import com.github.garynasser.correction_notebook.data.local.knowledgebase.KnowledgeBaseFileStorage
@@ -10,8 +13,10 @@ import com.github.garynasser.correction_notebook.data.model.knowledgebase.Knowle
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.KnowledgeBaseFolderChoice
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.KnowledgeBaseFolderContent
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.KnowledgeBaseFolderSummary
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import java.io.File
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -19,7 +24,8 @@ import javax.inject.Singleton
 @Singleton
 class KnowledgeBaseRepository @Inject constructor(
     private val dao: KnowledgeBaseDao,
-    private val fileStorage: KnowledgeBaseFileStorage
+    private val fileStorage: KnowledgeBaseFileStorage,
+    @ApplicationContext private val context: Context
 ) {
     fun observeFolderContent(folderId: String?, query: String): Flow<KnowledgeBaseFolderContent> {
         return combine(
@@ -170,6 +176,55 @@ class KnowledgeBaseRepository @Inject constructor(
         dao.deleteFile(file)
     }
 
+    suspend fun getFileSummary(fileId: String): KnowledgeBaseFileSummary? {
+        return dao.getFileById(fileId)?.toSummary()
+    }
+
+    suspend fun fileExists(fileId: String): Boolean {
+        val file = dao.getFileById(fileId) ?: return false
+        return File(file.localPath).exists()
+    }
+
+    suspend fun importLocalFile(
+        targetFolderId: String?,
+        fileUri: Uri
+    ): Result<Unit> = runCatching {
+        val resolvedFolderId = targetFolderId.takeUnless { it == ROOT_FOLDER_ID }
+        val metadata = resolveImportMetadata(fileUri)
+        val now = System.currentTimeMillis()
+        val displayName = resolveUniqueDisplayName(
+            folderId = resolvedFolderId,
+            preferredName = metadata.displayName
+        )
+
+        val stored = context.contentResolver.openInputStream(fileUri)?.use { inputStream ->
+            fileStorage.writeFile(
+                folderPathIds = getFolderPathIds(resolvedFolderId),
+                preferredName = displayName,
+                inputStream = inputStream
+            )
+        } ?: error("无法读取所选文件")
+
+        dao.insertFile(
+            KnowledgeBaseFileEntity(
+                id = UUID.randomUUID().toString(),
+                folderId = resolvedFolderId,
+                displayName = displayName,
+                storedName = stored.storedName,
+                localPath = stored.absolutePath,
+                mimeType = metadata.mimeType,
+                sizeBytes = stored.sizeBytes,
+                sourceType = "local",
+                sourceFileId = null,
+                sourceTitle = metadata.displayName,
+                sourcePath = fileUri.toString(),
+                downloadedAt = now,
+                createdAt = now,
+                updatedAt = now
+            )
+        )
+    }
+
     suspend fun importDownloadedFile(
         detail: BitShareFileDetail,
         targetFolderId: String,
@@ -281,7 +336,55 @@ class KnowledgeBaseRepository @Inject constructor(
         }
     }
 
+    private fun resolveImportMetadata(fileUri: Uri): ImportFileMetadata {
+        val contentResolver = context.contentResolver
+        var displayName: String? = null
+
+        contentResolver.query(
+            fileUri,
+            arrayOf(OpenableColumns.DISPLAY_NAME),
+            null,
+            null,
+            null
+        )?.use { cursor ->
+            val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (nameIndex >= 0 && cursor.moveToFirst()) {
+                displayName = cursor.getString(nameIndex)
+            }
+        }
+
+        val resolvedName = displayName
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?: fileUri.lastPathSegment?.substringAfterLast('/')
+            ?: "导入文件"
+
+        return ImportFileMetadata(
+            displayName = resolvedName,
+            mimeType = contentResolver.getType(fileUri) ?: "application/octet-stream"
+        )
+    }
+
+    private data class ImportFileMetadata(
+        val displayName: String,
+        val mimeType: String
+    )
+
     companion object {
         const val ROOT_FOLDER_ID = "__root__"
     }
+}
+
+private fun KnowledgeBaseFileEntity.toSummary(): KnowledgeBaseFileSummary {
+    return KnowledgeBaseFileSummary(
+        id = id,
+        folderId = folderId,
+        displayName = displayName,
+        localPath = localPath,
+        mimeType = mimeType,
+        sizeBytes = sizeBytes,
+        sourceType = sourceType,
+        sourceTitle = sourceTitle,
+        downloadedAt = downloadedAt
+    )
 }

@@ -1,8 +1,11 @@
 package com.github.garynasser.correction_notebook.ui.screens.knowledgebase
 
 import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
 import android.webkit.MimeTypeMap
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -28,19 +31,19 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.DriveFileMove
+import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SortByAlpha
-import androidx.compose.material.icons.filled.Update
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -101,11 +104,27 @@ private enum class FileSortMode {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun KnowledgeBaseScreen(
+    onOpenFile: (String) -> Unit,
     viewModel: KnowledgeBaseViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
+    var fileToExport by remember { mutableStateOf<KnowledgeBaseFileSummary?>(null) }
+    val importLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        uri?.let(viewModel::importLocalFile)
+    }
+    val exportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("*/*")
+    ) { uri: Uri? ->
+        val file = fileToExport
+        if (uri != null && file != null) {
+            exportFile(context, file, uri)
+        }
+        fileToExport = null
+    }
 
     var showCreateFolderDialog by rememberSaveable { mutableStateOf(false) }
     var folderToRename by remember { mutableStateOf<KnowledgeBaseFolderSummary?>(null) }
@@ -114,7 +133,9 @@ fun KnowledgeBaseScreen(
     var fileToDelete by remember { mutableStateOf<KnowledgeBaseFileSummary?>(null) }
     var fileToMove by remember { mutableStateOf<KnowledgeBaseFileSummary?>(null) }
     var showDownloadFolderPicker by rememberSaveable { mutableStateOf(false) }
+    var pendingRemoteDownload by remember { mutableStateOf<BitShareSearchResult?>(null) }
     var fileSortMode by rememberSaveable { mutableStateOf(FileSortMode.UPDATED) }
+    var isSearchExpanded by rememberSaveable { mutableStateOf(false) }
 
     val sortedFiles = remember(uiState.folderContent.files, fileSortMode) {
         when (fileSortMode) {
@@ -123,7 +144,7 @@ fun KnowledgeBaseScreen(
         }
     }
 
-    LaunchedEffect(uiState.snackbarMessage) {
+        LaunchedEffect(uiState.snackbarMessage) {
         val message = uiState.snackbarMessage ?: return@LaunchedEffect
         snackbarHostState.showSnackbar(message)
         viewModel.consumeSnackbarMessage()
@@ -206,19 +227,26 @@ fun KnowledgeBaseScreen(
         )
     }
 
-    if (showDownloadFolderPicker && uiState.selectedRemoteDetail != null) {
+    if (showDownloadFolderPicker && pendingRemoteDownload != null) {
         FolderPickerDialog(
             title = "下载到知识库",
             folders = uiState.folderChoices,
-            onDismiss = { showDownloadFolderPicker = false },
-            onSelect = { folderId ->
-                viewModel.downloadRemoteFileToFolder(folderId)
+            onDismiss = {
                 showDownloadFolderPicker = false
+                pendingRemoteDownload = null
+                viewModel.dismissRemoteDetail()
+            },
+            onSelect = { folderId ->
+                pendingRemoteDownload?.let { result ->
+                    viewModel.downloadSearchResultToFolder(result, folderId)
+                }
+                showDownloadFolderPicker = false
+                pendingRemoteDownload = null
             }
         )
     }
 
-    uiState.selectedRemoteDetail?.let { detail ->
+    uiState.selectedRemoteDetail?.takeIf { !showDownloadFolderPicker && pendingRemoteDownload == null }?.let { detail ->
         RemoteDetailDialog(
             detail = detail,
             isDownloading = uiState.activeDownloadId == detail.id,
@@ -282,6 +310,13 @@ fun KnowledgeBaseScreen(
                             FileSortMode.NAME -> FileSortMode.UPDATED
                         }
                     },
+                    isSearchExpanded = isSearchExpanded,
+                    onToggleSearch = {
+                        isSearchExpanded = !isSearchExpanded
+                        if (!isSearchExpanded) {
+                            viewModel.updateLocalSearchQuery("")
+                        }
+                    },
                     files = sortedFiles,
                     onLocalSearchChanged = viewModel::updateLocalSearchQuery,
                     onBack = viewModel::navigateBack,
@@ -289,9 +324,15 @@ fun KnowledgeBaseScreen(
                     onFolderClick = viewModel::enterFolder,
                     onFolderRename = { folderToRename = it },
                     onFolderDelete = { folderToDelete = it },
+                    onFileOpen = { onOpenFile(it.id) },
                     onFileRename = { fileToRename = it },
                     onFileDelete = { fileToDelete = it },
                     onFileMove = { fileToMove = it },
+                    onFileExport = {
+                        fileToExport = it
+                        exportLauncher.launch(it.displayName)
+                    },
+                    onImportLocalFile = { importLauncher.launch(arrayOf("*/*")) },
                     onFileShare = {
                         shareFile(
                             context = context,
@@ -312,7 +353,10 @@ fun KnowledgeBaseScreen(
                         }
                     },
                     onSearchClick = viewModel::searchRemoteResources,
-                    onOpenDetail = viewModel::loadRemoteDetail,
+                    onOpenDetail = {
+                        pendingRemoteDownload = it
+                        showDownloadFolderPicker = true
+                    },
                     onOpenFolderDetail = viewModel::loadRemoteFolderDetail
                 )
             }
@@ -326,17 +370,24 @@ private fun FileManagementPage(
     fileSortMode: FileSortMode,
     files: List<KnowledgeBaseFileSummary>,
     onToggleSort: () -> Unit,
+    isSearchExpanded: Boolean,
+    onToggleSearch: () -> Unit,
     onLocalSearchChanged: (String) -> Unit,
     onBack: () -> Unit,
     onBreadcrumbClick: (String?) -> Unit,
     onFolderClick: (String) -> Unit,
     onFolderRename: (KnowledgeBaseFolderSummary) -> Unit,
     onFolderDelete: (KnowledgeBaseFolderSummary) -> Unit,
+    onFileOpen: (KnowledgeBaseFileSummary) -> Unit,
     onFileRename: (KnowledgeBaseFileSummary) -> Unit,
     onFileDelete: (KnowledgeBaseFileSummary) -> Unit,
     onFileMove: (KnowledgeBaseFileSummary) -> Unit,
+    onFileExport: (KnowledgeBaseFileSummary) -> Unit,
+    onImportLocalFile: () -> Unit,
     onFileShare: (KnowledgeBaseFileSummary) -> Unit
 ) {
+    var menuExpanded by remember { mutableStateOf(false) }
+
     Column(modifier = Modifier.fillMaxSize()) {
         Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)) {
             Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
@@ -351,57 +402,82 @@ private fun FileManagementPage(
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回上一级")
                         }
                     }
-                    uiState.folderContent.breadcrumbs.forEachIndexed { index, breadcrumb ->
+                    val breadcrumbs = uiState.folderContent.breadcrumbs
+                        .drop(if (uiState.currentFolderId == null) 1 else 0)
+                    breadcrumbs.forEachIndexed { index, breadcrumb ->
                         TextButton(onClick = { onBreadcrumbClick(breadcrumb.id) }) {
                             Text(breadcrumb.name)
                         }
-                        if (index != uiState.folderContent.breadcrumbs.lastIndex) {
+                        if (index != breadcrumbs.lastIndex) {
                             Text("/", style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                    Spacer(modifier = Modifier.size(12.dp))
+                    OutlinedButton(
+                        onClick = onImportLocalFile,
+                        enabled = !uiState.isLocalBusy && !uiState.isImportingLocalFile
+                    ) {
+                        if (uiState.isImportingLocalFile) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(Icons.Default.FileOpen, contentDescription = null)
+                        }
+                        Spacer(modifier = Modifier.size(6.dp))
+                        Text("导入")
+                    }
+                    OutlinedButton(onClick = onToggleSearch) {
+                        Icon(Icons.Default.Search, contentDescription = null)
+                        Spacer(modifier = Modifier.size(6.dp))
+                        Text(if (isSearchExpanded) "收起" else "搜索")
+                    }
+                    Box {
+                        IconButton(onClick = { menuExpanded = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "更多操作")
+                        }
+                        DropdownMenu(
+                            expanded = menuExpanded,
+                            onDismissRequest = { menuExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text(if (fileSortMode == FileSortMode.UPDATED) "当前: 最近更新" else "当前: 名称") },
+                                enabled = false,
+                                onClick = {}
+                            )
+                            DropdownMenuItem(
+                                text = { Text("按最近更新") },
+                                leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) },
+                                onClick = {
+                                    menuExpanded = false
+                                    if (fileSortMode != FileSortMode.UPDATED) onToggleSort()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("按名称") },
+                                leadingIcon = { Icon(Icons.Default.SortByAlpha, contentDescription = null) },
+                                onClick = {
+                                    menuExpanded = false
+                                    if (fileSortMode != FileSortMode.NAME) onToggleSort()
+                                }
+                            )
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                if (isSearchExpanded) {
+                    Spacer(modifier = Modifier.height(12.dp))
                     OutlinedTextField(
                         value = uiState.localSearchQuery,
                         onValueChange = onLocalSearchChanged,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
-                        leadingIcon = {
-                            Icon(Icons.Default.Search, contentDescription = null)
-                        },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                         label = { Text("搜索当前目录") }
-                    )
-                    AssistChip(
-                        onClick = onToggleSort,
-                        label = {
-                            Text(if (fileSortMode == FileSortMode.UPDATED) "按最近更新" else "按名称")
-                        },
-                        leadingIcon = {
-                            Icon(
-                                if (fileSortMode == FileSortMode.UPDATED) Icons.Default.Update else Icons.Default.SortByAlpha,
-                                contentDescription = null
-                            )
-                        }
                     )
                 }
             }
-        }
-
-        if (uiState.currentFolderId == null &&
-            uiState.localSearchQuery.isBlank() &&
-            uiState.recentFiles.isNotEmpty()
-        ) {
-            RecentDownloadsSection(
-                files = uiState.recentFiles,
-                onShare = onFileShare
-            )
         }
 
         LazyColumn(
@@ -438,8 +514,10 @@ private fun FileManagementPage(
                 items(files, key = { it.id }) { file ->
                     FileRow(
                         file = file,
+                        onOpen = { onFileOpen(file) },
                         onRename = { onFileRename(file) },
                         onMove = { onFileMove(file) },
+                        onExport = { onFileExport(file) },
                         onDelete = { onFileDelete(file) },
                         onShare = { onFileShare(file) }
                     )
@@ -455,7 +533,7 @@ private fun BitSharePage(
     onQueryChanged: (String) -> Unit,
     onSortChanged: (BitShareSortOption) -> Unit,
     onSearchClick: () -> Unit,
-    onOpenDetail: (String) -> Unit,
+    onOpenDetail: (BitShareSearchResult) -> Unit,
     onOpenFolderDetail: (String) -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
@@ -555,7 +633,7 @@ private fun BitSharePage(
                                 if (result.entityType == "folder") {
                                     onOpenFolderDetail(result.id)
                                 } else {
-                                    onOpenDetail(result.id)
+                                    onOpenDetail(result)
                                 }
                             }
                         )
@@ -563,52 +641,6 @@ private fun BitSharePage(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun RecentDownloadsSection(
-    files: List<KnowledgeBaseFileSummary>,
-    onShare: (KnowledgeBaseFileSummary) -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp)
-    ) {
-        Text(
-            text = "最近下载",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        files.forEach { file ->
-            ElevatedCard(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 8.dp)
-            ) {
-                ListItem(
-                    headlineContent = {
-                        Text(file.displayName, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    },
-                    supportingContent = {
-                        Text(
-                            "${formatFileSize(file.sizeBytes)} · ${formatTimestamp(file.downloadedAt)}"
-                        )
-                    },
-                    leadingContent = {
-                        Icon(Icons.Default.DownloadDone, contentDescription = null)
-                    },
-                    trailingContent = {
-                        IconButton(onClick = { onShare(file) }) {
-                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "导出")
-                        }
-                    }
-                )
-            }
-        }
-        HorizontalDivider()
     }
 }
 
@@ -668,8 +700,10 @@ private fun FolderRow(
 @Composable
 private fun FileRow(
     file: KnowledgeBaseFileSummary,
+    onOpen: () -> Unit,
     onRename: () -> Unit,
     onMove: () -> Unit,
+    onExport: () -> Unit,
     onDelete: () -> Unit,
     onShare: () -> Unit
 ) {
@@ -679,6 +713,7 @@ private fun FileRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
+            .clickable(onClick = onOpen)
     ) {
         ListItem(
             headlineContent = {
@@ -720,6 +755,14 @@ private fun FileRow(
                         )
                         DropdownMenuItem(
                             text = { Text("导出") },
+                            leadingIcon = { Icon(Icons.Default.Download, contentDescription = null) },
+                            onClick = {
+                                menuExpanded = false
+                                onExport()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("分享") },
                             leadingIcon = { Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null) },
                             onClick = {
                                 menuExpanded = false
@@ -778,10 +821,9 @@ private fun RemoteResultRow(
             },
             trailingContent = {
                 if (isFolder) {
-                    AssistChip(
-                        onClick = onClick,
-                        label = { Text("查看", style = MaterialTheme.typography.labelSmall) }
-                    )
+                    TextButton(onClick = onClick) {
+                        Text("查看", style = MaterialTheme.typography.labelSmall)
+                    }
                 } else {
                     Icon(Icons.Default.CloudDownload, contentDescription = "下载")
                 }
@@ -818,10 +860,16 @@ private fun RemoteDetailDialog(
                 enabled = !isDownloading
             ) {
                 if (isDownloading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
-                        strokeWidth = 2.dp
-                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Text("下载中…")
+                    }
                 } else {
                     Text("下载到知识库")
                 }
@@ -1112,5 +1160,28 @@ private fun shareFile(
         context.startActivity(Intent.createChooser(shareIntent, "导出文件"))
     }.onFailure {
         Toast.makeText(context, "当前设备无法导出该文件", Toast.LENGTH_SHORT).show()
+    }
+}
+
+private fun exportFile(
+    context: android.content.Context,
+    file: KnowledgeBaseFileSummary,
+    targetUri: Uri
+) {
+    val sourceFile = File(file.localPath)
+    if (!sourceFile.exists()) {
+        Toast.makeText(context, "文件不存在，无法导出", Toast.LENGTH_SHORT).show()
+        return
+    }
+
+    runCatching {
+        context.contentResolver.openOutputStream(targetUri)?.use { output ->
+            sourceFile.inputStream().use { input ->
+                input.copyTo(output)
+            }
+        } ?: error("无法写入导出位置")
+        Toast.makeText(context, "已导出文件副本", Toast.LENGTH_SHORT).show()
+    }.onFailure {
+        Toast.makeText(context, "导出失败，请重试", Toast.LENGTH_SHORT).show()
     }
 }

@@ -16,6 +16,7 @@ import com.github.garynasser.correction_notebook.ui.navigation.AITutor
 import com.github.garynasser.correction_notebook.ui.navigation.CourseList
 import com.github.garynasser.correction_notebook.ui.navigation.Home
 import com.github.garynasser.correction_notebook.ui.navigation.KnowledgeBase
+import com.github.garynasser.correction_notebook.ui.navigation.KnowledgeBaseFileViewer
 import com.github.garynasser.correction_notebook.ui.navigation.Login
 import com.github.garynasser.correction_notebook.ui.navigation.Profile
 import com.github.garynasser.correction_notebook.ui.navigation.VideoList
@@ -23,6 +24,7 @@ import com.github.garynasser.correction_notebook.ui.navigation.VideoPlayer
 import com.github.garynasser.correction_notebook.ui.navigation.bottomNavList
 import com.github.garynasser.correction_notebook.ui.screens.aitutor.AITutorScreen
 import com.github.garynasser.correction_notebook.ui.screens.home.HomeScreen
+import com.github.garynasser.correction_notebook.ui.screens.knowledgebase.KnowledgeBaseFileViewerScreen
 import com.github.garynasser.correction_notebook.ui.screens.knowledgebase.KnowledgeBaseScreen
 import com.github.garynasser.correction_notebook.ui.screens.profile.ProfileScreen
 import com.github.garynasser.correction_notebook.ui.screens.yanhe.CourseListScreen
@@ -90,7 +92,22 @@ fun MainContainer(
                 navController.navigate(VideoList(courseId))
             }) }
             composable<AITutor> { AITutorScreen() }
-            composable<KnowledgeBase> { KnowledgeBaseScreen() }
+            composable<KnowledgeBase> {
+                KnowledgeBaseScreen(
+                    onOpenFile = { fileId ->
+                        navController.navigate(KnowledgeBaseFileViewer(fileId))
+                    }
+                )
+            }
+
+            composable<KnowledgeBaseFileViewer> {
+                KnowledgeBaseFileViewerScreen(
+                    onBack = { navController.popBackStack() },
+                    onDeleted = {
+                        navController.popBackStack()
+                    }
+                )
+            }
 
             composable<VideoList> {
                 CourseVideoListScreen(
