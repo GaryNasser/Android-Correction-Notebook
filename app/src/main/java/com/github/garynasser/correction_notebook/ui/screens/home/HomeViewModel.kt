@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.github.garynasser.correction_notebook.data.local.StudyPreferencesManager
 import com.github.garynasser.correction_notebook.data.model.home.Article
 import com.github.garynasser.correction_notebook.data.model.home.PomodoroSettings
+import com.github.garynasser.correction_notebook.data.model.home.SessionType
+import com.github.garynasser.correction_notebook.data.model.home.StudySession
 import com.github.garynasser.correction_notebook.data.model.home.TodoHistoryItem
 import com.github.garynasser.correction_notebook.data.model.home.TodoItem
 import com.github.garynasser.correction_notebook.data.repository.ArticleRepository
@@ -19,6 +21,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import java.time.LocalDateTime
 
 enum class StudyMode {
     POMODORO, COUNTDOWN, STOPWATCH, IMMERSIVE
@@ -58,6 +61,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val todoHistoryRepository = TodoHistoryRepository(application)
 
     val timerManager = StudyTimerManager(viewModelScope)
+    private var sessionPersisted = false
+    private var currentSessionStartedAt: LocalDateTime? = null
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
@@ -66,34 +71,18 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         loadData()
         loadPomodoroSettings()
         loadAlertSettings()
-        setupTimerCallbacks()
-    }
-
-    private fun setupTimerCallbacks() {
-        // Handle stopwatch reset - save elapsed time
-        timerManager.onStopwatchReset = { elapsedMinutes ->
-            if (elapsedMinutes > 0) {
-                viewModelScope.launch {
-                    studyPreferencesManager.addStudyMinutes(elapsedMinutes)
-                    refreshTodayMinutes()
-                }
-            }
-        }
-
-        // Handle countdown reset - save elapsed time
-        timerManager.onCountdownReset = { elapsedMinutes ->
-            if (elapsedMinutes > 0) {
-                viewModelScope.launch {
-                    studyPreferencesManager.addStudyMinutes(elapsedMinutes)
-                    refreshTodayMinutes()
-                }
-            }
-        }
     }
 
     private suspend fun refreshTodayMinutes() {
-        val todayMinutes = studyPreferencesManager.getTodayStudyMinutes()
-        _uiState.value = _uiState.value.copy(todayStudyMinutes = todayMinutes)
+        refreshTodayStats()
+    }
+
+    private suspend fun refreshTodayStats() {
+        val todayStats = studySessionRepository.getTodayStats()
+        _uiState.value = _uiState.value.copy(
+            todayStudyMinutes = todayStats.totalStudyMinutes,
+            completedPomodoros = todayStats.completedPomodoros
+        )
     }
 
     private fun loadPomodoroSettings() {
@@ -157,13 +146,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             // Load today's stats
-            val todayMinutes = studyPreferencesManager.getTodayStudyMinutes()
-            val pomodoros = studyPreferencesManager.pomodorosCompleted.first()
-            _uiState.value = _uiState.value.copy(
-                todayStudyMinutes = todayMinutes,
-                completedPomodoros = pomodoros,
-                isLoading = false
-            )
+            refreshTodayStats()
+            _uiState.value = _uiState.value.copy(isLoading = false)
         }
 
         viewModelScope.launch {
@@ -256,6 +240,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun startPomodoro() {
+        markSessionStarted()
         _uiState.value = _uiState.value.copy(activeTimerMode = ActiveTimerMode.POMODORO)
         timerManager.startPomodoro(_uiState.value.pomodoroSettings)
     }
@@ -287,25 +272,54 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun startCountdown(minutes: Int) {
+        markSessionStarted()
         _uiState.value = _uiState.value.copy(activeTimerMode = ActiveTimerMode.COUNTDOWN)
         timerManager.startCountdown(minutes)
     }
 
     fun startStopwatch() {
+        markSessionStarted()
         _uiState.value = _uiState.value.copy(activeTimerMode = ActiveTimerMode.STOPWATCH)
         timerManager.startStopwatch()
     }
 
-    fun saveCurrentStudyTime() {
+    fun finishCurrentSessionAndExit() {
         viewModelScope.launch {
-            val elapsedMinutes = timerManager.getElapsedMinutesForCurrentSession()
-            if (elapsedMinutes > 0) {
-                studyPreferencesManager.addStudyMinutes(elapsedMinutes)
-                // Refresh UI state
-                val todayMinutes = studyPreferencesManager.getTodayStudyMinutes()
-                _uiState.value = _uiState.value.copy(todayStudyMinutes = todayMinutes)
-            }
+            persistCurrentSessionIfNeeded()
+            timerManager.stop()
+            currentSessionStartedAt = null
+            clearSelectedMode()
         }
+    }
+
+    private fun markSessionStarted() {
+        sessionPersisted = false
+        currentSessionStartedAt = LocalDateTime.now()
+    }
+
+    private suspend fun persistCurrentSessionIfNeeded() {
+        if (sessionPersisted) return
+
+        val snapshot = timerManager.getCurrentSessionSnapshot() ?: return
+        if (snapshot.durationMinutes <= 0 && snapshot.pomodoroCount <= 0) return
+
+        val endedAt = LocalDateTime.now()
+        val fallbackStart = endedAt.minusMinutes(snapshot.durationMinutes.toLong())
+        val startAt = currentSessionStartedAt ?: fallbackStart
+
+        sessionPersisted = true
+        studySessionRepository.addSession(
+            StudySession(
+                subject = snapshot.sessionType.defaultSubject(),
+                startTime = if (startAt.isAfter(endedAt)) fallbackStart else startAt,
+                endTime = endedAt,
+                durationMinutes = snapshot.durationMinutes,
+                sessionType = snapshot.sessionType,
+                pomodoroCount = snapshot.pomodoroCount
+            )
+        )
+        currentSessionStartedAt = null
+        refreshTodayStats()
     }
 
     fun setBackgroundImage(uri: String?) {
@@ -320,5 +334,13 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             studyPreferencesManager.setLandscapeOrientation(isLandscape)
             _uiState.value = _uiState.value.copy(isLandscapeOrientation = isLandscape)
         }
+    }
+}
+
+private fun SessionType.defaultSubject(): String {
+    return when (this) {
+        SessionType.POMODORO -> "番茄钟"
+        SessionType.COUNTDOWN -> "倒计时"
+        SessionType.STOPWATCH -> "正计时"
     }
 }
