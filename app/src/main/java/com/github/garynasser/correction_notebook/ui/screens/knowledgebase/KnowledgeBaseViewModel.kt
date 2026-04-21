@@ -1,5 +1,6 @@
 package com.github.garynasser.correction_notebook.ui.screens.knowledgebase
 
+import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -16,6 +17,7 @@ import com.github.garynasser.correction_notebook.data.repository.BitShareReposit
 import com.github.garynasser.correction_notebook.data.repository.KnowledgeBaseRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -23,6 +25,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 data class KnowledgeBaseUiState(
@@ -44,6 +47,7 @@ data class KnowledgeBaseUiState(
     val isRemoteSearching: Boolean = false,
     val isRemoteDetailLoading: Boolean = false,
     val isRemoteFolderLoading: Boolean = false,
+    val isImportingLocalFile: Boolean = false,
     val remoteErrorMessage: String? = null,
     val isLocalBusy: Boolean = false,
     val activeDownloadId: String? = null,
@@ -68,10 +72,18 @@ private data class RemoteUiSnapshot(
     val isRemoteSearching: Boolean,
     val isRemoteDetailLoading: Boolean,
     val isRemoteFolderLoading: Boolean,
+    val isImportingLocalFile: Boolean,
     val remoteErrorMessage: String?,
     val isLocalBusy: Boolean,
     val activeDownloadId: String?,
     val snackbarMessage: String?
+)
+
+private data class RemoteLoadingSnapshot(
+    val isRemoteSearching: Boolean,
+    val isRemoteDetailLoading: Boolean,
+    val isImportingLocalFile: Boolean,
+    val remoteErrorMessage: String?
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -93,6 +105,7 @@ class KnowledgeBaseViewModel @Inject constructor(
     private val selectedRemoteFolderDetail = MutableStateFlow<BitShareFolderDetail?>(null)
     private val isRemoteSearching = MutableStateFlow(false)
     private val isRemoteDetailLoading = MutableStateFlow(false)
+    private val isImportingLocalFile = MutableStateFlow(false)
     private val remoteErrorMessage = MutableStateFlow<String?>(null)
     private val isLocalBusy = MutableStateFlow(false)
     private val activeDownloadId = MutableStateFlow<String?>(null)
@@ -152,8 +165,13 @@ class KnowledgeBaseViewModel @Inject constructor(
         combine(selectedRemoteDetail, selectedRemoteFolderDetail) { detail, folderDetail ->
             Pair(detail, folderDetail)
         },
-        combine(isRemoteSearching, isRemoteDetailLoading, remoteErrorMessage) { searching, detailLoading, error ->
-            Triple(searching, detailLoading, error)
+        combine(isRemoteSearching, isRemoteDetailLoading, isImportingLocalFile, remoteErrorMessage) { searching, detailLoading, importing, error ->
+            RemoteLoadingSnapshot(
+                isRemoteSearching = searching,
+                isRemoteDetailLoading = detailLoading,
+                isImportingLocalFile = importing,
+                remoteErrorMessage = error
+            )
         },
         combine(isLocalBusy, activeDownloadId, snackbarMessage) { localBusy, downloadId, message ->
             Triple(localBusy, downloadId, message)
@@ -165,10 +183,11 @@ class KnowledgeBaseViewModel @Inject constructor(
             remoteResults = searchMeta.third,
             selectedRemoteDetail = detailMeta.first,
             selectedRemoteFolderDetail = detailMeta.second,
-            isRemoteSearching = loadingMeta.first,
-            isRemoteDetailLoading = loadingMeta.second,
+            isRemoteSearching = loadingMeta.isRemoteSearching,
+            isRemoteDetailLoading = loadingMeta.isRemoteDetailLoading,
             isRemoteFolderLoading = false,
-            remoteErrorMessage = loadingMeta.third,
+            isImportingLocalFile = loadingMeta.isImportingLocalFile,
+            remoteErrorMessage = loadingMeta.remoteErrorMessage,
             isLocalBusy = localMeta.first,
             activeDownloadId = localMeta.second,
             snackbarMessage = localMeta.third
@@ -193,6 +212,7 @@ class KnowledgeBaseViewModel @Inject constructor(
             selectedRemoteFolderDetail = remote.selectedRemoteFolderDetail,
             isRemoteSearching = remote.isRemoteSearching,
             isRemoteDetailLoading = remote.isRemoteDetailLoading,
+            isImportingLocalFile = remote.isImportingLocalFile,
             remoteErrorMessage = remote.remoteErrorMessage,
             isLocalBusy = remote.isLocalBusy,
             activeDownloadId = remote.activeDownloadId,
@@ -368,21 +388,72 @@ class KnowledgeBaseViewModel @Inject constructor(
         }
     }
 
+    fun importLocalFile(fileUri: Uri) {
+        viewModelScope.launch {
+            isImportingLocalFile.value = true
+            knowledgeBaseRepository.importLocalFile(
+                targetFolderId = currentFolderId.value,
+                fileUri = fileUri
+            ).onSuccess {
+                val folderName = knowledgeBaseRepository.getFolderName(currentFolderId.value)
+                snackbarMessage.value = "已导入到 $folderName"
+            }.onFailure {
+                snackbarMessage.value = it.message ?: "导入失败"
+            }
+            isImportingLocalFile.value = false
+        }
+    }
+
+    fun downloadSearchResultToFolder(
+        result: BitShareSearchResult,
+        folderId: String?
+    ) {
+        viewModelScope.launch {
+            val detail = bitShareRepository.getFileDetail(result.id).getOrElse {
+                BitShareFileDetail(
+                    id = result.id,
+                    title = result.title,
+                    originalName = result.originalName.ifBlank { result.title },
+                    extension = result.extension,
+                    path = null,
+                    description = null,
+                    mimeType = guessMimeType(result.extension),
+                    sizeBytes = result.sizeBytes,
+                    uploadedAt = result.uploadedAt,
+                    downloadCount = result.downloadCount
+                )
+            }
+            selectedRemoteDetail.value = detail
+            performRemoteDownload(folderId, detail)
+        }
+    }
+
     fun downloadRemoteFileToFolder(folderId: String?) {
         val detail = selectedRemoteDetail.value ?: return
+        performRemoteDownload(folderId, detail)
+    }
 
+    private fun performRemoteDownload(
+        folderId: String?,
+        detail: BitShareFileDetail
+    ) {
         viewModelScope.launch {
             activeDownloadId.value = detail.id
+            snackbarMessage.value = "开始下载 ${detail.originalName}"
             remoteErrorMessage.value = null
 
             val downloadResult = bitShareRepository.downloadFile(detail.id)
             downloadResult
                 .mapCatching { body ->
-                    knowledgeBaseRepository.importDownloadedFile(
-                        detail = detail,
-                        targetFolderId = folderId ?: KnowledgeBaseRepository.ROOT_FOLDER_ID,
-                        inputBytes = body.bytes()
-                    ).getOrThrow()
+                    withContext(Dispatchers.IO) {
+                        body.use { responseBody ->
+                            knowledgeBaseRepository.importDownloadedFile(
+                                detail = detail,
+                                targetFolderId = folderId ?: KnowledgeBaseRepository.ROOT_FOLDER_ID,
+                                inputBytes = responseBody.bytes()
+                            ).getOrThrow()
+                        }
+                    }
                 }
                 .onSuccess {
                     val folderName = knowledgeBaseRepository.getFolderName(folderId)
@@ -395,6 +466,22 @@ class KnowledgeBaseViewModel @Inject constructor(
                 }
 
             activeDownloadId.value = null
+        }
+    }
+
+    private fun guessMimeType(extension: String): String {
+        return when (extension.lowercase()) {
+            "pdf" -> "application/pdf"
+            "ppt" -> "application/vnd.ms-powerpoint"
+            "pptx" -> "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            "doc" -> "application/msword"
+            "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            "xls" -> "application/vnd.ms-excel"
+            "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            "png" -> "image/png"
+            "jpg", "jpeg" -> "image/jpeg"
+            "txt", "md" -> "text/plain"
+            else -> "application/octet-stream"
         }
     }
 

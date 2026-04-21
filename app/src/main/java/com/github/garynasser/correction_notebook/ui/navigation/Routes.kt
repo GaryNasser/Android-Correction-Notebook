@@ -24,6 +24,9 @@ object CourseList
 object KnowledgeBase
 
 @Serializable
+data class KnowledgeBaseFileViewer(val fileId: String)
+
+@Serializable
 object AITutor
 
 @Serializable
