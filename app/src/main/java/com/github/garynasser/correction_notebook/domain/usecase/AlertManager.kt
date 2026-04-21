@@ -1,6 +1,7 @@
 package com.github.garynasser.correction_notebook.domain.usecase
 
 import android.content.Context
+import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.media.RingtoneManager
@@ -8,10 +9,20 @@ import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import androidx.core.content.ContextCompat
 
 class AlertManager(private val context: Context) {
 
     private var mediaPlayer: MediaPlayer? = null
+    private val vibrator: Vibrator by lazy {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+            vibratorManager.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        }
+    }
 
     fun playNotificationSound() {
         try {
@@ -36,7 +47,7 @@ class AlertManager(private val context: Context) {
         }
     }
 
-    fun playAlarmSound() {
+    fun playAlarmSound(looping: Boolean = false) {
         try {
             val alarm = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
             if (alarm == null) {
@@ -53,10 +64,16 @@ class AlertManager(private val context: Context) {
                         .build()
                 )
                 setDataSource(context, alarm)
+                isLooping = looping
                 prepare()
                 start()
                 setOnCompletionListener { mp ->
-                    mp.release()
+                    if (!looping) {
+                        mp.release()
+                        if (mediaPlayer === mp) {
+                            mediaPlayer = null
+                        }
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -66,14 +83,6 @@ class AlertManager(private val context: Context) {
     }
 
     fun vibrate(pattern: VibrationPattern = VibrationPattern.SHORT) {
-        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
-            vibratorManager.defaultVibrator
-        } else {
-            @Suppress("DEPRECATION")
-            context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-        }
-
         try {
             when (pattern) {
                 VibrationPattern.SHORT -> {
@@ -115,6 +124,12 @@ class AlertManager(private val context: Context) {
     }
 
     fun stop() {
+        if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.VIBRATE) == PackageManager.PERMISSION_GRANTED) {
+            try {
+                vibrator.cancel()
+            } catch (_: SecurityException) {
+            }
+        }
         mediaPlayer?.release()
         mediaPlayer = null
     }

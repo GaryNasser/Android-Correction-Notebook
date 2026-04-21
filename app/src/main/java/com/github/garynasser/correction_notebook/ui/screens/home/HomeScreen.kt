@@ -29,7 +29,9 @@ import com.github.garynasser.correction_notebook.data.model.home.TodoItem
 import com.github.garynasser.correction_notebook.ui.screens.statistics.StatisticsScreen
 import com.github.garynasser.correction_notebook.ui.screens.statistics.StatisticsViewModel
 import java.time.LocalDate
+import java.time.format.TextStyle
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,16 +68,9 @@ fun HomeScreen(
         }
         ImmersiveStudyScreen(
             timerManager = homeViewModel.timerManager,
-            onExit = {
-                homeViewModel.saveCurrentStudyTime()
-                homeViewModel.timerManager.stop()
-                homeViewModel.clearSelectedMode()
-            },
-            onStop = { homeViewModel.saveCurrentStudyTime() },
+            onExit = { homeViewModel.finishCurrentSessionAndExit() },
+            onStop = { homeViewModel.finishCurrentSessionAndExit() },
             backgroundImageUri = uiState.backgroundImageUri,
-            isLandscapeOrientation = uiState.isLandscapeOrientation,
-            onOrientationChange = { homeViewModel.setLandscapeOrientation(it) },
-            onShowPomodoroSettings = { homeViewModel.showPomodoroSettingsDialog() },
             soundEnabled = uiState.soundEnabled,
             vibrationEnabled = uiState.vibrationEnabled,
             onSoundEnabledChange = { homeViewModel.setSoundEnabled(it) },
@@ -202,13 +197,6 @@ fun HomeScreen(
                 )
             }
 
-            // Immersive Mode Entry Card
-            item {
-                ImmersiveModeCard(
-                    onClick = { homeViewModel.showModeSelector() }
-                )
-            }
-
             item { Spacer(modifier = Modifier.height(80.dp)) }
         }
     }
@@ -237,9 +225,6 @@ fun HomeScreen(
                     }
                     "stopwatch" -> {
                         homeViewModel.startStopwatch()
-                        homeViewModel.selectMode(StudyMode.IMMERSIVE)
-                    }
-                    "immersive" -> {
                         homeViewModel.selectMode(StudyMode.IMMERSIVE)
                     }
                 }
@@ -385,7 +370,11 @@ fun DateSelector(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = if (date == LocalDate.now()) "今天" else date.dayOfWeek.name.take(3),
+                    text = if (date == LocalDate.now()) {
+                        "今天"
+                    } else {
+                        date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.CHINA)
+                    },
                     fontSize = 12.sp,
                     color = if (isSelected) MaterialTheme.colorScheme.onPrimary
                     else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
@@ -512,53 +501,6 @@ fun EmptyTodoState(onAddClick: () -> Unit) {
 }
 
 @Composable
-fun ImmersiveModeCard(onClick: () -> Unit) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.tertiaryContainer
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.tertiary.copy(alpha = 0.2f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    Icons.Default.Fullscreen,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onTertiaryContainer
-                )
-            }
-            Spacer(modifier = Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "沉浸学习模式",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "番茄钟 / 倒计时 / 正计时",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
-                )
-            }
-            Icon(Icons.Default.ChevronRight, contentDescription = null)
-        }
-    }
-}
-
-@Composable
 fun ModeSelectorDialog(
     onDismiss: () -> Unit,
     onModeSelected: (String) -> Unit
@@ -585,12 +527,6 @@ fun ModeSelectorDialog(
                     title = "正计时",
                     description = "记录学习时长",
                     onClick = { onModeSelected("stopwatch") }
-                )
-                ModeOption(
-                    icon = Icons.Default.Fullscreen,
-                    title = "全屏沉浸",
-                    description = "只显示时间，屏蔽干扰",
-                    onClick = { onModeSelected("immersive") }
                 )
             }
         },

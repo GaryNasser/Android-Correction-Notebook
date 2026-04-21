@@ -3,6 +3,7 @@ package com.github.garynasser.correction_notebook.domain.usecase
 import com.github.garynasser.correction_notebook.data.model.home.PomodoroPhase
 import com.github.garynasser.correction_notebook.data.model.home.PomodoroSettings
 import com.github.garynasser.correction_notebook.data.model.home.PomodoroState
+import com.github.garynasser.correction_notebook.data.model.home.SessionType
 import com.github.garynasser.correction_notebook.data.model.home.TimerState
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
@@ -21,6 +22,12 @@ class StudyTimerManager(
     var onPomodoroPhaseChanged: ((PomodoroPhase) -> Unit)? = null
     var onStopwatchReset: ((Int) -> Unit)? = null  // Called with elapsed minutes when stopwatch is reset
     var onCountdownReset: ((Int) -> Unit)? = null  // Called with elapsed minutes when countdown is reset
+
+    data class SessionSnapshot(
+        val sessionType: SessionType,
+        val durationMinutes: Int,
+        val pomodoroCount: Int = 0
+    )
 
     fun startPomodoro(settings: PomodoroSettings = PomodoroSettings()) {
         stopTimer()
@@ -94,7 +101,7 @@ class StudyTimerManager(
     fun skip() {
         when (val state = _timerState.value) {
             is TimerState.Pomodoro -> {
-                handlePomodoroPhaseEnd()
+                handlePomodoroPhaseEnd(skipped = true)
             }
             is TimerState.Countdown -> {
                 _timerState.value = TimerState.CountdownFinished(state.totalSeconds)
@@ -214,32 +221,40 @@ class StudyTimerManager(
         }
     }
 
-    private fun handlePomodoroPhaseEnd() {
+    private fun handlePomodoroPhaseEnd(skipped: Boolean = false) {
         val settings = pomodoroState.settings
-        val oldPhase = pomodoroState.phase
         val newPhase: PomodoroPhase
 
         pomodoroState = when (pomodoroState.phase) {
             PomodoroPhase.FOCUS -> {
-                val newCompleted = pomodoroState.completedPomodoros + 1
+                val elapsedFocusMinutes = maxOf(
+                    0,
+                    (settings.focusMinutes * 60 - pomodoroState.timeRemainingSeconds) / 60
+                )
+                val newCompleted = if (skipped) {
+                    pomodoroState.completedPomodoros
+                } else {
+                    pomodoroState.completedPomodoros + 1
+                }
                 newPhase = if (newCompleted % settings.pomodorosBeforeLongBreak == 0) {
                     PomodoroPhase.LONG_BREAK
                 } else {
                     PomodoroPhase.SHORT_BREAK
                 }
+                val focusMinutesToAdd = if (skipped) elapsedFocusMinutes else settings.focusMinutes
                 if (newPhase == PomodoroPhase.LONG_BREAK) {
                     pomodoroState.copy(
                         phase = PomodoroPhase.LONG_BREAK,
                         timeRemainingSeconds = settings.longBreakMinutes * 60,
                         completedPomodoros = newCompleted,
-                        totalFocusTimeMinutes = pomodoroState.totalFocusTimeMinutes + settings.focusMinutes
+                        totalFocusTimeMinutes = pomodoroState.totalFocusTimeMinutes + focusMinutesToAdd
                     )
                 } else {
                     pomodoroState.copy(
                         phase = PomodoroPhase.SHORT_BREAK,
                         timeRemainingSeconds = settings.shortBreakMinutes * 60,
                         completedPomodoros = newCompleted,
-                        totalFocusTimeMinutes = pomodoroState.totalFocusTimeMinutes + settings.focusMinutes
+                        totalFocusTimeMinutes = pomodoroState.totalFocusTimeMinutes + focusMinutesToAdd
                     )
                 }
             }
@@ -324,5 +339,46 @@ class StudyTimerManager(
 
     fun getElapsedMinutesForCurrentSession(): Int {
         return getElapsedSeconds() / 60
+    }
+
+    fun getCurrentSessionSnapshot(): SessionSnapshot? {
+        return when (val state = _timerState.value) {
+            is TimerState.Pomodoro -> {
+                val settings = state.state.settings
+                val currentFocusMinutes = if (state.state.phase == PomodoroPhase.FOCUS) {
+                    val elapsedFocusSeconds = settings.focusMinutes * 60 - state.state.timeRemainingSeconds
+                    maxOf(0, elapsedFocusSeconds) / 60
+                } else {
+                    0
+                }
+                val totalFocusMinutes = state.state.totalFocusTimeMinutes + currentFocusMinutes
+                if (totalFocusMinutes <= 0 && state.state.completedPomodoros <= 0) {
+                    null
+                } else {
+                    SessionSnapshot(
+                        sessionType = SessionType.POMODORO,
+                        durationMinutes = totalFocusMinutes,
+                        pomodoroCount = state.state.completedPomodoros
+                    )
+                }
+            }
+            is TimerState.Countdown -> {
+                val elapsedMinutes = (state.totalSeconds - state.remainingSeconds) / 60
+                if (elapsedMinutes <= 0) null else SessionSnapshot(SessionType.COUNTDOWN, elapsedMinutes)
+            }
+            is TimerState.CountdownFinished -> {
+                val elapsedMinutes = state.totalSeconds / 60
+                if (elapsedMinutes <= 0) null else SessionSnapshot(SessionType.COUNTDOWN, elapsedMinutes)
+            }
+            is TimerState.Stopwatch -> {
+                val elapsedMinutes = state.elapsedSeconds / 60
+                if (elapsedMinutes <= 0) null else SessionSnapshot(SessionType.STOPWATCH, elapsedMinutes)
+            }
+            is TimerState.StopwatchFinished -> {
+                val elapsedMinutes = state.elapsedSeconds / 60
+                if (elapsedMinutes <= 0) null else SessionSnapshot(SessionType.STOPWATCH, elapsedMinutes)
+            }
+            TimerState.Idle -> null
+        }
     }
 }
