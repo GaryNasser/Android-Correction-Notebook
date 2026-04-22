@@ -19,7 +19,12 @@ class ArticleRepository @Inject constructor(
             cachedArticles?.let { return it }
         }
 
-        val articles = articleApiService.getRecommendedArticles().map { it.toDomain() }
+        val response = articleApiService.getRecommendedArticles()
+        if (response.code != 200 || response.data == null) {
+            throw IllegalStateException(response.message.ifBlank { "推荐内容加载失败" })
+        }
+
+        val articles = response.data.map { it.toDomain() }
         cachedArticles = articles
         return articles
     }
@@ -29,7 +34,12 @@ class ArticleRepository @Inject constructor(
             articleDetailCache[articleId]?.let { return it }
         }
 
-        val detail = articleApiService.getArticleDetail(articleId).toDomain()
+        val response = articleApiService.getArticleDetail(articleId)
+        if (response.code != 200 || response.data == null) {
+            throw IllegalStateException(response.message.ifBlank { "文章详情加载失败" })
+        }
+
+        val detail = response.data.toDomain()
         articleDetailCache[articleId] = detail
         return detail
     }
