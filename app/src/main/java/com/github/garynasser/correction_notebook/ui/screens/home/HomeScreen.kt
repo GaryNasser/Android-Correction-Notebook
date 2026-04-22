@@ -39,7 +39,8 @@ fun HomeScreen(
     homeViewModel: HomeViewModel = hiltViewModel(),
     statisticsViewModel: StatisticsViewModel = hiltViewModel(),
     onNavigateToStatistics: () -> Unit = {},
-    onImmersiveModeChanged: (Boolean) -> Unit = {}
+    onImmersiveModeChanged: (Boolean) -> Unit = {},
+    onOpenArticle: (Article) -> Unit = {}
 ) {
     val uiState by homeViewModel.uiState.collectAsState()
     val timerState by homeViewModel.timerManager.timerState.collectAsState()
@@ -176,7 +177,10 @@ fun HomeScreen(
             item {
                 ArticlesSection(
                     articles = uiState.articles,
-                    onArticleClick = { /* Open article */ }
+                    isLoading = uiState.isArticlesLoading,
+                    errorMessage = uiState.articleErrorMessage,
+                    onArticleClick = onOpenArticle,
+                    onRefresh = { homeViewModel.refreshArticles(forceRefresh = true) }
                 )
             }
 

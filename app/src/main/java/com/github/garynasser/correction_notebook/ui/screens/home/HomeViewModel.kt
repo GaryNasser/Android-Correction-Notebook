@@ -1,7 +1,6 @@
 package com.github.garynasser.correction_notebook.ui.screens.home
 
-import android.app.Application
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.garynasser.correction_notebook.data.local.StudyPreferencesManager
 import com.github.garynasser.correction_notebook.data.model.home.Article
@@ -24,6 +23,7 @@ import com.github.garynasser.correction_notebook.data.repository.StudySessionRep
 import com.github.garynasser.correction_notebook.data.repository.TodoHistoryRepository
 import com.github.garynasser.correction_notebook.data.repository.TodoRepository
 import com.github.garynasser.correction_notebook.domain.usecase.StudyTimerManager
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.LocalDateTime
+import javax.inject.Inject
 
 enum class StudyMode {
     POMODORO, COUNTDOWN, STOPWATCH, IMMERSIVE
@@ -40,6 +41,8 @@ data class HomeUiState(
     val selectedDate: LocalDate = LocalDate.now(),
     val todoItems: List<TodoItem> = emptyList(),
     val articles: List<Article> = emptyList(),
+    val isArticlesLoading: Boolean = false,
+    val articleErrorMessage: String? = null,
     val todayStudyMinutes: Int = 0,
     val completedPomodoros: Int = 0,
     val plannerTab: PlannerTab = PlannerTab.SCHEDULE,
@@ -68,15 +71,16 @@ enum class ActiveTimerMode {
     NONE, POMODORO, COUNTDOWN, STOPWATCH
 }
 
-class HomeViewModel(application: Application) : AndroidViewModel(application) {
-
-    private val todoRepository = TodoRepository(application)
-    private val articleRepository = ArticleRepository()
-    private val studyPreferencesManager = StudyPreferencesManager(application)
-    private val studySessionRepository = StudySessionRepository(application)
-    private val todoHistoryRepository = TodoHistoryRepository(application)
-    private val scheduleRepository = ScheduleRepository(application)
-    private val icsImportRepository = IcsImportRepository(application, scheduleRepository)
+@HiltViewModel
+class HomeViewModel @Inject constructor(
+    private val todoRepository: TodoRepository,
+    private val articleRepository: ArticleRepository,
+    private val studyPreferencesManager: StudyPreferencesManager,
+    private val studySessionRepository: StudySessionRepository,
+    private val todoHistoryRepository: TodoHistoryRepository,
+    private val scheduleRepository: ScheduleRepository,
+    private val icsImportRepository: IcsImportRepository
+) : ViewModel() {
 
     val timerManager = StudyTimerManager(viewModelScope)
     private var sessionPersisted = false
@@ -161,12 +165,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
-        viewModelScope.launch {
-            // Load articles
-            articleRepository.getArticles().collect { articles ->
-                _uiState.value = _uiState.value.copy(articles = articles)
-            }
-        }
+        refreshArticles()
 
         viewModelScope.launch {
             // Load today's stats
@@ -182,6 +181,29 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 backgroundImageUri = bgUri,
                 isLandscapeOrientation = isLandscape
             )
+        }
+    }
+
+    fun refreshArticles(forceRefresh: Boolean = true) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                isArticlesLoading = true,
+                articleErrorMessage = null
+            )
+            runCatching {
+                articleRepository.getRecommendedArticles(forceRefresh = forceRefresh)
+            }.onSuccess { articles ->
+                _uiState.value = _uiState.value.copy(
+                    articles = articles,
+                    isArticlesLoading = false,
+                    articleErrorMessage = null
+                )
+            }.onFailure { throwable ->
+                _uiState.value = _uiState.value.copy(
+                    isArticlesLoading = false,
+                    articleErrorMessage = throwable.message?.takeIf { it.isNotBlank() } ?: "推荐内容加载失败"
+                )
+            }
         }
     }
 
