@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Article
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,7 +27,10 @@ import java.util.*
 @Composable
 fun ArticlesSection(
     articles: List<Article>,
-    onArticleClick: (Article) -> Unit
+    isLoading: Boolean,
+    errorMessage: String?,
+    onArticleClick: (Article) -> Unit,
+    onRefresh: () -> Unit
 ) {
     Column {
         Row(
@@ -39,21 +43,124 @@ fun ArticlesSection(
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
-            TextButton(onClick = { /* View all */ }) {
-                Text("查看更多")
+            TextButton(onClick = onRefresh) {
+                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("刷新")
             }
         }
 
         Spacer(modifier = Modifier.height(8.dp))
-
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            items(articles) { article ->
-                ArticleCard(
-                    article = article,
-                    onClick = { onArticleClick(article) }
+        when {
+            isLoading && articles.isEmpty() -> {
+                ArticleLoadingRow()
+            }
+            errorMessage != null && articles.isEmpty() -> {
+                ArticleMessageCard(
+                    title = "推荐内容加载失败",
+                    description = errorMessage,
+                    actionLabel = "重试",
+                    onAction = onRefresh
                 )
+            }
+            articles.isEmpty() -> {
+                ArticleMessageCard(
+                    title = "暂时还没有推荐内容",
+                    description = "稍后刷新看看，或等待后端推送新的学习文章。"
+                )
+            }
+            else -> {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(articles, key = { it.id }) { article ->
+                        ArticleCard(
+                            article = article,
+                            onClick = { onArticleClick(article) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ArticleLoadingRow() {
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        items(3) {
+            Card(
+                modifier = Modifier.width(200.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                )
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(100.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(0.8f)
+                            .height(16.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(12.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ArticleMessageCard(
+    title: String,
+    description: String,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null
+) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
+            )
+            if (actionLabel != null && onAction != null) {
+                TextButton(
+                    onClick = onAction,
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    Text(actionLabel)
+                }
             }
         }
     }

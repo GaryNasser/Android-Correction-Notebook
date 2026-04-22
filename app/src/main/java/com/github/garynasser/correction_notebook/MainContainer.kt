@@ -13,6 +13,7 @@ import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
 import androidx.navigation.toRoute
 import com.github.garynasser.correction_notebook.data.local.AISettingsManager
+import com.github.garynasser.correction_notebook.ui.navigation.ArticleDetailRoute
 import com.github.garynasser.correction_notebook.ui.navigation.AITutor
 import com.github.garynasser.correction_notebook.ui.navigation.CourseList
 import com.github.garynasser.correction_notebook.ui.navigation.Home
@@ -24,6 +25,7 @@ import com.github.garynasser.correction_notebook.ui.navigation.VideoList
 import com.github.garynasser.correction_notebook.ui.navigation.VideoPlayer
 import com.github.garynasser.correction_notebook.ui.navigation.bottomNavList
 import com.github.garynasser.correction_notebook.ui.screens.aitutor.AITutorScreen
+import com.github.garynasser.correction_notebook.ui.screens.home.ArticleDetailScreen
 import com.github.garynasser.correction_notebook.ui.screens.home.HomeScreen
 import com.github.garynasser.correction_notebook.ui.screens.knowledgebase.KnowledgeBaseFileViewerScreen
 import com.github.garynasser.correction_notebook.ui.screens.knowledgebase.KnowledgeBaseScreen
@@ -91,7 +93,15 @@ fun MainContainer(
         ) {
             composable<Home> {
                 HomeScreen(
+                    onOpenArticle = { article ->
+                        navController.navigate(ArticleDetailRoute(article.id))
+                    },
                     onImmersiveModeChanged = { hideBottomBar = it }
+                )
+            }
+            composable<ArticleDetailRoute> {
+                ArticleDetailScreen(
+                    onBack = { navController.popBackStack() }
                 )
             }
             composable<CourseList> { CourseListScreen(onCourseCardClick = { courseId ->
