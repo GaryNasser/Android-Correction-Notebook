@@ -347,7 +347,7 @@ class StudyTimerManager(
                 val settings = state.state.settings
                 val currentFocusMinutes = if (state.state.phase == PomodoroPhase.FOCUS) {
                     val elapsedFocusSeconds = settings.focusMinutes * 60 - state.state.timeRemainingSeconds
-                    maxOf(0, elapsedFocusSeconds) / 60
+                    roundUpToMinutes(maxOf(0, elapsedFocusSeconds))
                 } else {
                     0
                 }
@@ -363,22 +363,27 @@ class StudyTimerManager(
                 }
             }
             is TimerState.Countdown -> {
-                val elapsedMinutes = (state.totalSeconds - state.remainingSeconds) / 60
+                val elapsedMinutes = roundUpToMinutes(state.totalSeconds - state.remainingSeconds)
                 if (elapsedMinutes <= 0) null else SessionSnapshot(SessionType.COUNTDOWN, elapsedMinutes)
             }
             is TimerState.CountdownFinished -> {
-                val elapsedMinutes = state.totalSeconds / 60
+                val elapsedMinutes = roundUpToMinutes(state.totalSeconds)
                 if (elapsedMinutes <= 0) null else SessionSnapshot(SessionType.COUNTDOWN, elapsedMinutes)
             }
             is TimerState.Stopwatch -> {
-                val elapsedMinutes = state.elapsedSeconds / 60
+                val elapsedMinutes = roundUpToMinutes(state.elapsedSeconds)
                 if (elapsedMinutes <= 0) null else SessionSnapshot(SessionType.STOPWATCH, elapsedMinutes)
             }
             is TimerState.StopwatchFinished -> {
-                val elapsedMinutes = state.elapsedSeconds / 60
+                val elapsedMinutes = roundUpToMinutes(state.elapsedSeconds)
                 if (elapsedMinutes <= 0) null else SessionSnapshot(SessionType.STOPWATCH, elapsedMinutes)
             }
             TimerState.Idle -> null
         }
+    }
+
+    private fun roundUpToMinutes(seconds: Int): Int {
+        if (seconds <= 0) return 0
+        return (seconds + 59) / 60
     }
 }
