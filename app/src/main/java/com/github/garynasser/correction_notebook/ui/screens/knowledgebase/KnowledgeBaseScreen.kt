@@ -112,9 +112,11 @@ fun KnowledgeBaseScreen(
     val context = LocalContext.current
     var fileToExport by remember { mutableStateOf<KnowledgeBaseFileSummary?>(null) }
     val importLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        uri?.let(viewModel::importLocalFile)
+        contract = ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris: List<Uri> ->
+        if (uris.isNotEmpty()) {
+            viewModel.importLocalFiles(uris)
+        }
     }
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("*/*")

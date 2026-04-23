@@ -2,7 +2,10 @@ package com.github.garynasser.correction_notebook.di
 
 import android.content.Context
 import com.github.garynasser.correction_notebook.data.local.StudyPreferencesManager
+import com.github.garynasser.correction_notebook.data.remote.api.ArticleApiService
 import com.github.garynasser.correction_notebook.data.repository.ArticleRepository
+import com.github.garynasser.correction_notebook.data.repository.IcsImportRepository
+import com.github.garynasser.correction_notebook.data.repository.ScheduleRepository
 import com.github.garynasser.correction_notebook.data.repository.StudySessionRepository
 import com.github.garynasser.correction_notebook.data.repository.TodoHistoryRepository
 import com.github.garynasser.correction_notebook.data.repository.TodoRepository
@@ -51,7 +54,26 @@ object HomeModule {
 
     @Provides
     @Singleton
-    fun provideArticleRepository(): ArticleRepository {
-        return ArticleRepository()
+    fun provideScheduleRepository(
+        @ApplicationContext context: Context
+    ): ScheduleRepository {
+        return ScheduleRepository(context)
+    }
+
+    @Provides
+    @Singleton
+    fun provideIcsImportRepository(
+        @ApplicationContext context: Context,
+        scheduleRepository: ScheduleRepository
+    ): IcsImportRepository {
+        return IcsImportRepository(context, scheduleRepository)
+    }
+
+    @Provides
+    @Singleton
+    fun provideArticleRepository(
+        articleApiService: ArticleApiService
+    ): ArticleRepository {
+        return ArticleRepository(articleApiService)
     }
 }

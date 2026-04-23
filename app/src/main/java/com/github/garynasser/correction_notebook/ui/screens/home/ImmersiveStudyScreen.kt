@@ -168,7 +168,7 @@ fun ImmersiveStudyScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(backgroundGradient)
+            .background(if (backgroundImageUri == null) backgroundGradient else Brush.verticalGradient(listOf(Color.Black, Color.Black)))
             .clickable(
                 indication = null,
                 interactionSource = remember { MutableInteractionSource() }
@@ -183,20 +183,7 @@ fun ImmersiveStudyScreen(
                 contentDescription = "背景图片",
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
-                alpha = 0.6f
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                Color.Black.copy(alpha = 0.3f),
-                                Color.Transparent,
-                                Color.Black.copy(alpha = 0.5f)
-                            )
-                        )
-                    )
+                alpha = 1f
             )
         }
 

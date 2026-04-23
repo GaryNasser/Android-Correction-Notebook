@@ -1,54 +1,46 @@
 package com.github.garynasser.correction_notebook.data.repository
 
 import com.github.garynasser.correction_notebook.data.model.home.Article
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
-import java.util.UUID
+import com.github.garynasser.correction_notebook.data.model.home.ArticleDetail
+import com.github.garynasser.correction_notebook.data.remote.api.ArticleApiService
+import com.github.garynasser.correction_notebook.data.remote.model.toDomain
+import javax.inject.Inject
+import javax.inject.Singleton
 
-class ArticleRepository {
+@Singleton
+class ArticleRepository @Inject constructor(
+    private val articleApiService: ArticleApiService
+) {
+    private var cachedArticles: List<Article>? = null
+    private val articleDetailCache = linkedMapOf<String, ArticleDetail>()
 
-    fun getArticles(): Flow<List<Article>> = flow {
-        emit(getMockArticles())
+    suspend fun getRecommendedArticles(forceRefresh: Boolean = false): List<Article> {
+        if (!forceRefresh) {
+            cachedArticles?.let { return it }
+        }
+
+        val response = articleApiService.getRecommendedArticles()
+        if (response.code != 200 || response.data == null) {
+            throw IllegalStateException(response.message.ifBlank { "推荐内容加载失败" })
+        }
+
+        val articles = response.data.map { it.toDomain() }
+        cachedArticles = articles
+        return articles
     }
 
-    private fun getMockArticles(): List<Article> {
-        return listOf(
-            Article(
-                id = UUID.randomUUID().toString(),
-                title = "高效学习的10个科学方法",
-                summary = "基于认知心理学研究，介绍经过验证的高效学习方法...",
-                imageUrl = null,
-                source = "学习科学",
-                publishTime = System.currentTimeMillis() - 86400000,
-                url = "https://example.com/article1"
-            ),
-            Article(
-                id = UUID.randomUUID().toString(),
-                title = "番茄工作法详解",
-                summary = "如何正确使用番茄工作法提升专注力...",
-                imageUrl = null,
-                source = "时间管理",
-                publishTime = System.currentTimeMillis() - 172800000,
-                url = "https://example.com/article2"
-            ),
-            Article(
-                id = UUID.randomUUID().toString(),
-                title = "深度工作：如何有效使用每一点脑力",
-                summary = "在分散注意力的世界中培养深度工作的能力...",
-                imageUrl = null,
-                source = " Productivity",
-                publishTime = System.currentTimeMillis() - 259200000,
-                url = "https://example.com/article3"
-            ),
-            Article(
-                id = UUID.randomUUID().toString(),
-                title = "记忆宫殿：提升记忆力的古老技巧",
-                summary = "探索古代记忆术在现代学习中的应用...",
-                imageUrl = null,
-                source = "记忆技巧",
-                publishTime = System.currentTimeMillis() - 345600000,
-                url = "https://example.com/article4"
-            )
-        )
+    suspend fun getArticleDetail(articleId: String, forceRefresh: Boolean = false): ArticleDetail {
+        if (!forceRefresh) {
+            articleDetailCache[articleId]?.let { return it }
+        }
+
+        val response = articleApiService.getArticleDetail(articleId)
+        if (response.code != 200 || response.data == null) {
+            throw IllegalStateException(response.message.ifBlank { "文章详情加载失败" })
+        }
+
+        val detail = response.data.toDomain()
+        articleDetailCache[articleId] = detail
+        return detail
     }
 }
