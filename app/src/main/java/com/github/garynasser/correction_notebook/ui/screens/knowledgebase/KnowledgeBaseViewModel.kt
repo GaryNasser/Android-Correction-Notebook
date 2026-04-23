@@ -389,16 +389,36 @@ class KnowledgeBaseViewModel @Inject constructor(
     }
 
     fun importLocalFile(fileUri: Uri) {
+        importLocalFiles(listOf(fileUri))
+    }
+
+    fun importLocalFiles(fileUris: List<Uri>) {
+        if (fileUris.isEmpty()) return
         viewModelScope.launch {
             isImportingLocalFile.value = true
-            knowledgeBaseRepository.importLocalFile(
-                targetFolderId = currentFolderId.value,
-                fileUri = fileUri
-            ).onSuccess {
-                val folderName = knowledgeBaseRepository.getFolderName(currentFolderId.value)
-                snackbarMessage.value = "已导入到 $folderName"
-            }.onFailure {
-                snackbarMessage.value = it.message ?: "导入失败"
+            var successCount = 0
+            var failureCount = 0
+            var lastErrorMessage: String? = null
+
+            fileUris.forEach { fileUri ->
+                knowledgeBaseRepository.importLocalFile(
+                    targetFolderId = currentFolderId.value,
+                    fileUri = fileUri
+                ).onSuccess {
+                    successCount += 1
+                }.onFailure {
+                    failureCount += 1
+                    lastErrorMessage = it.message
+                }
+            }
+
+            val folderName = knowledgeBaseRepository.getFolderName(currentFolderId.value)
+            snackbarMessage.value = when {
+                successCount > 0 && failureCount == 0 -> {
+                    if (successCount == 1) "已导入到 $folderName" else "已导入 $successCount 个文件到 $folderName"
+                }
+                successCount > 0 -> "成功导入 $successCount 个文件，$failureCount 个失败"
+                else -> lastErrorMessage ?: "导入失败"
             }
             isImportingLocalFile.value = false
         }

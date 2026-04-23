@@ -165,8 +165,6 @@ class HomeViewModel @Inject constructor(
             }
         }
 
-        refreshArticles()
-
         viewModelScope.launch {
             // Load today's stats
             refreshTodayStats()
