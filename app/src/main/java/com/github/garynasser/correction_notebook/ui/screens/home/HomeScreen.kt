@@ -1,5 +1,6 @@
 package com.github.garynasser.correction_notebook.ui.screens.home
 
+import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -31,6 +32,7 @@ import com.github.garynasser.correction_notebook.ui.screens.statistics.Statistic
 import java.time.LocalDate
 import java.time.format.TextStyle
 import java.time.format.DateTimeFormatter
+import java.io.File
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -39,20 +41,19 @@ fun HomeScreen(
     homeViewModel: HomeViewModel = hiltViewModel(),
     statisticsViewModel: StatisticsViewModel = hiltViewModel(),
     onNavigateToStatistics: () -> Unit = {},
-    onImmersiveModeChanged: (Boolean) -> Unit = {}
+    onImmersiveModeChanged: (Boolean) -> Unit = {},
+    onOpenArticle: (Article) -> Unit = {}
 ) {
     val uiState by homeViewModel.uiState.collectAsState()
     val timerState by homeViewModel.timerManager.timerState.collectAsState()
     var showCustomTimer by remember { mutableStateOf(false) }
-    var showSettingsDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
-    // Image picker launcher
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let {
-            // Take persistent permission
-            homeViewModel.setBackgroundImage(it.toString())
+            saveBackgroundImageToAppStorage(context, it)?.let(homeViewModel::setBackgroundImage)
         }
     }
     val icsPickerLauncher = rememberLauncherForActivityResult(
@@ -110,9 +111,6 @@ fun HomeScreen(
                 title = { Text("BITStudy") },
                 windowInsets = WindowInsets(0, 0, 0, 0),
                 actions = {
-                    IconButton(onClick = { showSettingsDialog = true }) {
-                        Icon(Icons.Default.Settings, contentDescription = "设置")
-                    }
                     IconButton(onClick = { homeViewModel.showStatistics() }) {
                         Icon(Icons.Default.BarChart, contentDescription = "统计")
                     }
@@ -172,14 +170,6 @@ fun HomeScreen(
                 )
             }
 
-            // Articles Section
-            item {
-                ArticlesSection(
-                    articles = uiState.articles,
-                    onArticleClick = { /* Open article */ }
-                )
-            }
-
             item { Spacer(modifier = Modifier.height(80.dp)) }
         }
     }
@@ -212,6 +202,7 @@ fun HomeScreen(
     // Mode Selector Dialog
     if (uiState.showModeSelector) {
         ModeSelectorDialog(
+            currentBackgroundUri = uiState.backgroundImageUri,
             onDismiss = { homeViewModel.hideModeSelector() },
             onModeSelected = { mode ->
                 homeViewModel.hideModeSelector()
@@ -228,6 +219,12 @@ fun HomeScreen(
                         homeViewModel.selectMode(StudyMode.IMMERSIVE)
                     }
                 }
+            },
+            onSelectBackground = {
+                imagePickerLauncher.launch("image/*")
+            },
+            onClearBackground = {
+                homeViewModel.setBackgroundImage(null)
             }
         )
     }
@@ -244,20 +241,6 @@ fun HomeScreen(
         )
     }
 
-    // Settings Dialog
-    if (showSettingsDialog) {
-        SettingsDialog(
-            currentBackgroundUri = uiState.backgroundImageUri,
-            onDismiss = { showSettingsDialog = false },
-            onSelectImage = {
-                imagePickerLauncher.launch("image/*")
-            },
-            onClearImage = {
-                homeViewModel.setBackgroundImage(null)
-            }
-        )
-    }
-
     // Pomodoro Settings Dialog
     if (uiState.showPomodoroSettingsDialog) {
         PomodoroSettingsDialog(
@@ -266,6 +249,21 @@ fun HomeScreen(
             onSave = { settings -> homeViewModel.updatePomodoroSettings(settings) }
         )
     }
+}
+
+private fun saveBackgroundImageToAppStorage(context: Context, sourceUri: Uri): String? {
+    val backgroundsDir = File(context.filesDir, "immersive_backgrounds").apply {
+        mkdirs()
+    }
+    val targetFile = File(backgroundsDir, "background.jpg")
+    return runCatching {
+        context.contentResolver.openInputStream(sourceUri)?.use { input ->
+            targetFile.outputStream().use { output ->
+                input.copyTo(output)
+            }
+        } ?: return null
+        Uri.fromFile(targetFile).toString()
+    }.getOrNull()
 }
 
 @Composable
@@ -502,14 +500,17 @@ fun EmptyTodoState(onAddClick: () -> Unit) {
 
 @Composable
 fun ModeSelectorDialog(
+    currentBackgroundUri: String?,
     onDismiss: () -> Unit,
-    onModeSelected: (String) -> Unit
+    onModeSelected: (String) -> Unit,
+    onSelectBackground: () -> Unit,
+    onClearBackground: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("选择学习模式") },
         text = {
-            Column {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 ModeOption(
                     icon = Icons.Default.Timer,
                     title = "番茄钟",
@@ -528,6 +529,56 @@ fun ModeSelectorDialog(
                     description = "记录学习时长",
                     onClick = { onModeSelected("stopwatch") }
                 )
+
+                HorizontalDivider()
+
+                Text(
+                    text = "沉浸模式背景图片",
+                    style = MaterialTheme.typography.titleSmall
+                )
+
+                if (currentBackgroundUri != null) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(120.dp)
+                    ) {
+                        coil.compose.AsyncImage(
+                            model = Uri.parse(currentBackgroundUri),
+                            contentDescription = "当前背景",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onSelectBackground,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.Image, contentDescription = null)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(if (currentBackgroundUri == null) "上传背景图" else "更换背景图")
+                    }
+
+                    if (currentBackgroundUri != null) {
+                        OutlinedButton(
+                            onClick = onClearBackground,
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error
+                            )
+                        ) {
+                            Icon(Icons.Default.Delete, contentDescription = null)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("清除")
+                        }
+                    }
+                }
             }
         },
         confirmButton = {},

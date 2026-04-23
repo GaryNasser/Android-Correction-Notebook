@@ -5,6 +5,7 @@ import android.util.Log
 import com.github.garynasser.correction_notebook.data.local.AISettingsManager
 import com.github.garynasser.correction_notebook.data.local.TokenManager
 import com.github.garynasser.correction_notebook.data.remote.api.AIApiService
+import com.github.garynasser.correction_notebook.data.remote.api.ArticleApiService
 import com.github.garynasser.correction_notebook.data.remote.api.AuthApiService
 import com.github.garynasser.correction_notebook.data.remote.api.BitShareApiService
 import com.github.garynasser.correction_notebook.data.remote.api.VideoApiService
@@ -97,6 +98,17 @@ object NetworkModule {
             .build()
 
         return retrofit.create(VideoApiService::class.java)
+    }
+
+    @Provides
+    @Singleton
+    fun provideArticleApiService(@BasicRetrofit okHttpClient: OkHttpClient): ArticleApiService {
+        return Retrofit.Builder()
+            .baseUrl(BASE_URL)
+            .client(okHttpClient)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(ArticleApiService::class.java)
     }
 
     @Provides

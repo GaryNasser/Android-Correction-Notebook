@@ -6,6 +6,9 @@ import kotlinx.serialization.Serializable
 object Home
 
 @Serializable
+data class ArticleDetailRoute(val articleId: String)
+
+@Serializable
 object Login
 
 @Serializable
