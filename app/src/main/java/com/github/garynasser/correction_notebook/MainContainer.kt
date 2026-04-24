@@ -1,17 +1,18 @@
 package com.github.garynasser.correction_notebook
 
-import android.util.Log
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
-import androidx.navigation.toRoute
 import com.github.garynasser.correction_notebook.data.local.AISettingsManager
 import com.github.garynasser.correction_notebook.ui.navigation.ArticleDetailRoute
 import com.github.garynasser.correction_notebook.ui.navigation.AITutor
@@ -33,13 +34,18 @@ import com.github.garynasser.correction_notebook.ui.screens.profile.ProfileScree
 import com.github.garynasser.correction_notebook.ui.screens.yanhe.CourseListScreen
 import com.github.garynasser.correction_notebook.ui.screens.yanhe.CourseVideoListScreen
 import com.github.garynasser.correction_notebook.ui.screens.yanhe.PlayerScreen
+import com.github.garynasser.correction_notebook.ui.update.AppUpdateViewModel
 
 @Composable
 fun MainContainer(
     aiSettingsManager: AISettingsManager,
     outerNavController: NavHostController? = null
 ) {
+    val context = LocalContext.current
     val navController = rememberNavController()
+    val appUpdateViewModel: AppUpdateViewModel = hiltViewModel()
+    val appUpdateUiState by appUpdateViewModel.uiState.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
     val aiEnabled by aiSettingsManager.aiEnabled.collectAsState(initial = false)
     var hideBottomBar by remember { mutableStateOf(false) }
 
@@ -51,11 +57,18 @@ fun MainContainer(
         currentDestination?.hasRoute(item.route::class) == true
     }
 
+    LaunchedEffect(Unit) {
+        appUpdateViewModel.checkForUpdates(silent = true)
+    }
+
     Scaffold(
         contentWindowInsets = if (hideBottomBar) {
             WindowInsets(0, 0, 0, 0)
         } else {
             ScaffoldDefaults.contentWindowInsets
+        },
+        snackbarHost = {
+            SnackbarHost(snackbarHostState)
         },
         bottomBar = {
             // 结合了配置和隐藏逻辑
@@ -86,6 +99,11 @@ fun MainContainer(
             }
         } // 这里是 bottomBar 结束
     ) { innerPadding -> // 这里是 Scaffold 的 content 启动
+        LaunchedEffect(appUpdateUiState.snackbarMessage) {
+            val message = appUpdateUiState.snackbarMessage ?: return@LaunchedEffect
+            snackbarHostState.showSnackbar(message)
+            appUpdateViewModel.consumeSnackbarMessage()
+        }
         NavHost(
             navController = navController,
             startDestination = Home,
@@ -143,11 +161,58 @@ fun MainContainer(
             composable<Profile> {
                 ProfileScreen(
                     viewModel = hiltViewModel(),
+                    onCheckForUpdates = {
+                        appUpdateViewModel.checkForUpdates(silent = false)
+                    },
+                    currentVersionName = appUpdateUiState.currentVersionName,
                     onNavigateToLogin = {
                         outerNavController?.navigate(Login)
                     }
                 )
             }
+        }
+
+        appUpdateUiState.availableUpdate?.let { update ->
+            AlertDialog(
+                onDismissRequest = {
+                    if (!update.forceUpdate) {
+                        appUpdateViewModel.dismissUpdateDialog()
+                    }
+                },
+                title = { Text(update.updateTitle) },
+                text = {
+                    Text(
+                        buildString {
+                            append("最新版本 ${update.latestVersionName}\n\n")
+                            append(
+                                update.updateContent.ifBlank {
+                                    "检测到新版本，建议尽快更新以获得更稳定的使用体验。"
+                                }
+                            )
+                        }
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(update.downloadUrl))
+                            context.startActivity(intent)
+                            if (!update.forceUpdate) {
+                                appUpdateViewModel.dismissUpdateDialog()
+                            }
+                        }
+                    ) {
+                        Text("立即更新")
+                    }
+                },
+                dismissButton = {
+                    if (!update.forceUpdate) {
+                        TextButton(onClick = { appUpdateViewModel.dismissUpdateDialog() }) {
+                            Text("稍后")
+                        }
+                    }
+                }
+            )
         }
     }
 }
