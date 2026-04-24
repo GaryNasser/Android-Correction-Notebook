@@ -47,6 +47,7 @@ fun HomeScreen(
     val uiState by homeViewModel.uiState.collectAsState()
     val timerState by homeViewModel.timerManager.timerState.collectAsState()
     var showCustomTimer by remember { mutableStateOf(false) }
+    var startPomodoroAfterSettings by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
     val imagePickerLauncher = rememberLauncherForActivityResult(
@@ -208,8 +209,8 @@ fun HomeScreen(
                 homeViewModel.hideModeSelector()
                 when (mode) {
                     "pomodoro" -> {
-                        homeViewModel.startPomodoro()
-                        homeViewModel.selectMode(StudyMode.IMMERSIVE)
+                        startPomodoroAfterSettings = true
+                        homeViewModel.showPomodoroSettingsDialog()
                     }
                     "countdown" -> {
                         showCustomTimer = true
@@ -245,8 +246,18 @@ fun HomeScreen(
     if (uiState.showPomodoroSettingsDialog) {
         PomodoroSettingsDialog(
             currentSettings = uiState.pomodoroSettings,
-            onDismiss = { homeViewModel.hidePomodoroSettingsDialog() },
-            onSave = { settings -> homeViewModel.updatePomodoroSettings(settings) }
+            onDismiss = {
+                startPomodoroAfterSettings = false
+                homeViewModel.hidePomodoroSettingsDialog()
+            },
+            onSave = { settings ->
+                homeViewModel.updatePomodoroSettings(settings)
+                if (startPomodoroAfterSettings) {
+                    homeViewModel.startPomodoro(settings)
+                    homeViewModel.selectMode(StudyMode.IMMERSIVE)
+                    startPomodoroAfterSettings = false
+                }
+            }
         )
     }
 }
@@ -255,13 +266,16 @@ private fun saveBackgroundImageToAppStorage(context: Context, sourceUri: Uri): S
     val backgroundsDir = File(context.filesDir, "immersive_backgrounds").apply {
         mkdirs()
     }
-    val targetFile = File(backgroundsDir, "background.jpg")
+    val targetFile = File(backgroundsDir, "background_${System.currentTimeMillis()}.jpg")
     return runCatching {
         context.contentResolver.openInputStream(sourceUri)?.use { input ->
             targetFile.outputStream().use { output ->
                 input.copyTo(output)
             }
         } ?: return null
+        backgroundsDir.listFiles()
+            ?.filter { it != targetFile }
+            ?.forEach { it.delete() }
         Uri.fromFile(targetFile).toString()
     }.getOrNull()
 }

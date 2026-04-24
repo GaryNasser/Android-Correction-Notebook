@@ -1,5 +1,6 @@
 package com.github.garynasser.correction_notebook.ui.screens.knowledgebase
 
+import android.content.ClipData
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
@@ -42,9 +43,12 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SortByAlpha
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -134,10 +138,14 @@ fun KnowledgeBaseScreen(
     var fileToRename by remember { mutableStateOf<KnowledgeBaseFileSummary?>(null) }
     var fileToDelete by remember { mutableStateOf<KnowledgeBaseFileSummary?>(null) }
     var fileToMove by remember { mutableStateOf<KnowledgeBaseFileSummary?>(null) }
+    var showBatchMovePicker by remember { mutableStateOf(false) }
+    var showBatchDeleteConfirm by remember { mutableStateOf(false) }
     var showDownloadFolderPicker by rememberSaveable { mutableStateOf(false) }
     var pendingRemoteDownload by remember { mutableStateOf<BitShareSearchResult?>(null) }
     var fileSortMode by rememberSaveable { mutableStateOf(FileSortMode.UPDATED) }
     var isSearchExpanded by rememberSaveable { mutableStateOf(false) }
+    var isSelectionMode by remember { mutableStateOf(false) }
+    var selectedFileIds by remember { mutableStateOf(emptySet<String>()) }
 
     val sortedFiles = remember(uiState.folderContent.files, fileSortMode) {
         when (fileSortMode) {
@@ -145,8 +153,16 @@ fun KnowledgeBaseScreen(
             FileSortMode.NAME -> uiState.folderContent.files.sortedBy { it.displayName.lowercase(Locale.getDefault()) }
         }
     }
+    val selectedFiles = remember(sortedFiles, selectedFileIds) {
+        sortedFiles.filter { it.id in selectedFileIds }
+    }
 
-        LaunchedEffect(uiState.snackbarMessage) {
+    LaunchedEffect(uiState.currentFolderId, uiState.selectedTabIndex) {
+        isSelectionMode = false
+        selectedFileIds = emptySet()
+    }
+
+    LaunchedEffect(uiState.snackbarMessage) {
         val message = uiState.snackbarMessage ?: return@LaunchedEffect
         snackbarHostState.showSnackbar(message)
         viewModel.consumeSnackbarMessage()
@@ -229,6 +245,35 @@ fun KnowledgeBaseScreen(
         )
     }
 
+    if (showBatchMovePicker) {
+        FolderPickerDialog(
+            title = "移动 ${selectedFileIds.size} 个文件到",
+            folders = uiState.folderChoices,
+            onDismiss = { showBatchMovePicker = false },
+            onSelect = { folderId ->
+                viewModel.moveFiles(selectedFileIds, folderId)
+                selectedFileIds = emptySet()
+                isSelectionMode = false
+                showBatchMovePicker = false
+            }
+        )
+    }
+
+    if (showBatchDeleteConfirm) {
+        ConfirmDialog(
+            title = "删除文件",
+            message = "确定删除选中的 ${selectedFileIds.size} 个文件吗？",
+            confirmText = "删除",
+            onDismiss = { showBatchDeleteConfirm = false },
+            onConfirm = {
+                viewModel.deleteFiles(selectedFileIds)
+                selectedFileIds = emptySet()
+                isSelectionMode = false
+                showBatchDeleteConfirm = false
+            }
+        )
+    }
+
     if (showDownloadFolderPicker && pendingRemoteDownload != null) {
         FolderPickerDialog(
             title = "下载到知识库",
@@ -306,6 +351,8 @@ fun KnowledgeBaseScreen(
                 0 -> FileManagementPage(
                     uiState = uiState,
                     fileSortMode = fileSortMode,
+                    isSelectionMode = isSelectionMode,
+                    selectedFileIds = selectedFileIds,
                     onToggleSort = {
                         fileSortMode = when (fileSortMode) {
                             FileSortMode.UPDATED -> FileSortMode.NAME
@@ -322,11 +369,31 @@ fun KnowledgeBaseScreen(
                     files = sortedFiles,
                     onLocalSearchChanged = viewModel::updateLocalSearchQuery,
                     onBack = viewModel::navigateBack,
-                    onBreadcrumbClick = viewModel::navigateToBreadcrumb,
                     onFolderClick = viewModel::enterFolder,
                     onFolderRename = { folderToRename = it },
                     onFolderDelete = { folderToDelete = it },
                     onFileOpen = { onOpenFile(it.id) },
+                    onToggleSelectionMode = {
+                        isSelectionMode = !isSelectionMode
+                        selectedFileIds = emptySet()
+                    },
+                    onToggleFileSelection = { file ->
+                        selectedFileIds = if (file.id in selectedFileIds) {
+                            selectedFileIds - file.id
+                        } else {
+                            selectedFileIds + file.id
+                        }
+                    },
+                    onSelectAllFiles = {
+                        selectedFileIds = sortedFiles.map { it.id }.toSet()
+                    },
+                    onBatchMove = { showBatchMovePicker = true },
+                    onBatchDelete = { showBatchDeleteConfirm = true },
+                    onBatchShare = {
+                        shareFiles(context, selectedFiles)
+                        selectedFileIds = emptySet()
+                        isSelectionMode = false
+                    },
                     onFileRename = { fileToRename = it },
                     onFileDelete = { fileToDelete = it },
                     onFileMove = { fileToMove = it },
@@ -371,16 +438,23 @@ private fun FileManagementPage(
     uiState: KnowledgeBaseUiState,
     fileSortMode: FileSortMode,
     files: List<KnowledgeBaseFileSummary>,
+    isSelectionMode: Boolean,
+    selectedFileIds: Set<String>,
     onToggleSort: () -> Unit,
     isSearchExpanded: Boolean,
     onToggleSearch: () -> Unit,
     onLocalSearchChanged: (String) -> Unit,
     onBack: () -> Unit,
-    onBreadcrumbClick: (String?) -> Unit,
     onFolderClick: (String) -> Unit,
     onFolderRename: (KnowledgeBaseFolderSummary) -> Unit,
     onFolderDelete: (KnowledgeBaseFolderSummary) -> Unit,
     onFileOpen: (KnowledgeBaseFileSummary) -> Unit,
+    onToggleSelectionMode: () -> Unit,
+    onToggleFileSelection: (KnowledgeBaseFileSummary) -> Unit,
+    onSelectAllFiles: () -> Unit,
+    onBatchMove: () -> Unit,
+    onBatchDelete: () -> Unit,
+    onBatchShare: () -> Unit,
     onFileRename: (KnowledgeBaseFileSummary) -> Unit,
     onFileDelete: (KnowledgeBaseFileSummary) -> Unit,
     onFileMove: (KnowledgeBaseFileSummary) -> Unit,
@@ -389,6 +463,9 @@ private fun FileManagementPage(
     onFileShare: (KnowledgeBaseFileSummary) -> Unit
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
+    val currentFolderPath = uiState.folderContent.breadcrumbs
+        .joinToString(" / ") { it.name }
+        .ifBlank { "知识库" }
 
     Column(modifier = Modifier.fillMaxSize()) {
         Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)) {
@@ -404,17 +481,6 @@ private fun FileManagementPage(
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回上一级")
                         }
                     }
-                    val breadcrumbs = uiState.folderContent.breadcrumbs
-                        .drop(if (uiState.currentFolderId == null) 1 else 0)
-                    breadcrumbs.forEachIndexed { index, breadcrumb ->
-                        TextButton(onClick = { onBreadcrumbClick(breadcrumb.id) }) {
-                            Text(breadcrumb.name)
-                        }
-                        if (index != breadcrumbs.lastIndex) {
-                            Text("/", style = MaterialTheme.typography.bodyMedium)
-                        }
-                    }
-                    Spacer(modifier = Modifier.size(12.dp))
                     OutlinedButton(
                         onClick = onImportLocalFile,
                         enabled = !uiState.isLocalBusy && !uiState.isImportingLocalFile
@@ -434,6 +500,17 @@ private fun FileManagementPage(
                         Icon(Icons.Default.Search, contentDescription = null)
                         Spacer(modifier = Modifier.size(6.dp))
                         Text(if (isSearchExpanded) "收起" else "搜索")
+                    }
+                    OutlinedButton(
+                        onClick = onToggleSelectionMode,
+                        enabled = files.isNotEmpty() && !uiState.isLocalBusy
+                    ) {
+                        Icon(
+                            if (isSelectionMode) Icons.Default.Close else Icons.Default.CheckCircle,
+                            contentDescription = null
+                        )
+                        Spacer(modifier = Modifier.size(6.dp))
+                        Text(if (isSelectionMode) "取消" else "多选")
                     }
                     Box {
                         IconButton(onClick = { menuExpanded = true }) {
@@ -479,6 +556,33 @@ private fun FileManagementPage(
                         label = { Text("搜索当前目录") }
                     )
                 }
+
+                if (isSelectionMode) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "已选 ${selectedFileIds.size} 个",
+                            style = MaterialTheme.typography.labelLarge,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(onClick = onSelectAllFiles, enabled = files.isNotEmpty()) {
+                            Text("全选")
+                        }
+                        TextButton(onClick = onBatchMove, enabled = selectedFileIds.isNotEmpty() && !uiState.isLocalBusy) {
+                            Text("移动")
+                        }
+                        TextButton(onClick = onBatchShare, enabled = selectedFileIds.isNotEmpty()) {
+                            Text("分享")
+                        }
+                        TextButton(onClick = onBatchDelete, enabled = selectedFileIds.isNotEmpty() && !uiState.isLocalBusy) {
+                            Text("删除")
+                        }
+                    }
+                }
             }
         }
 
@@ -486,6 +590,10 @@ private fun FileManagementPage(
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            item {
+                SectionTitle(currentFolderPath)
+            }
+
             if (uiState.folderContent.folders.isEmpty() && files.isEmpty()) {
                 item {
                     EmptyStateCard(
@@ -496,9 +604,6 @@ private fun FileManagementPage(
             }
 
             if (uiState.folderContent.folders.isNotEmpty()) {
-                item {
-                    SectionTitle("文件夹")
-                }
                 items(uiState.folderContent.folders, key = { it.id }) { folder ->
                     FolderRow(
                         folder = folder,
@@ -510,13 +615,13 @@ private fun FileManagementPage(
             }
 
             if (files.isNotEmpty()) {
-                item {
-                    SectionTitle("文件")
-                }
                 items(files, key = { it.id }) { file ->
                     FileRow(
                         file = file,
+                        isSelectionMode = isSelectionMode,
+                        isSelected = file.id in selectedFileIds,
                         onOpen = { onFileOpen(file) },
+                        onToggleSelected = { onToggleFileSelection(file) },
                         onRename = { onFileRename(file) },
                         onMove = { onFileMove(file) },
                         onExport = { onFileExport(file) },
@@ -702,7 +807,10 @@ private fun FolderRow(
 @Composable
 private fun FileRow(
     file: KnowledgeBaseFileSummary,
+    isSelectionMode: Boolean,
+    isSelected: Boolean,
     onOpen: () -> Unit,
+    onToggleSelected: () -> Unit,
     onRename: () -> Unit,
     onMove: () -> Unit,
     onExport: () -> Unit,
@@ -715,7 +823,7 @@ private fun FileRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
-            .clickable(onClick = onOpen)
+            .clickable(onClick = if (isSelectionMode) onToggleSelected else onOpen)
     ) {
         ListItem(
             headlineContent = {
@@ -729,56 +837,67 @@ private fun FileRow(
                     ).joinToString(" · ")
                 )
             },
-            leadingContent = { Icon(Icons.Default.Description, contentDescription = null) },
+            leadingContent = {
+                if (isSelectionMode) {
+                    Checkbox(
+                        checked = isSelected,
+                        onCheckedChange = { onToggleSelected() }
+                    )
+                } else {
+                    Icon(Icons.Default.Description, contentDescription = null)
+                }
+            },
             trailingContent = {
-                Box {
-                    IconButton(onClick = { menuExpanded = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "更多操作")
-                    }
-                    DropdownMenu(
-                        expanded = menuExpanded,
-                        onDismissRequest = { menuExpanded = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("重命名") },
-                            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
-                            onClick = {
-                                menuExpanded = false
-                                onRename()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("移动") },
-                            leadingIcon = { Icon(Icons.AutoMirrored.Filled.DriveFileMove, contentDescription = null) },
-                            onClick = {
-                                menuExpanded = false
-                                onMove()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("导出") },
-                            leadingIcon = { Icon(Icons.Default.Download, contentDescription = null) },
-                            onClick = {
-                                menuExpanded = false
-                                onExport()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("分享") },
-                            leadingIcon = { Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null) },
-                            onClick = {
-                                menuExpanded = false
-                                onShare()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("删除") },
-                            leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
-                            onClick = {
-                                menuExpanded = false
-                                onDelete()
-                            }
-                        )
+                if (!isSelectionMode) {
+                    Box {
+                        IconButton(onClick = { menuExpanded = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "更多操作")
+                        }
+                        DropdownMenu(
+                            expanded = menuExpanded,
+                            onDismissRequest = { menuExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("重命名") },
+                                leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                                onClick = {
+                                    menuExpanded = false
+                                    onRename()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("移动") },
+                                leadingIcon = { Icon(Icons.AutoMirrored.Filled.DriveFileMove, contentDescription = null) },
+                                onClick = {
+                                    menuExpanded = false
+                                    onMove()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("导出") },
+                                leadingIcon = { Icon(Icons.Default.Download, contentDescription = null) },
+                                onClick = {
+                                    menuExpanded = false
+                                    onExport()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("分享") },
+                                leadingIcon = { Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null) },
+                                onClick = {
+                                    menuExpanded = false
+                                    onShare()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("删除") },
+                                leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
+                                onClick = {
+                                    menuExpanded = false
+                                    onDelete()
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -1162,6 +1281,46 @@ private fun shareFile(
         context.startActivity(Intent.createChooser(shareIntent, "导出文件"))
     }.onFailure {
         Toast.makeText(context, "当前设备无法导出该文件", Toast.LENGTH_SHORT).show()
+    }
+}
+
+private fun shareFiles(
+    context: android.content.Context,
+    files: List<KnowledgeBaseFileSummary>
+) {
+    val existingFiles = files.mapNotNull { summary ->
+        File(summary.localPath).takeIf { it.exists() }
+    }
+    if (existingFiles.isEmpty()) {
+        Toast.makeText(context, "文件不存在，无法分享", Toast.LENGTH_SHORT).show()
+        return
+    }
+
+    runCatching {
+        val uris = ArrayList(
+            existingFiles.map { file ->
+                FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    file
+                )
+            }
+        )
+
+        val shareIntent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+            type = "*/*"
+            putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            clipData = ClipData.newUri(context.contentResolver, "shared-files", uris.first()).apply {
+                uris.drop(1).forEach { uri ->
+                    addItem(ClipData.Item(uri))
+                }
+            }
+        }
+
+        context.startActivity(Intent.createChooser(shareIntent, "分享文件"))
+    }.onFailure {
+        Toast.makeText(context, "当前设备无法分享这些文件", Toast.LENGTH_SHORT).show()
     }
 }
 
