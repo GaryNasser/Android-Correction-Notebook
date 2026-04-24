@@ -8,6 +8,7 @@ import com.github.garynasser.correction_notebook.data.remote.api.AIApiService
 import com.github.garynasser.correction_notebook.data.remote.api.ArticleApiService
 import com.github.garynasser.correction_notebook.data.remote.api.AuthApiService
 import com.github.garynasser.correction_notebook.data.remote.api.BitShareApiService
+import com.github.garynasser.correction_notebook.data.remote.api.UpdateApiService
 import com.github.garynasser.correction_notebook.data.remote.api.VideoApiService
 import com.github.garynasser.correction_notebook.data.remote.network.AuthInterceptor
 import com.github.garynasser.correction_notebook.data.remote.network.TokenAuthenticator
@@ -109,6 +110,17 @@ object NetworkModule {
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(ArticleApiService::class.java)
+    }
+
+    @Provides
+    @Singleton
+    fun provideUpdateApiService(@BasicRetrofit okHttpClient: OkHttpClient): UpdateApiService {
+        return Retrofit.Builder()
+            .baseUrl(BASE_URL)
+            .client(okHttpClient)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(UpdateApiService::class.java)
     }
 
     @Provides
