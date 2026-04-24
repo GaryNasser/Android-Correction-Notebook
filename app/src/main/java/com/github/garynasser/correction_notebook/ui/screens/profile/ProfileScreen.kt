@@ -19,14 +19,15 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.github.garynasser.correction_notebook.data.local.AISettingsManager
 import com.github.garynasser.correction_notebook.data.model.auth.AuthState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(
     viewModel: ProfileViewModel = hiltViewModel(),
-    onNavigateToLogin: () -> Unit = {}
+    onNavigateToLogin: () -> Unit = {},
+    onCheckForUpdates: () -> Unit = {},
+    currentVersionName: String = ""
 ) {
     val authState by viewModel.authState.collectAsState()
     val aiEnabled by viewModel.aiEnabled.collectAsState()
@@ -178,6 +179,13 @@ fun ProfileScreen(
                             title = "API配置",
                             subtitle = if (apiKey.isNotEmpty()) "已配置" else "设置AI接口密钥",
                             onClick = { showAiSettingsDialog = true }
+                        )
+                        HorizontalDivider()
+                        SettingsItem(
+                            icon = Icons.Default.SystemUpdate,
+                            title = "检查更新",
+                            subtitle = "当前版本 $currentVersionName",
+                            onClick = onCheckForUpdates
                         )
                         HorizontalDivider()
                         SettingsItem(
