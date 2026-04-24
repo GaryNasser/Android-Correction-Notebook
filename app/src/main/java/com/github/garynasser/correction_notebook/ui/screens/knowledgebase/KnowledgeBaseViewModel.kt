@@ -378,12 +378,64 @@ class KnowledgeBaseViewModel @Inject constructor(
         }
     }
 
+    fun moveFiles(fileIds: Set<String>, targetFolderId: String?) {
+        if (fileIds.isEmpty()) return
+        viewModelScope.launch {
+            isLocalBusy.value = true
+            var successCount = 0
+            var failureCount = 0
+            var lastErrorMessage: String? = null
+
+            fileIds.forEach { fileId ->
+                knowledgeBaseRepository.moveFile(fileId, targetFolderId)
+                    .onSuccess { successCount += 1 }
+                    .onFailure {
+                        failureCount += 1
+                        lastErrorMessage = it.message
+                    }
+            }
+
+            snackbarMessage.value = when {
+                successCount > 0 && failureCount == 0 -> "已移动 $successCount 个文件"
+                successCount > 0 -> "成功移动 $successCount 个文件，$failureCount 个失败"
+                else -> lastErrorMessage ?: "移动失败"
+            }
+            isLocalBusy.value = false
+        }
+    }
+
     fun deleteFile(fileId: String) {
         viewModelScope.launch {
             isLocalBusy.value = true
             knowledgeBaseRepository.deleteFile(fileId)
                 .onSuccess { snackbarMessage.value = "文件已删除" }
                 .onFailure { snackbarMessage.value = it.message ?: "删除失败" }
+            isLocalBusy.value = false
+        }
+    }
+
+    fun deleteFiles(fileIds: Set<String>) {
+        if (fileIds.isEmpty()) return
+        viewModelScope.launch {
+            isLocalBusy.value = true
+            var successCount = 0
+            var failureCount = 0
+            var lastErrorMessage: String? = null
+
+            fileIds.forEach { fileId ->
+                knowledgeBaseRepository.deleteFile(fileId)
+                    .onSuccess { successCount += 1 }
+                    .onFailure {
+                        failureCount += 1
+                        lastErrorMessage = it.message
+                    }
+            }
+
+            snackbarMessage.value = when {
+                successCount > 0 && failureCount == 0 -> "已删除 $successCount 个文件"
+                successCount > 0 -> "成功删除 $successCount 个文件，$failureCount 个失败"
+                else -> lastErrorMessage ?: "删除失败"
+            }
             isLocalBusy.value = false
         }
     }
