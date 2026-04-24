@@ -352,10 +352,10 @@ class HomeViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(showStatistics = false)
     }
 
-    fun startPomodoro() {
+    fun startPomodoro(settings: PomodoroSettings = _uiState.value.pomodoroSettings) {
         markSessionStarted()
         _uiState.value = _uiState.value.copy(activeTimerMode = ActiveTimerMode.POMODORO)
-        timerManager.startPomodoro(_uiState.value.pomodoroSettings)
+        timerManager.startPomodoro(settings)
     }
 
     fun updatePomodoroSettings(settings: PomodoroSettings) {
