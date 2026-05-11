@@ -22,6 +22,7 @@ import com.github.garynasser.correction_notebook.data.repository.ScheduleReposit
 import com.github.garynasser.correction_notebook.data.repository.StudySessionRepository
 import com.github.garynasser.correction_notebook.data.repository.TodoHistoryRepository
 import com.github.garynasser.correction_notebook.data.repository.TodoRepository
+import com.github.garynasser.correction_notebook.domain.usecase.AiStudyUseCase
 import com.github.garynasser.correction_notebook.domain.usecase.StudyTimerManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -64,7 +65,11 @@ data class HomeUiState(
     val showTodoHistory: Boolean = false,
     val pendingIcsPreview: IcsImportPreview? = null,
     val soundEnabled: Boolean = true,
-    val vibrationEnabled: Boolean = true
+    val vibrationEnabled: Boolean = true,
+    val aiAdvice: String? = null,
+    val isAiAdviceLoading: Boolean = false,
+    val aiTodoBreakdown: String? = null,
+    val aiErrorMessage: String? = null
 )
 
 enum class ActiveTimerMode {
@@ -79,7 +84,8 @@ class HomeViewModel @Inject constructor(
     private val studySessionRepository: StudySessionRepository,
     private val todoHistoryRepository: TodoHistoryRepository,
     private val scheduleRepository: ScheduleRepository,
-    private val icsImportRepository: IcsImportRepository
+    private val icsImportRepository: IcsImportRepository,
+    private val aiStudyUseCase: AiStudyUseCase
 ) : ViewModel() {
 
     val timerManager = StudyTimerManager(viewModelScope)
@@ -238,6 +244,57 @@ class HomeViewModel @Inject constructor(
             todoRepository.addTodo(todo)
             hideAddTodoDialog()
         }
+    }
+
+    fun generateTodayAdvice() {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                isAiAdviceLoading = true,
+                aiErrorMessage = null
+            )
+            aiStudyUseCase.generateTodayAdvice()
+                .onSuccess { advice ->
+                    _uiState.value = _uiState.value.copy(
+                        aiAdvice = advice,
+                        isAiAdviceLoading = false
+                    )
+                }
+                .onFailure { throwable ->
+                    _uiState.value = _uiState.value.copy(
+                        isAiAdviceLoading = false,
+                        aiErrorMessage = throwable.message ?: "AI 建议生成失败"
+                    )
+                }
+        }
+    }
+
+    fun breakDownTodo(todo: TodoItem) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                isAiAdviceLoading = true,
+                aiErrorMessage = null
+            )
+            aiStudyUseCase.breakDownTodo(todo.title, todo.description)
+                .onSuccess { breakdown ->
+                    _uiState.value = _uiState.value.copy(
+                        aiTodoBreakdown = breakdown,
+                        isAiAdviceLoading = false
+                    )
+                }
+                .onFailure { throwable ->
+                    _uiState.value = _uiState.value.copy(
+                        isAiAdviceLoading = false,
+                        aiErrorMessage = throwable.message ?: "待办拆解失败"
+                    )
+                }
+        }
+    }
+
+    fun dismissAiResult() {
+        _uiState.value = _uiState.value.copy(
+            aiTodoBreakdown = null,
+            aiErrorMessage = null
+        )
     }
 
     fun showAddScheduleDialog() {

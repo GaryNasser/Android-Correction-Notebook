@@ -21,20 +21,29 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Camera
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -50,10 +59,14 @@ import com.github.garynasser.correction_notebook.data.model.yanhe.Video
 @Composable
 fun CourseVideoListScreen(
     viewModel: VideoListViewModel = hiltViewModel(),
+    assistantViewModel: CourseAssistantViewModel = hiltViewModel(),
     onNavigateToPlayer: (String) -> Unit,
     onBackButtonClick: () -> Unit
 ) {
     val context = LocalContext.current
+    val assistantState by assistantViewModel.uiState.collectAsState()
+    var selectedSectionTitle by remember { mutableStateOf<String?>(null) }
+    var noteInput by remember { mutableStateOf("") }
 
     LaunchedEffect(viewModel.playState) {
         val state = viewModel.playState
@@ -104,6 +117,10 @@ fun CourseVideoListScreen(
                         items(state.videos) { video ->
                             VideoCard(
                                 section = video,
+                                onAiAssistantClick = { sectionTitle ->
+                                    selectedSectionTitle = sectionTitle
+                                    noteInput = ""
+                                },
                                 onCameraPlayClick = { videos ->
                                     Log.i("VIDEO", "Play btn pressed")
                                     if (videos.isNotEmpty()) {
@@ -123,11 +140,58 @@ fun CourseVideoListScreen(
             }
         }
     }
+
+    selectedSectionTitle?.let { title ->
+        AlertDialog(
+            onDismissRequest = {
+                selectedSectionTitle = null
+                assistantViewModel.clear()
+            },
+            title = { Text("课程助手") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(title, style = MaterialTheme.typography.titleSmall)
+                    OutlinedTextField(
+                        value = noteInput,
+                        onValueChange = { noteInput = it },
+                        label = { Text("补充课堂笔记，可留空") },
+                        minLines = 3,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    when {
+                        assistantState.isLoading -> Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("AI 正在整理课程内容...")
+                        }
+                        assistantState.result != null -> Text(assistantState.result.orEmpty())
+                        assistantState.error != null -> Text(
+                            assistantState.error.orEmpty(),
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { assistantViewModel.summarize(title, noteInput) },
+                    enabled = !assistantState.isLoading
+                ) { Text(if (assistantState.result == null) "生成" else "重新生成") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    selectedSectionTitle = null
+                    assistantViewModel.clear()
+                }) { Text("关闭") }
+            }
+        )
+    }
 }
 
 @Composable
 fun VideoCard(
     section: CourseSection,
+    onAiAssistantClick: (String) -> Unit,
     onCameraPlayClick: (List<Video>) -> Unit,
     onScreenPlayClick: (List<Video>) -> Unit,
     modifier: Modifier = Modifier
@@ -167,6 +231,17 @@ fun VideoCard(
             Spacer(modifier = Modifier.width(16.dp))
 
             val hasVideo = section.videos.isNotEmpty()
+
+            FilledIconButton(
+                onClick = { onAiAssistantClick(timeInfo) },
+                modifier = Modifier.size(48.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Psychology,
+                    contentDescription = "课程助手"
+                )
+            }
 
             FilledIconButton(
                 onClick = { onCameraPlayClick(section.videos) },

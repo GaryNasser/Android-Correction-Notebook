@@ -34,7 +34,10 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.material.icons.filled.Quiz
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -70,6 +73,7 @@ import androidx.media3.ui.PlayerView
 import androidx.compose.ui.viewinterop.AndroidView
 import coil.compose.AsyncImage
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.KnowledgeBaseFileSummary
+import com.github.garynasser.correction_notebook.domain.usecase.KnowledgeAiMode
 import java.io.File
 import java.util.Locale
 
@@ -147,6 +151,30 @@ fun KnowledgeBaseFileViewerScreen(
                         ) {
                             uiState.file?.let { file ->
                                 DropdownMenuItem(
+                                    text = { Text("AI 总结") },
+                                    leadingIcon = { Icon(Icons.Default.Psychology, contentDescription = null) },
+                                    onClick = {
+                                        menuExpanded = false
+                                        viewModel.runAiAction(KnowledgeAiMode.SUMMARY)
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("AI 提取重点") },
+                                    leadingIcon = { Icon(Icons.Default.Lightbulb, contentDescription = null) },
+                                    onClick = {
+                                        menuExpanded = false
+                                        viewModel.runAiAction(KnowledgeAiMode.KEY_POINTS)
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("AI 生成复习题") },
+                                    leadingIcon = { Icon(Icons.Default.Quiz, contentDescription = null) },
+                                    onClick = {
+                                        menuExpanded = false
+                                        viewModel.runAiAction(KnowledgeAiMode.QUIZ)
+                                    }
+                                )
+                                DropdownMenuItem(
                                     text = { Text("其他应用打开") },
                                     leadingIcon = { Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null) },
                                     onClick = {
@@ -221,6 +249,23 @@ fun KnowledgeBaseFileViewerScreen(
                         }
                     }
 
+                    if (uiState.isAiLoading) {
+                        ElevatedCard(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                                Spacer(modifier = Modifier.size(12.dp))
+                                Text("AI 正在阅读这份资料...")
+                            }
+                        }
+                    }
+
                     when (uiState.previewType) {
                         KnowledgeBasePreviewType.IMAGE -> ImagePreview(uiState.file.localPath)
                         KnowledgeBasePreviewType.TEXT -> TextPreview(
@@ -240,6 +285,21 @@ fun KnowledgeBaseFileViewerScreen(
                 }
             }
         }
+    }
+
+    uiState.aiResult?.let { result ->
+        AlertDialog(
+            onDismissRequest = viewModel::clearAiResult,
+            title = { Text("AI 学习助手") },
+            text = {
+                LazyColumn {
+                    item { Text(result) }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = viewModel::clearAiResult) { Text("完成") }
+            }
+        )
     }
 }
 

@@ -7,7 +7,10 @@ data class AIProviderConfig(
     val baseUrl: String,
     val apiKey: String,
     val defaultModel: String,
-    val customHeaders: Map<String, String> = emptyMap()
+    val customHeaders: Map<String, String> = emptyMap(),
+    val temperature: Double? = null,
+    val maxTokens: Int? = null,
+    val contextMessageLimit: Int = 12
 )
 
 data class NormalizedChatMessage(
@@ -19,7 +22,9 @@ data class NormalizedChatRequest(
     val model: String,
     val messages: List<NormalizedChatMessage>,
     val systemPrompt: String? = null,
-    val memorySummary: String? = null
+    val memorySummary: String? = null,
+    val temperature: Double? = null,
+    val maxTokens: Int? = null
 )
 
 data class NormalizedChatResponse(

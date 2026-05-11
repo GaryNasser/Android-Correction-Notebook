@@ -3,9 +3,13 @@ package com.github.garynasser.correction_notebook.ui.screens.profile
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.garynasser.correction_notebook.data.local.AISettingsManager
+import com.github.garynasser.correction_notebook.data.model.ai.AIProviderType
+import com.github.garynasser.correction_notebook.data.model.ai.AiProviderForm
 import com.github.garynasser.correction_notebook.data.model.auth.AuthState
 import com.github.garynasser.correction_notebook.data.repository.AuthRepository
 import com.github.garynasser.correction_notebook.data.repository.AuthStateManager
+import com.github.garynasser.correction_notebook.data.repository.ProviderRecord
+import com.github.garynasser.correction_notebook.data.repository.ProviderRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -19,7 +23,8 @@ import javax.inject.Inject
 class ProfileViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val authStateManager: AuthStateManager,
-    private val aiSettingsManager: AISettingsManager
+    private val aiSettingsManager: AISettingsManager,
+    private val providerRepository: ProviderRepository
 ) : ViewModel() {
 
     // Auth state
@@ -30,17 +35,11 @@ class ProfileViewModel @Inject constructor(
         viewModelScope, SharingStarted.WhileSubscribed(5000), false
     )
 
-    val apiBaseUrl: StateFlow<String> = aiSettingsManager.apiBaseUrl.stateIn(
-        viewModelScope, SharingStarted.WhileSubscribed(5000), AISettingsManager.DEFAULT_API_URL
-    )
+    val activeProvider: StateFlow<ProviderRecord?> = providerRepository.observeActiveProvider()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    val apiKey: StateFlow<String> = aiSettingsManager.apiKey.stateIn(
-        viewModelScope, SharingStarted.WhileSubscribed(5000), ""
-    )
-
-    val aiModel: StateFlow<String> = aiSettingsManager.aiModel.stateIn(
-        viewModelScope, SharingStarted.WhileSubscribed(5000), AISettingsManager.DEFAULT_MODEL
-    )
+    val providers: StateFlow<List<ProviderRecord>> = providerRepository.observeProviders()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Loading state
     private val _isLoading = MutableStateFlow(false)
@@ -52,21 +51,39 @@ class ProfileViewModel @Inject constructor(
         }
     }
 
-    fun setApiBaseUrl(url: String) {
+    fun saveProvider(form: AiProviderForm) {
         viewModelScope.launch {
-            aiSettingsManager.setApiBaseUrl(url)
+            providerRepository.saveProvider(
+                ProviderRecord(
+                    id = form.id,
+                    name = form.name.trim().ifBlank { "AI Provider" },
+                    type = form.type,
+                    baseUrl = normalizeBaseUrl(form.baseUrl, form.type),
+                    apiKey = form.apiKey.trim(),
+                    defaultModel = form.model.trim().ifBlank { AISettingsManager.DEFAULT_MODEL },
+                    customHeadersJson = form.customHeaders.trim().ifBlank { "{}" },
+                    temperature = form.temperature.toDoubleOrNull()?.coerceIn(0.0, 2.0),
+                    maxTokens = form.maxTokens.toIntOrNull()?.coerceAtLeast(1),
+                    contextMessageLimit = form.contextMessageLimit.toIntOrNull()?.coerceIn(1, 60) ?: 12,
+                    isActive = form.isActive,
+                    createdAt = 0L,
+                    updatedAt = 0L
+                )
+            )
+            aiSettingsManager.setAiEnabled(true)
         }
     }
 
-    fun setApiKey(key: String) {
+    fun activateProvider(providerId: Long) {
         viewModelScope.launch {
-            aiSettingsManager.setApiKey(key)
+            providerRepository.activateProvider(providerId)
+            aiSettingsManager.setAiEnabled(true)
         }
     }
 
-    fun setAiModel(model: String) {
+    fun deleteProvider(providerId: Long) {
         viewModelScope.launch {
-            aiSettingsManager.setAiModel(model)
+            providerRepository.deleteProvider(providerId)
         }
     }
 
@@ -79,6 +96,15 @@ class ProfileViewModel @Inject constructor(
             } finally {
                 _isLoading.value = false
             }
+        }
+    }
+
+    private fun normalizeBaseUrl(raw: String, type: AIProviderType): String {
+        val trimmed = raw.trim().trimEnd('/')
+        if (trimmed.isNotBlank()) return trimmed
+        return when (type) {
+            AIProviderType.OPENAI_COMPATIBLE -> AISettingsManager.DEFAULT_API_URL
+            AIProviderType.ANTHROPIC_COMPATIBLE -> "https://api.anthropic.com/v1"
         }
     }
 }

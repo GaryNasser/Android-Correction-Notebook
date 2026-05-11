@@ -8,7 +8,9 @@ data class ChatMessage(
 data class ChatCompletionRequest(
     val model: String,
     val messages: List<ChatMessage>,
-    val stream: Boolean = false
+    val stream: Boolean = false,
+    val temperature: Double? = null,
+    val max_tokens: Int? = null
 )
 
 data class ChatCompletionResponse(
