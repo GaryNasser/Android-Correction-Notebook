@@ -2,6 +2,8 @@ package com.github.garynasser.correction_notebook.di
 
 import android.content.Context
 import androidx.room.Room
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.github.garynasser.correction_notebook.data.local.ai.AiCredentialCipher
 import com.github.garynasser.correction_notebook.data.local.ai.AiDatabase
 import com.github.garynasser.correction_notebook.data.local.ai.AiProviderDao
@@ -21,6 +23,14 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object AiPersistenceModule {
+    private val MIGRATION_1_2 = object : Migration(1, 2) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE `ai_provider` ADD COLUMN `temperature` REAL")
+            db.execSQL("ALTER TABLE `ai_provider` ADD COLUMN `maxTokens` INTEGER")
+            db.execSQL("ALTER TABLE `ai_provider` ADD COLUMN `contextMessageLimit` INTEGER NOT NULL DEFAULT 12")
+        }
+    }
+
     @Provides
     @Singleton
     fun provideAiDatabase(
@@ -31,6 +41,7 @@ object AiPersistenceModule {
             AiDatabase::class.java,
             "ai.db"
         )
+            .addMigrations(MIGRATION_1_2)
             .fallbackToDestructiveMigrationOnDowngrade()
             .build()
     }

@@ -21,6 +21,9 @@ data class AiProviderEntity(
     val apiKeyEncrypted: String,
     val defaultModel: String,
     val customHeadersJson: String = "{}",
+    val temperature: Double? = null,
+    val maxTokens: Int? = null,
+    val contextMessageLimit: Int = 12,
     val isActive: Boolean = false,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()

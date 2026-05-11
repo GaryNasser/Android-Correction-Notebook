@@ -85,6 +85,7 @@ fun PlannerSection(
     onAddTodo: () -> Unit,
     onShowTodoHistory: () -> Unit,
     onToggleTodo: (String) -> Unit,
+    onBreakDownTodo: (TodoItem) -> Unit,
     onDeleteTodo: (String) -> Unit,
     onDeleteSchedule: (String) -> Unit
 ) {
@@ -143,6 +144,7 @@ fun PlannerSection(
                     onAddTodo = onAddTodo,
                     onShowHistory = onShowTodoHistory,
                     onToggleTodo = onToggleTodo,
+                    onBreakDownTodo = onBreakDownTodo,
                     onDeleteTodo = onDeleteTodo
                 )
             }
@@ -229,6 +231,7 @@ private fun TodoPlannerContent(
     onAddTodo: () -> Unit,
     onShowHistory: () -> Unit,
     onToggleTodo: (String) -> Unit,
+    onBreakDownTodo: (TodoItem) -> Unit,
     onDeleteTodo: (String) -> Unit
 ) {
     Row(
@@ -266,6 +269,7 @@ private fun TodoPlannerContent(
                 TodoItemCard(
                     todo = todo,
                     onToggleComplete = { onToggleTodo(todo.id) },
+                    onAiBreakdown = { onBreakDownTodo(todo) },
                     onDelete = { onDeleteTodo(todo.id) }
                 )
             }

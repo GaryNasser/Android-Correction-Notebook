@@ -3,6 +3,7 @@ package com.github.garynasser.correction_notebook.data.model.ai
 data class AnthropicMessageRequest(
     val model: String,
     val max_tokens: Int = 1024,
+    val temperature: Double? = null,
     val system: String? = null,
     val messages: List<AnthropicMessage>
 )

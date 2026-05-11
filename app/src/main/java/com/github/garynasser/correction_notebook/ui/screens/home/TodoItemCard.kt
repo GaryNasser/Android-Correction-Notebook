@@ -27,7 +27,8 @@ import java.time.format.DateTimeFormatter
 fun TodoItemCard(
     todo: TodoItem,
     onToggleComplete: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onAiBreakdown: (() -> Unit)? = null
 ) {
     val checkboxModifier = if (todo.isCompleted) {
         Modifier.background(Color(0xFF43A047), CircleShape)
@@ -141,7 +142,20 @@ fun TodoItemCard(
                 }
             }
 
-            // Delete button
+            onAiBreakdown?.let { breakdown ->
+                IconButton(
+                    onClick = breakdown,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Psychology,
+                        contentDescription = "AI 拆解",
+                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.75f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+
             IconButton(
                 onClick = onDelete,
                 modifier = Modifier.size(32.dp)

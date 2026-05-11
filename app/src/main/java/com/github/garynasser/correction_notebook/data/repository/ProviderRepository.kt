@@ -17,6 +17,9 @@ data class ProviderRecord(
     val apiKey: String,
     val defaultModel: String,
     val customHeadersJson: String,
+    val temperature: Double?,
+    val maxTokens: Int?,
+    val contextMessageLimit: Int,
     val isActive: Boolean,
     val createdAt: Long,
     val updatedAt: Long
@@ -48,6 +51,9 @@ class ProviderRepository @Inject constructor(
             apiKeyEncrypted = credentialCipher.encrypt(record.apiKey),
             defaultModel = record.defaultModel,
             customHeadersJson = record.customHeadersJson,
+            temperature = record.temperature,
+            maxTokens = record.maxTokens,
+            contextMessageLimit = record.contextMessageLimit.coerceIn(1, 60),
             isActive = record.isActive,
             createdAt = if (record.createdAt == 0L) now else record.createdAt,
             updatedAt = now
@@ -81,6 +87,9 @@ class ProviderRepository @Inject constructor(
             apiKey = credentialCipher.decrypt(entity.apiKeyEncrypted),
             defaultModel = entity.defaultModel,
             customHeadersJson = entity.customHeadersJson,
+            temperature = entity.temperature,
+            maxTokens = entity.maxTokens,
+            contextMessageLimit = entity.contextMessageLimit,
             isActive = entity.isActive,
             createdAt = entity.createdAt,
             updatedAt = entity.updatedAt
