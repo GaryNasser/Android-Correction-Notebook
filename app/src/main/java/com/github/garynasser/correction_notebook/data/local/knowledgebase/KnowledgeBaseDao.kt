@@ -53,6 +53,18 @@ interface KnowledgeBaseDao {
     @Query("SELECT * FROM kb_file WHERE id = :fileId LIMIT 1")
     suspend fun getFileById(fileId: String): KnowledgeBaseFileEntity?
 
+    @Query("SELECT * FROM kb_file ORDER BY updatedAt DESC, displayName COLLATE NOCASE ASC")
+    suspend fun getAllFiles(): List<KnowledgeBaseFileEntity>
+
+    @Query(
+        """
+        SELECT * FROM kb_file
+        WHERE ((:folderId IS NULL AND folderId IS NULL) OR folderId = :folderId)
+        ORDER BY updatedAt DESC, displayName COLLATE NOCASE ASC
+        """
+    )
+    suspend fun getFilesForFolder(folderId: String?): List<KnowledgeBaseFileEntity>
+
     @Query(
         """
         SELECT * FROM kb_file
@@ -83,6 +95,9 @@ interface KnowledgeBaseDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertFile(file: KnowledgeBaseFileEntity)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertChunks(chunks: List<KnowledgeBaseChunkEntity>)
+
     @Update
     suspend fun updateFolder(folder: KnowledgeBaseFolderEntity)
 
@@ -94,4 +109,33 @@ interface KnowledgeBaseDao {
 
     @Delete
     suspend fun deleteFile(file: KnowledgeBaseFileEntity)
+
+    @Query("DELETE FROM kb_chunk WHERE fileId = :fileId")
+    suspend fun deleteChunksForFile(fileId: String)
+
+    @Query("SELECT * FROM kb_chunk WHERE fileId = :fileId ORDER BY chunkIndex ASC")
+    suspend fun getChunksForFile(fileId: String): List<KnowledgeBaseChunkEntity>
+
+    @Query(
+        """
+        SELECT * FROM kb_chunk
+        WHERE (:folderIdFilter = 0 OR fileId IN (
+            SELECT id FROM kb_file
+            WHERE ((:folderId IS NULL AND folderId IS NULL) OR folderId = :folderId)
+        ))
+          AND (
+            content LIKE '%' || :query || '%'
+            OR keywords LIKE '%' || :query || '%'
+            OR title LIKE '%' || :query || '%'
+          )
+        ORDER BY updatedAt DESC
+        LIMIT :limit
+        """
+    )
+    suspend fun searchChunks(
+        query: String,
+        folderId: String?,
+        folderIdFilter: Boolean,
+        limit: Int
+    ): List<KnowledgeBaseChunkEntity>
 }

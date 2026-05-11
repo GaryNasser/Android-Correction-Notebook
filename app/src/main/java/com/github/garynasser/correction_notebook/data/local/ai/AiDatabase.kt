@@ -11,7 +11,7 @@ import androidx.room.TypeConverters
         ChatMessageEntity::class,
         UserMemoryEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 @TypeConverters(AiTypeConverters::class)

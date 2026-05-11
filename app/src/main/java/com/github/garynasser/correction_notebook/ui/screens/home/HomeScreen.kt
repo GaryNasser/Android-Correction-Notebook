@@ -157,6 +157,14 @@ fun HomeScreen(
             }
 
             item {
+                AiStudyAdviceCard(
+                    advice = uiState.aiAdvice,
+                    isLoading = uiState.isAiAdviceLoading,
+                    onGenerate = { homeViewModel.generateTodayAdvice() }
+                )
+            }
+
+            item {
                 PlannerSection(
                     uiState = uiState,
                     onPlannerTabChange = { homeViewModel.setPlannerTab(it) },
@@ -166,6 +174,7 @@ fun HomeScreen(
                     onAddTodo = { homeViewModel.showAddTodoDialog() },
                     onShowTodoHistory = { homeViewModel.showTodoHistory() },
                     onToggleTodo = { homeViewModel.toggleTodoComplete(it) },
+                    onBreakDownTodo = { homeViewModel.breakDownTodo(it) },
                     onDeleteTodo = { homeViewModel.deleteTodo(it) },
                     onDeleteSchedule = { homeViewModel.deleteSchedule(it) }
                 )
@@ -196,6 +205,21 @@ fun HomeScreen(
             onDismiss = { homeViewModel.dismissIcsPreview() },
             onApply = { decision: ImportDecision ->
                 homeViewModel.applyIcsPreview(decision)
+            }
+        )
+    }
+
+    if (uiState.aiTodoBreakdown != null || uiState.aiErrorMessage != null) {
+        AlertDialog(
+            onDismissRequest = { homeViewModel.dismissAiResult() },
+            title = { Text(if (uiState.aiTodoBreakdown != null) "AI 待办拆解" else "AI 提示") },
+            text = {
+                Text(uiState.aiTodoBreakdown ?: uiState.aiErrorMessage.orEmpty())
+            },
+            confirmButton = {
+                TextButton(onClick = { homeViewModel.dismissAiResult() }) {
+                    Text("知道了")
+                }
             }
         )
     }
@@ -259,6 +283,47 @@ fun HomeScreen(
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun AiStudyAdviceCard(
+    advice: String?,
+    isLoading: Boolean,
+    onGenerate: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Psychology, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "今日 AI 学习建议",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(onClick = onGenerate, enabled = !isLoading) {
+                    if (isLoading) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    } else {
+                        Text(if (advice == null) "生成" else "刷新")
+                    }
+                }
+            }
+            Text(
+                text = advice ?: "结合今日日程、待办和学习记录，生成 3-5 条可执行建议。",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = if (advice == null) 0.72f else 1f)
+            )
+        }
     }
 }
 

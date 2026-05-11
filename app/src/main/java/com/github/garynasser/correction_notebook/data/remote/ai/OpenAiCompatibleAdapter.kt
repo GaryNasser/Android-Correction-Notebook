@@ -28,7 +28,9 @@ class OpenAiCompatibleAdapter @Inject constructor(
         return runCatching {
             val payload = ChatCompletionRequest(
                 model = request.model,
-                messages = buildMessages(request)
+                messages = buildMessages(request),
+                temperature = request.temperature,
+                max_tokens = request.maxTokens
             )
             val response = aiApiService.postJson(
                 url = resolveUrl(config.baseUrl, "chat/completions"),
@@ -76,6 +78,7 @@ class OpenAiCompatibleAdapter @Inject constructor(
     private fun buildHeaders(config: AIProviderConfig): Map<String, String> {
         return buildMap {
             put("Authorization", "Bearer ${config.apiKey}")
+            put("Content-Type", "application/json")
             putAll(config.customHeaders)
         }
     }

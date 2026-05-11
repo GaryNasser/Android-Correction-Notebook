@@ -138,6 +138,28 @@ object KnowledgeBaseModule {
         }
     }
 
+    private val MIGRATION_2_3 = object : Migration(2, 3) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `kb_chunk` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `fileId` TEXT NOT NULL,
+                    `chunkIndex` INTEGER NOT NULL,
+                    `title` TEXT NOT NULL,
+                    `path` TEXT NOT NULL,
+                    `content` TEXT NOT NULL,
+                    `keywords` TEXT NOT NULL,
+                    `updatedAt` INTEGER NOT NULL,
+                    FOREIGN KEY(`fileId`) REFERENCES `kb_file`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+                )
+                """.trimIndent()
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_kb_chunk_fileId` ON `kb_chunk` (`fileId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_kb_chunk_updatedAt` ON `kb_chunk` (`updatedAt`)")
+        }
+    }
+
     @Provides
     @Singleton
     fun provideKnowledgeBaseDatabase(
@@ -148,7 +170,7 @@ object KnowledgeBaseModule {
             KnowledgeBaseDatabase::class.java,
             "knowledge_base.db"
         )
-            .addMigrations(MIGRATION_1_2)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
             .fallbackToDestructiveMigrationOnDowngrade()
             .build()
     }
