@@ -31,6 +31,9 @@ interface ChatSessionDao {
     @Query("SELECT * FROM ai_chat_session WHERE id = :sessionId LIMIT 1")
     suspend fun getSessionById(sessionId: Long): ChatSessionEntity?
 
+    @Query("SELECT * FROM ai_chat_session ORDER BY updatedAt DESC")
+    fun observeAllSessions(): Flow<List<ChatSessionEntity>>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSession(session: ChatSessionEntity): Long
 
@@ -39,4 +42,10 @@ interface ChatSessionDao {
 
     @Query("DELETE FROM ai_chat_session WHERE id = :sessionId")
     suspend fun deleteSessionById(sessionId: Long)
+
+    @Query("UPDATE ai_chat_session SET title = :title, updatedAt = :updatedAt WHERE id = :sessionId")
+    suspend fun renameSession(sessionId: Long, title: String, updatedAt: Long = System.currentTimeMillis())
+
+    @Query("UPDATE ai_chat_session SET updatedAt = :updatedAt WHERE id = :sessionId")
+    suspend fun touchSession(sessionId: Long, updatedAt: Long = System.currentTimeMillis())
 }

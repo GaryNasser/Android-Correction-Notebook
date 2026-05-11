@@ -28,6 +28,8 @@ class AnthropicCompatibleAdapter @Inject constructor(
         return runCatching {
             val payload = AnthropicMessageRequest(
                 model = request.model,
+                max_tokens = request.maxTokens ?: config.maxTokens ?: DEFAULT_MAX_TOKENS,
+                temperature = request.temperature ?: config.temperature,
                 system = buildSystemPrompt(request),
                 messages = request.messages
                     .filter { it.role != "system" }
@@ -75,6 +77,7 @@ class AnthropicCompatibleAdapter @Inject constructor(
         return buildMap {
             put("x-api-key", config.apiKey)
             put("anthropic-version", DEFAULT_ANTHROPIC_VERSION)
+            put("Content-Type", "application/json")
             putAll(config.customHeaders)
         }
     }
@@ -106,6 +109,7 @@ class AnthropicCompatibleAdapter @Inject constructor(
     companion object {
         private val JSON_MEDIA_TYPE = "application/json".toMediaType()
         private const val DEFAULT_ANTHROPIC_VERSION = "2023-06-01"
+        private const val DEFAULT_MAX_TOKENS = 1024
         private val errorMapper = AiErrorMapper
     }
 }

@@ -32,6 +32,9 @@ class AiSettingsMigrationCoordinator @Inject constructor(
                 apiKey = apiKey,
                 defaultModel = model,
                 customHeadersJson = "{}",
+                temperature = null,
+                maxTokens = null,
+                contextMessageLimit = 12,
                 isActive = enabled,
                 createdAt = System.currentTimeMillis(),
                 updatedAt = System.currentTimeMillis()

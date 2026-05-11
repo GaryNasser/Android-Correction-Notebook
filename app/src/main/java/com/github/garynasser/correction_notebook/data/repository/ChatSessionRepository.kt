@@ -16,6 +16,9 @@ class ChatSessionRepository @Inject constructor(
     fun observeSessionsForProvider(providerId: Long): Flow<List<ChatSessionEntity>> =
         sessionDao.observeSessionsForProvider(providerId)
 
+    fun observeAllSessions(): Flow<List<ChatSessionEntity>> =
+        sessionDao.observeAllSessions()
+
     fun observeMessagesForSession(sessionId: Long): Flow<List<ChatMessageEntity>> =
         messageDao.observeMessagesForSession(sessionId)
 
@@ -41,13 +44,15 @@ class ChatSessionRepository @Inject constructor(
         role: String,
         content: String
     ): Long {
-        return messageDao.insertMessage(
+        val id = messageDao.insertMessage(
             ChatMessageEntity(
                 sessionId = sessionId,
                 role = role,
                 content = content
             )
         )
+        sessionDao.touchSession(sessionId)
+        return id
     }
 
     suspend fun getRecentMessages(sessionId: Long, limit: Int): List<ChatMessageEntity> =
@@ -55,5 +60,14 @@ class ChatSessionRepository @Inject constructor(
 
     suspend fun clearSessionMessages(sessionId: Long) {
         messageDao.deleteMessagesForSession(sessionId)
+        sessionDao.touchSession(sessionId)
+    }
+
+    suspend fun renameSession(sessionId: Long, title: String) {
+        sessionDao.renameSession(sessionId, title.trim().ifBlank { "新的对话" })
+    }
+
+    suspend fun deleteSession(sessionId: Long) {
+        sessionDao.deleteSessionById(sessionId)
     }
 }

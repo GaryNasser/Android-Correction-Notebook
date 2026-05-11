@@ -11,6 +11,8 @@ import androidx.navigation.toRoute
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.KnowledgeBaseFileSummary
 import com.github.garynasser.correction_notebook.data.repository.KnowledgeBasePreviewRenderer
 import com.github.garynasser.correction_notebook.data.repository.KnowledgeBaseRepository
+import com.github.garynasser.correction_notebook.domain.usecase.AiStudyUseCase
+import com.github.garynasser.correction_notebook.domain.usecase.KnowledgeAiMode
 import com.github.garynasser.correction_notebook.ui.navigation.KnowledgeBaseFileViewer
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -37,6 +39,8 @@ data class KnowledgeBaseFileViewerUiState(
     val isTextTruncated: Boolean = false,
     val pdfPages: List<Bitmap> = emptyList(),
     val htmlPreviewPath: String? = null,
+    val aiResult: String? = null,
+    val isAiLoading: Boolean = false,
     val errorMessage: String? = null
 )
 
@@ -44,6 +48,7 @@ data class KnowledgeBaseFileViewerUiState(
 class KnowledgeBaseFileViewerViewModel @Inject constructor(
     private val knowledgeBaseRepository: KnowledgeBaseRepository,
     private val previewRenderer: KnowledgeBasePreviewRenderer,
+    private val aiStudyUseCase: AiStudyUseCase,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -58,6 +63,27 @@ class KnowledgeBaseFileViewerViewModel @Inject constructor(
 
     fun refresh() {
         loadFile()
+    }
+
+    fun runAiAction(mode: KnowledgeAiMode) {
+        val fileId = uiState.value.file?.id ?: return
+        viewModelScope.launch {
+            uiState.value = uiState.value.copy(isAiLoading = true, aiResult = null, errorMessage = null)
+            aiStudyUseCase.summarizeKnowledgeFile(fileId, mode)
+                .onSuccess { result ->
+                    uiState.value = uiState.value.copy(isAiLoading = false, aiResult = result)
+                }
+                .onFailure { throwable ->
+                    uiState.value = uiState.value.copy(
+                        isAiLoading = false,
+                        errorMessage = throwable.message ?: "AI 处理失败"
+                    )
+                }
+        }
+    }
+
+    fun clearAiResult() {
+        uiState.value = uiState.value.copy(aiResult = null)
     }
 
     private fun loadFile() {
