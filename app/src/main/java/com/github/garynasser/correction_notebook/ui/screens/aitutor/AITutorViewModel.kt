@@ -7,8 +7,9 @@ import com.github.garynasser.correction_notebook.data.local.ai.ChatMessageEntity
 import com.github.garynasser.correction_notebook.data.local.ai.ChatSessionEntity
 import com.github.garynasser.correction_notebook.data.local.ai.UserMemoryEntity
 import com.github.garynasser.correction_notebook.data.model.ai.AiProviderForm
-import com.github.garynasser.correction_notebook.data.model.ai.AIProviderType
+import com.github.garynasser.correction_notebook.data.model.ai.AiModelOption
 import com.github.garynasser.correction_notebook.data.model.ai.NormalizedChatMessage
+import com.github.garynasser.correction_notebook.data.repository.AIRepository
 import com.github.garynasser.correction_notebook.data.repository.ChatSessionRepository
 import com.github.garynasser.correction_notebook.data.repository.MemoryRepository
 import com.github.garynasser.correction_notebook.data.repository.ProviderRecord
@@ -41,6 +42,9 @@ data class AITutorUiState(
     val selectedSessionId: Long? = null,
     val messages: List<ChatUiMessage> = emptyList(),
     val memories: List<UserMemoryEntity> = emptyList(),
+    val fetchedModels: List<AiModelOption> = emptyList(),
+    val isProviderBusy: Boolean = false,
+    val providerStatusMessage: String? = null,
     val isLoading: Boolean = false,
     val isKnowledgeMode: Boolean = false,
     val error: String? = null
@@ -52,6 +56,7 @@ data class AITutorUiState(
 @HiltViewModel
 class AITutorViewModel @Inject constructor(
     private val aiStudyUseCase: AiStudyUseCase,
+    private val aiRepository: AIRepository,
     private val providerRepository: ProviderRepository,
     private val chatSessionRepository: ChatSessionRepository,
     private val memoryRepository: MemoryRepository,
@@ -60,6 +65,9 @@ class AITutorViewModel @Inject constructor(
 
     private val selectedSessionId = MutableStateFlow<Long?>(null)
     private val loading = MutableStateFlow(false)
+    private val providerBusy = MutableStateFlow(false)
+    private val providerStatus = MutableStateFlow<String?>(null)
+    private val fetchedModels = MutableStateFlow<List<AiModelOption>>(emptyList())
     private val knowledgeMode = MutableStateFlow(false)
     private val error = MutableStateFlow<String?>(null)
 
@@ -72,6 +80,9 @@ class AITutorViewModel @Inject constructor(
             if (id == null) flowOf(emptyList()) else chatSessionRepository.observeMessagesForSession(id)
         },
         memoryRepository.observeMemories(),
+        fetchedModels,
+        providerBusy,
+        providerStatus,
         loading,
         knowledgeMode,
         error
@@ -83,9 +94,12 @@ class AITutorViewModel @Inject constructor(
         val selectedId = values[3] as Long?
         val messages = values[4] as List<ChatMessageEntity>
         val memories = values[5] as List<UserMemoryEntity>
-        val isLoading = values[6] as Boolean
-        val isKnowledgeMode = values[7] as Boolean
-        val currentError = values[8] as String?
+        val currentFetchedModels = values[6] as List<AiModelOption>
+        val isProviderBusy = values[7] as Boolean
+        val currentProviderStatus = values[8] as String?
+        val isLoading = values[9] as Boolean
+        val isKnowledgeMode = values[10] as Boolean
+        val currentError = values[11] as String?
 
         AITutorUiState(
             activeProvider = activeProvider,
@@ -101,6 +115,9 @@ class AITutorViewModel @Inject constructor(
                 )
             },
             memories = memories,
+            fetchedModels = currentFetchedModels,
+            isProviderBusy = isProviderBusy,
+            providerStatusMessage = currentProviderStatus,
             isLoading = isLoading,
             isKnowledgeMode = isKnowledgeMode,
             error = currentError
@@ -211,25 +228,56 @@ class AITutorViewModel @Inject constructor(
 
     fun saveProvider(form: AiProviderForm) {
         viewModelScope.launch {
-            providerRepository.saveProvider(
-                ProviderRecord(
-                    id = form.id,
-                    name = form.name.trim().ifBlank { "AI Provider" },
-                    type = form.type,
-                    baseUrl = normalizeBaseUrl(form.baseUrl, form.type),
-                    apiKey = form.apiKey.trim(),
-                    defaultModel = form.model.trim().ifBlank { AISettingsManager.DEFAULT_MODEL },
-                    customHeadersJson = normalizeHeaders(form.customHeaders),
-                    temperature = form.temperature.toDoubleOrNull()?.coerceIn(0.0, 2.0),
-                    maxTokens = form.maxTokens.toIntOrNull()?.coerceAtLeast(1),
-                    contextMessageLimit = form.contextMessageLimit.toIntOrNull()?.coerceIn(1, 60) ?: 12,
-                    isActive = form.isActive,
-                    createdAt = 0L,
-                    updatedAt = 0L
-                )
-            )
+            aiRepository.validateProviderForm(form)?.let { message ->
+                providerStatus.value = message
+                return@launch
+            }
+            providerRepository.saveProvider(aiRepository.normalizeProviderRecord(form))
             aiSettingsManager.setAiEnabled(true)
+            providerStatus.value = aiRepository.providerConfigWarning(form)
+                ?.let { "Provider 已保存。$it" }
+                ?: "Provider 已保存"
         }
+    }
+
+    fun fetchModels(form: AiProviderForm) {
+        viewModelScope.launch {
+            providerBusy.value = true
+            providerStatus.value = null
+            aiRepository.listModels(form)
+                .onSuccess { models ->
+                    fetchedModels.value = models
+                    providerStatus.value = if (models.isEmpty()) {
+                        "接口可访问，但没有返回模型列表；你仍然可以手动填写模型名"
+                    } else {
+                        "已获取 ${models.size} 个模型"
+                    }
+                }
+                .onFailure { throwable ->
+                    providerStatus.value = throwable.message ?: "获取模型列表失败"
+                }
+            providerBusy.value = false
+        }
+    }
+
+    fun testProvider(form: AiProviderForm) {
+        viewModelScope.launch {
+            providerBusy.value = true
+            providerStatus.value = null
+            aiRepository.testProvider(form)
+                .onSuccess { result ->
+                    if (result.models.isNotEmpty()) fetchedModels.value = result.models
+                    providerStatus.value = result.message
+                }
+                .onFailure { throwable ->
+                    providerStatus.value = throwable.message ?: "连接测试失败"
+                }
+            providerBusy.value = false
+        }
+    }
+
+    fun clearProviderStatus() {
+        providerStatus.value = null
     }
 
     fun activateProvider(providerId: Long) {
@@ -263,14 +311,4 @@ class AITutorViewModel @Inject constructor(
     private fun titleFrom(text: String): String =
         text.take(18).ifBlank { "新的学习对话" }
 
-    private fun normalizeBaseUrl(raw: String, type: AIProviderType): String {
-        val trimmed = raw.trim().trimEnd('/')
-        if (trimmed.isNotBlank()) return trimmed
-        return when (type) {
-            AIProviderType.OPENAI_COMPATIBLE -> AISettingsManager.DEFAULT_API_URL
-            AIProviderType.ANTHROPIC_COMPATIBLE -> "https://api.anthropic.com/v1"
-        }
-    }
-
-    private fun normalizeHeaders(raw: String): String = raw.trim().ifBlank { "{}" }
 }
