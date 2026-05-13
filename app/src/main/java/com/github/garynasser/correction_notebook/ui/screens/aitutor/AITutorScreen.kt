@@ -3,6 +3,7 @@ package com.github.garynasser.correction_notebook.ui.screens.aitutor
 import android.util.Base64
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -95,6 +96,7 @@ fun AITutorScreen(
     var showProviderDialog by remember { mutableStateOf(false) }
     var showMemoryDialog by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf(false) }
+    var showSessionDialog by remember { mutableStateOf(false) }
     var menuExpanded by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -154,7 +156,7 @@ fun AITutorScreen(
             } else {
                 AiTutorHeader(
                     uiState = uiState,
-                    onSelectSession = viewModel::selectSession,
+                    onOpenSessions = { showSessionDialog = true },
                     onKnowledgeModeChange = viewModel::setKnowledgeMode
                 )
 
@@ -251,6 +253,21 @@ fun AITutorScreen(
         )
     }
 
+    if (showSessionDialog) {
+        SessionPickerDialog(
+            uiState = uiState,
+            onDismiss = { showSessionDialog = false },
+            onSelectSession = {
+                viewModel.selectSession(it)
+                showSessionDialog = false
+            },
+            onNewSession = {
+                viewModel.newSession()
+                showSessionDialog = false
+            }
+        )
+    }
+
     if (showRenameDialog) {
         var title by remember(uiState.selectedSessionId) {
             mutableStateOf(uiState.sessions.firstOrNull { it.id == uiState.selectedSessionId }?.title.orEmpty())
@@ -302,71 +319,104 @@ private fun EmptyAiState(onConfigure: () -> Unit) {
 @Composable
 private fun AiTutorHeader(
     uiState: AITutorUiState,
-    onSelectSession: (Long) -> Unit,
+    onOpenSessions: () -> Unit,
     onKnowledgeModeChange: (Boolean) -> Unit
 ) {
-    var sessionExpanded by remember { mutableStateOf(false) }
     val selectedSession = uiState.sessions.firstOrNull { it.id == uiState.selectedSessionId }
 
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 12.dp, vertical = 6.dp),
         color = MaterialTheme.colorScheme.secondaryContainer,
         shape = MaterialTheme.shapes.medium
     ) {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Icon(Icons.Default.Psychology, contentDescription = null)
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(10.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(uiState.activeProvider?.name.orEmpty(), fontWeight = FontWeight.Medium)
                     Text(
-                        text = uiState.activeProvider?.defaultModel.orEmpty(),
+                        uiState.activeProvider?.name.orEmpty(),
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = selectedSession?.title ?: uiState.activeProvider?.defaultModel.orEmpty(),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
-                AssistChip(
-                    onClick = { onKnowledgeModeChange(!uiState.isKnowledgeMode) },
-                    leadingIcon = { Icon(Icons.Default.LibraryBooks, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                    label = { Text(if (uiState.isKnowledgeMode) "资料问答" else "普通问答") }
-                )
             }
+            TextButton(onClick = onOpenSessions) {
+                Text("对话")
+            }
+            AssistChip(
+                onClick = { onKnowledgeModeChange(!uiState.isKnowledgeMode) },
+                leadingIcon = { Icon(Icons.Default.LibraryBooks, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                label = { Text(if (uiState.isKnowledgeMode) "资料" else "普通") }
+            )
+        }
+    }
+}
 
-            ExposedDropdownMenuBox(
-                expanded = sessionExpanded,
-                onExpandedChange = { sessionExpanded = it }
-            ) {
-                OutlinedTextField(
-                    value = selectedSession?.title ?: "选择对话",
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("当前对话") },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = sessionExpanded) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .menuAnchor()
-                )
-                ExposedDropdownMenu(
-                    expanded = sessionExpanded,
-                    onDismissRequest = { sessionExpanded = false }
-                ) {
-                    uiState.sessions.forEach { session ->
-                        DropdownMenuItem(
-                            text = {
-                                Text(session.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            },
-                            onClick = {
-                                onSelectSession(session.id)
-                                sessionExpanded = false
-                            }
-                        )
+@Composable
+private fun SessionPickerDialog(
+    uiState: AITutorUiState,
+    onDismiss: () -> Unit,
+    onSelectSession: (Long) -> Unit,
+    onNewSession: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("选择对话") },
+        text = {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(uiState.sessions, key = { it.id }) { session ->
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelectSession(session.id) },
+                        color = if (session.id == uiState.selectedSessionId) {
+                            MaterialTheme.colorScheme.primaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surface
+                        },
+                        shape = MaterialTheme.shapes.small
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                text = session.title,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = if (session.id == uiState.selectedSessionId) "当前对话" else "点击切换",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             }
+        },
+        confirmButton = {
+            TextButton(onClick = onNewSession) { Text("新建对话") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("关闭") }
         }
-    }
+    )
 }
 
 @Composable
@@ -374,7 +424,7 @@ private fun EmptyChatState(isKnowledgeMode: Boolean, onSuggestion: (String) -> U
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(360.dp),
+            .height(300.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
