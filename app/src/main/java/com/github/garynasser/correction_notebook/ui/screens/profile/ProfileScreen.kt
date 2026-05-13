@@ -31,6 +31,9 @@ fun ProfileScreen(
     val aiEnabled by viewModel.aiEnabled.collectAsState()
     val activeProvider by viewModel.activeProvider.collectAsState()
     val providers by viewModel.providers.collectAsState()
+    val fetchedModels by viewModel.fetchedModels.collectAsState()
+    val isProviderBusy by viewModel.isProviderBusy.collectAsState()
+    val providerStatusMessage by viewModel.providerStatusMessage.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
 
     var showLogoutDialog by remember { mutableStateOf(false) }
@@ -204,13 +207,18 @@ fun ProfileScreen(
         ProviderDialog(
             uiState = AITutorUiState(
                 activeProvider = activeProvider,
-                providers = providers
+                providers = providers,
+                fetchedModels = fetchedModels,
+                isProviderBusy = isProviderBusy,
+                providerStatusMessage = providerStatusMessage
             ),
             onDismiss = { showAiSettingsDialog = false },
             onSave = {
                 viewModel.saveProvider(it)
-                showAiSettingsDialog = false
             },
+            onFetchModels = viewModel::fetchModels,
+            onTestProvider = viewModel::testProvider,
+            onClearProviderStatus = viewModel::clearProviderStatus,
             onActivate = viewModel::activateProvider,
             onDelete = viewModel::deleteProvider
         )

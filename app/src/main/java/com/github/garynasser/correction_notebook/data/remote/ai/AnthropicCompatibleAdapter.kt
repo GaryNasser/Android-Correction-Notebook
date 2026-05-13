@@ -4,7 +4,6 @@ import com.github.garynasser.correction_notebook.data.model.ai.AIProviderConfig
 import com.github.garynasser.correction_notebook.data.model.ai.AIProviderType
 import com.github.garynasser.correction_notebook.data.model.ai.AnthropicMessage
 import com.github.garynasser.correction_notebook.data.model.ai.AnthropicMessageRequest
-import com.github.garynasser.correction_notebook.data.model.ai.AnthropicMessageResponse
 import com.github.garynasser.correction_notebook.data.model.ai.NormalizedChatRequest
 import com.github.garynasser.correction_notebook.data.model.ai.NormalizedChatResponse
 import com.github.garynasser.correction_notebook.data.remote.api.AIApiService
@@ -48,14 +47,29 @@ class AnthropicCompatibleAdapter @Inject constructor(
             }
 
             val body = response.body()?.string().orEmpty()
-            val parsed = gson.fromJson(body, AnthropicMessageResponse::class.java)
-            if (parsed.error != null) {
-                throw IllegalStateException(parsed.error.message ?: "Anthropic 兼容接口返回错误")
+            val parsed = AiResponseParser.requireJsonObject(body, "Anthropic 兼容")
+            parsed.get("error")?.takeIf { it.isJsonObject }?.asJsonObject?.let { error ->
+                throw IllegalStateException(
+                    error.get("message")?.takeIf { it.isJsonPrimitive }?.asString ?: "Anthropic 兼容接口返回错误"
+                )
             }
 
-            val content = parsed.content
-                ?.filter { it.type == "text" }
-                ?.joinToString("\n") { it.text.orEmpty() }
+            val content = parsed.get("content")
+                ?.takeIf { it.isJsonArray }
+                ?.asJsonArray
+                ?.mapNotNull { block ->
+                    if (block.isJsonObject) {
+                        val obj = block.asJsonObject
+                        if (obj.get("type")?.takeIf { it.isJsonPrimitive }?.asString == "text") {
+                            obj.get("text")?.takeIf { it.isJsonPrimitive }?.asString
+                        } else {
+                            AiResponseParser.readTextContent(obj.get("text")).takeIf { it.isNotBlank() }
+                        }
+                    } else {
+                        AiResponseParser.readTextContent(block).takeIf { it.isNotBlank() }
+                    }
+                }
+                ?.joinToString("\n")
                 ?.trim()
                 .orEmpty()
 
@@ -65,17 +79,39 @@ class AnthropicCompatibleAdapter @Inject constructor(
 
             NormalizedChatResponse(
                 content = content,
-                providerMessageId = parsed.id,
-                finishReason = parsed.stop_reason
+                providerMessageId = parsed.get("id")?.takeIf { it.isJsonPrimitive }?.asString,
+                finishReason = parsed.get("stop_reason")?.takeIf { it.isJsonPrimitive }?.asString
             )
         }.recoverCatching { throwable ->
-            throw IllegalStateException(errorMapper.mapThrowable(throwable))
+            throw IllegalStateException(errorMapper.mapThrowable(throwable), throwable)
+        }
+    }
+
+    suspend fun listModels(config: AIProviderConfig): Result<List<String>> {
+        return runCatching {
+            val response = aiApiService.getJson(
+                url = resolveAnthropicUrl(config.baseUrl, "models"),
+                headers = buildHeaders(config)
+            )
+            val body = if (response.isSuccessful) {
+                response.body()?.string().orEmpty()
+            } else {
+                throw IllegalStateException(
+                    errorMapper.mapHttpError(response.code(), response.errorBody()?.string())
+                )
+            }
+            AiResponseParser.extractModelIds(body, "Anthropic 兼容")
+        }.recoverCatching { throwable ->
+            throw IllegalStateException(errorMapper.mapThrowable(throwable), throwable)
         }
     }
 
     private fun buildHeaders(config: AIProviderConfig): Map<String, String> {
         return buildMap {
-            put("x-api-key", config.apiKey)
+            if (config.apiKey.isNotBlank()) {
+                put("x-api-key", config.apiKey)
+                put("Authorization", "Bearer ${config.apiKey}")
+            }
             put("anthropic-version", DEFAULT_ANTHROPIC_VERSION)
             put("Content-Type", "application/json")
             putAll(config.customHeaders)
@@ -97,12 +133,18 @@ class AnthropicCompatibleAdapter @Inject constructor(
         }
     }
 
-    private fun resolveAnthropicUrl(baseUrl: String): String {
-        val normalizedBase = baseUrl.trim().trimEnd('/')
+    private fun resolveAnthropicUrl(baseUrl: String, suffix: String = "messages"): String {
+        val rawBase = baseUrl.trim().trimEnd('/')
+        val baseWithoutQuery = rawBase.substringBefore("?")
+        if (baseWithoutQuery.endsWith(suffix)) return rawBase
+
+        val normalizedBase = baseWithoutQuery
+            .removeSuffix("/messages")
+            .removeSuffix("/models")
         return when {
-            normalizedBase.endsWith("messages") -> normalizedBase
-            normalizedBase.endsWith("/v1") -> "$normalizedBase/messages"
-            else -> "$normalizedBase/messages"
+            normalizedBase.endsWith(suffix) -> normalizedBase
+            normalizedBase.endsWith("/v1") -> "$normalizedBase/$suffix"
+            else -> "$normalizedBase/$suffix"
         }
     }
 
