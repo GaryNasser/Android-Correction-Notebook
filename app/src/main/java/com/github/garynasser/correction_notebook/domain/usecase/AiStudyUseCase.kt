@@ -4,6 +4,7 @@ import com.github.garynasser.correction_notebook.data.local.ai.UserMemoryEntity
 import com.github.garynasser.correction_notebook.data.model.ai.NormalizedChatMessage
 import com.github.garynasser.correction_notebook.data.model.home.ScheduleRange
 import com.github.garynasser.correction_notebook.data.repository.AIRepository
+import com.github.garynasser.correction_notebook.data.repository.KnowledgeContextChunk
 import com.github.garynasser.correction_notebook.data.repository.KnowledgeBaseAiRepository
 import com.github.garynasser.correction_notebook.data.repository.MemoryRepository
 import com.github.garynasser.correction_notebook.data.repository.ScheduleRepository
@@ -43,9 +44,7 @@ class AiStudyUseCase @Inject constructor(
         if (chunks.isEmpty()) {
             return Result.failure(Exception("没有检索到可用资料，请先导入 txt/md/docx/pptx，或尝试换一种问法"))
         }
-        val context = chunks.joinToString("\n\n") { chunk ->
-            "来源：${chunk.title}\n路径：${chunk.path}\n内容：${chunk.content}"
-        }
+        val context = chunks.toPromptContext()
         val prompt = """
             你是 StudyBIT 的资料库学习助手。请只基于给定资料回答。
             如果资料不足，先说明不足，再给出可以继续查找的方向。
@@ -66,11 +65,11 @@ class AiStudyUseCase @Inject constructor(
         if (chunks.isEmpty()) {
             return Result.failure(Exception("当前文件暂不支持抽取文本，PDF 第一版不做 OCR"))
         }
-        val context = chunks.joinToString("\n\n") { it.content }
+        val context = chunks.toPromptContext()
         val instruction = when (mode) {
-            KnowledgeAiMode.SUMMARY -> "总结这份资料，输出核心内容、关键概念和适合复习的顺序。"
-            KnowledgeAiMode.KEY_POINTS -> "提取这份资料的高频考点、易错点和必须记住的公式/定义。"
-            KnowledgeAiMode.QUIZ -> "基于这份资料生成 8 道复习题，包含答案和简短解析。"
+            KnowledgeAiMode.SUMMARY -> "总结这份资料，输出核心内容、关键概念和适合复习的顺序，控制在 800 字以内。"
+            KnowledgeAiMode.KEY_POINTS -> "提取这份资料的高频考点、易错点和必须记住的公式/定义，用条目输出，控制在 800 字以内。"
+            KnowledgeAiMode.QUIZ -> "基于这份资料生成 6 道复习题，包含答案和简短解析，避免过长。"
         }
         return aiRepository.sendChat(
             messages = listOf(NormalizedChatMessage("user", "$instruction\n\n资料内容：\n$context")),
@@ -156,7 +155,25 @@ class AiStudyUseCase @Inject constructor(
             .joinToString("\n") { "- [${it.category}] ${it.content}" }
     }
 
+    private fun List<KnowledgeContextChunk>.toPromptContext(maxChars: Int = MAX_KNOWLEDGE_CONTEXT_CHARS): String {
+        val builder = StringBuilder()
+        for (chunk in this) {
+            val block = "来源：${chunk.title}\n路径：${chunk.path}\n内容：${chunk.content}\n\n"
+            if (builder.length + block.length > maxChars) {
+                val remaining = maxChars - builder.length
+                if (remaining > 200) {
+                    builder.append(block.take(remaining))
+                    builder.append("\n（后续资料已因上下文长度自动截断）")
+                }
+                break
+            }
+            builder.append(block)
+        }
+        return builder.toString().trim()
+    }
+
     companion object {
+        private const val MAX_KNOWLEDGE_CONTEXT_CHARS = 10_000
         private const val DEFAULT_TUTOR_PROMPT = """
             你是 StudyBIT 内置 AI 学习导师。
             你的目标是帮助用户理解资料、制定计划、复习巩固。

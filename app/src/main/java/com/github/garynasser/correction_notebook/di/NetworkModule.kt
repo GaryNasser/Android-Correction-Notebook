@@ -24,6 +24,7 @@ import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import java.util.concurrent.TimeUnit
 import javax.inject.Qualifier
 import javax.inject.Singleton
 
@@ -178,9 +179,16 @@ object NetworkModule {
     @Provides
     @Singleton
     fun provideAIApiService(@BasicRetrofit okHttpClient: OkHttpClient): AIApiService {
+        val aiOkHttpClient = okHttpClient.newBuilder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(90, TimeUnit.SECONDS)
+            .readTimeout(180, TimeUnit.SECONDS)
+            .callTimeout(240, TimeUnit.SECONDS)
+            .build()
+
         return Retrofit.Builder()
             .baseUrl("https://api.openai.com/v1/") // Base URL, actual URL is passed dynamically
-            .client(okHttpClient)
+            .client(aiOkHttpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(AIApiService::class.java)

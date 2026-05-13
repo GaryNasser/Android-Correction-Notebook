@@ -3,8 +3,9 @@ package com.github.garynasser.correction_notebook.ui.screens.profile
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.garynasser.correction_notebook.data.local.AISettingsManager
-import com.github.garynasser.correction_notebook.data.model.ai.AIProviderType
+import com.github.garynasser.correction_notebook.data.model.ai.AiModelOption
 import com.github.garynasser.correction_notebook.data.model.ai.AiProviderForm
+import com.github.garynasser.correction_notebook.data.repository.AIRepository
 import com.github.garynasser.correction_notebook.data.model.auth.AuthState
 import com.github.garynasser.correction_notebook.data.repository.AuthRepository
 import com.github.garynasser.correction_notebook.data.repository.AuthStateManager
@@ -24,7 +25,8 @@ class ProfileViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val authStateManager: AuthStateManager,
     private val aiSettingsManager: AISettingsManager,
-    private val providerRepository: ProviderRepository
+    private val providerRepository: ProviderRepository,
+    private val aiRepository: AIRepository
 ) : ViewModel() {
 
     // Auth state
@@ -45,6 +47,15 @@ class ProfileViewModel @Inject constructor(
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
+    private val _isProviderBusy = MutableStateFlow(false)
+    val isProviderBusy: StateFlow<Boolean> = _isProviderBusy.asStateFlow()
+
+    private val _providerStatusMessage = MutableStateFlow<String?>(null)
+    val providerStatusMessage: StateFlow<String?> = _providerStatusMessage.asStateFlow()
+
+    private val _fetchedModels = MutableStateFlow<List<AiModelOption>>(emptyList())
+    val fetchedModels: StateFlow<List<AiModelOption>> = _fetchedModels.asStateFlow()
+
     fun setAiEnabled(enabled: Boolean) {
         viewModelScope.launch {
             aiSettingsManager.setAiEnabled(enabled)
@@ -53,24 +64,15 @@ class ProfileViewModel @Inject constructor(
 
     fun saveProvider(form: AiProviderForm) {
         viewModelScope.launch {
-            providerRepository.saveProvider(
-                ProviderRecord(
-                    id = form.id,
-                    name = form.name.trim().ifBlank { "AI Provider" },
-                    type = form.type,
-                    baseUrl = normalizeBaseUrl(form.baseUrl, form.type),
-                    apiKey = form.apiKey.trim(),
-                    defaultModel = form.model.trim().ifBlank { AISettingsManager.DEFAULT_MODEL },
-                    customHeadersJson = form.customHeaders.trim().ifBlank { "{}" },
-                    temperature = form.temperature.toDoubleOrNull()?.coerceIn(0.0, 2.0),
-                    maxTokens = form.maxTokens.toIntOrNull()?.coerceAtLeast(1),
-                    contextMessageLimit = form.contextMessageLimit.toIntOrNull()?.coerceIn(1, 60) ?: 12,
-                    isActive = form.isActive,
-                    createdAt = 0L,
-                    updatedAt = 0L
-                )
-            )
+            aiRepository.validateProviderForm(form)?.let { message ->
+                _providerStatusMessage.value = message
+                return@launch
+            }
+            providerRepository.saveProvider(aiRepository.normalizeProviderRecord(form))
             aiSettingsManager.setAiEnabled(true)
+            _providerStatusMessage.value = aiRepository.providerConfigWarning(form)
+                ?.let { "Provider 已保存。$it" }
+                ?: "Provider 已保存"
         }
     }
 
@@ -87,6 +89,46 @@ class ProfileViewModel @Inject constructor(
         }
     }
 
+    fun fetchModels(form: AiProviderForm) {
+        viewModelScope.launch {
+            _isProviderBusy.value = true
+            _providerStatusMessage.value = null
+            aiRepository.listModels(form)
+                .onSuccess { models ->
+                    _fetchedModels.value = models
+                    _providerStatusMessage.value = if (models.isEmpty()) {
+                        "接口可访问，但没有返回模型列表；你仍然可以手动填写模型名"
+                    } else {
+                        "已获取 ${models.size} 个模型"
+                    }
+                }
+                .onFailure { throwable ->
+                    _providerStatusMessage.value = throwable.message ?: "获取模型列表失败"
+                }
+            _isProviderBusy.value = false
+        }
+    }
+
+    fun testProvider(form: AiProviderForm) {
+        viewModelScope.launch {
+            _isProviderBusy.value = true
+            _providerStatusMessage.value = null
+            aiRepository.testProvider(form)
+                .onSuccess { result ->
+                    if (result.models.isNotEmpty()) _fetchedModels.value = result.models
+                    _providerStatusMessage.value = result.message
+                }
+                .onFailure { throwable ->
+                    _providerStatusMessage.value = throwable.message ?: "连接测试失败"
+                }
+            _isProviderBusy.value = false
+        }
+    }
+
+    fun clearProviderStatus() {
+        _providerStatusMessage.value = null
+    }
+
     fun logout() {
         viewModelScope.launch {
             _isLoading.value = true
@@ -99,12 +141,4 @@ class ProfileViewModel @Inject constructor(
         }
     }
 
-    private fun normalizeBaseUrl(raw: String, type: AIProviderType): String {
-        val trimmed = raw.trim().trimEnd('/')
-        if (trimmed.isNotBlank()) return trimmed
-        return when (type) {
-            AIProviderType.OPENAI_COMPATIBLE -> AISettingsManager.DEFAULT_API_URL
-            AIProviderType.ANTHROPIC_COMPATIBLE -> "https://api.anthropic.com/v1"
-        }
-    }
 }
