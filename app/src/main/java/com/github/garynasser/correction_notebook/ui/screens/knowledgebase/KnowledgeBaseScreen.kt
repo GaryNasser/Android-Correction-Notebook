@@ -12,6 +12,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -468,8 +469,8 @@ private fun FileManagementPage(
         .ifBlank { "知识库" }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)) {
-            Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+        Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f)) {
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -546,7 +547,7 @@ private fun FileManagementPage(
                 }
 
                 if (isSearchExpanded) {
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
                         value = uiState.localSearchQuery,
                         onValueChange = onLocalSearchChanged,
@@ -558,7 +559,7 @@ private fun FileManagementPage(
                 }
 
                 if (isSelectionMode) {
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -588,7 +589,8 @@ private fun FileManagementPage(
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(bottom = 88.dp)
         ) {
             item {
                 SectionTitle(currentFolderPath)
