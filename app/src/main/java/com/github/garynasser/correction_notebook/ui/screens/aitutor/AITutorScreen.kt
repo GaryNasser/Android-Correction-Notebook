@@ -1,5 +1,6 @@
 package com.github.garynasser.correction_notebook.ui.screens.aitutor
 
+import androidx.compose.foundation.BorderStroke
 import android.util.Base64
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardActions
@@ -59,6 +61,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -83,6 +86,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.github.garynasser.correction_notebook.data.model.ai.AIProviderType
 import com.github.garynasser.correction_notebook.data.model.ai.AiProviderForm
 import com.github.garynasser.correction_notebook.data.repository.ProviderRecord
+import com.github.garynasser.correction_notebook.ui.components.FreshScreen
 import java.nio.charset.StandardCharsets
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -104,6 +108,10 @@ fun AITutorScreen(
             TopAppBar(
                 title = { Text("AI 学习中枢") },
                 windowInsets = WindowInsets(0, 0, 0, 0),
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0.92f),
+                    scrolledContainerColor = MaterialTheme.colorScheme.surface
+                ),
                 actions = {
                     IconButton(onClick = { viewModel.newSession() }) {
                         Icon(Icons.Default.Add, contentDescription = "新建对话")
@@ -146,10 +154,13 @@ fun AITutorScreen(
             )
         }
     ) { innerPadding ->
-        Column(
+        FreshScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+        ) {
+        Column(
+            modifier = Modifier.fillMaxSize()
         ) {
             if (!uiState.isConfigured) {
                 EmptyAiState(onConfigure = { showProviderDialog = true })
@@ -183,7 +194,11 @@ fun AITutorScreen(
                     ErrorBanner(message = errorMessage, onDismiss = viewModel::clearError)
                 }
 
-                Surface(modifier = Modifier.fillMaxWidth(), tonalElevation = 3.dp) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                    tonalElevation = 3.dp
+                ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -226,6 +241,7 @@ fun AITutorScreen(
                     }
                 }
             }
+        }
         }
     }
 
@@ -328,8 +344,9 @@ private fun AiTutorHeader(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 6.dp),
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        shape = MaterialTheme.shapes.medium
+        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.66f),
+        shape = MaterialTheme.shapes.large,
+        tonalElevation = 1.dp
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
@@ -461,8 +478,13 @@ fun ChatMessageItem(message: ChatUiMessage) {
             Spacer(modifier = Modifier.width(8.dp))
         }
         Surface(
-            shape = MaterialTheme.shapes.medium,
-            color = if (message.isUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+            shape = MaterialTheme.shapes.large,
+            color = if (message.isUser) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)
+            },
+            tonalElevation = if (message.isUser) 0.dp else 1.dp,
             modifier = Modifier
                 .fillMaxWidth(if (message.isUser) 0.78f else 0.86f)
                 .widthIn(max = 560.dp)
@@ -994,8 +1016,13 @@ private fun katexHtml(formula: String, displayMode: Boolean): String {
 private fun Avatar(isUser: Boolean) {
     Surface(
         modifier = Modifier.size(32.dp),
-        shape = MaterialTheme.shapes.small,
-        color = if (isUser) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.primaryContainer
+        shape = CircleShape,
+        color = if (isUser) {
+            MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.76f)
+        } else {
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.86f)
+        },
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(

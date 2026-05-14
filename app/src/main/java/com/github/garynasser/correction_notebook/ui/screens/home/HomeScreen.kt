@@ -27,6 +27,11 @@ import com.github.garynasser.correction_notebook.data.model.home.Article
 import com.github.garynasser.correction_notebook.data.model.home.ImportDecision
 import com.github.garynasser.correction_notebook.data.model.home.PlannerTab
 import com.github.garynasser.correction_notebook.data.model.home.TimerState
+import com.github.garynasser.correction_notebook.ui.components.FreshCard
+import com.github.garynasser.correction_notebook.ui.components.FreshGradientCard
+import com.github.garynasser.correction_notebook.ui.components.FreshScreen
+import com.github.garynasser.correction_notebook.ui.components.MetricTile
+import com.github.garynasser.correction_notebook.ui.components.SectionHeader
 import com.github.garynasser.correction_notebook.ui.screens.statistics.StatisticsScreen
 import com.github.garynasser.correction_notebook.ui.screens.statistics.StatisticsViewModel
 import java.time.LocalDate
@@ -109,8 +114,18 @@ fun HomeScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("BITStudy") },
+                title = {
+                    Text(
+                        "BITStudy",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                },
                 windowInsets = WindowInsets(0, 0, 0, 0),
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0.92f),
+                    scrolledContainerColor = MaterialTheme.colorScheme.surface
+                ),
                 actions = {
                     IconButton(onClick = { homeViewModel.showStatistics() }) {
                         Icon(Icons.Default.BarChart, contentDescription = "统计")
@@ -122,24 +137,30 @@ fun HomeScreen(
             )
         }
     ) { innerPadding ->
-        LazyColumn(
+        FreshScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+        ) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            item { Spacer(modifier = Modifier.height(8.dp)) }
+            item { Spacer(modifier = Modifier.height(10.dp)) }
 
-            // Current Time Card (1/3 screen height)
             item {
                 CurrentTimeCard(
                     timerState = timerState,
+                    todayMinutes = uiState.todayStudyMinutes,
+                    completedPomodoros = uiState.completedPomodoros,
+                    scheduleCount = uiState.scheduleSections.sumOf { it.items.size },
+                    todoCount = uiState.todoItems.count { !it.isCompleted },
                     onImmersiveModeClick = { homeViewModel.showModeSelector() }
                 )
             }
 
-            // Date Selector
             item {
                 DateSelector(
                     selectedDate = uiState.selectedDate,
@@ -147,12 +168,18 @@ fun HomeScreen(
                 )
             }
 
-            // Quick Stats Preview
             item {
                 QuickStatsPreview(
                     todayMinutes = uiState.todayStudyMinutes,
                     completedPomodoros = uiState.completedPomodoros,
                     onClick = { homeViewModel.showStatistics() }
+                )
+            }
+
+            item {
+                SectionHeader(
+                    title = "AI 学习建议",
+                    subtitle = "结合日程、待办和学习记录给你一个轻提醒"
                 )
             }
 
@@ -181,6 +208,7 @@ fun HomeScreen(
             }
 
             item { Spacer(modifier = Modifier.height(80.dp)) }
+        }
         }
     }
 
@@ -292,10 +320,9 @@ private fun AiStudyAdviceCard(
     isLoading: Boolean,
     onGenerate: () -> Unit
 ) {
-    Card(
+    FreshCard(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-        shape = RoundedCornerShape(16.dp)
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -305,7 +332,7 @@ private fun AiStudyAdviceCard(
                 Icon(Icons.Default.Psychology, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "今日 AI 学习建议",
+                    text = "今日建议",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f)
@@ -348,6 +375,10 @@ private fun saveBackgroundImageToAppStorage(context: Context, sourceUri: Uri): S
 @Composable
 fun CurrentTimeCard(
     timerState: TimerState,
+    todayMinutes: Int,
+    completedPomodoros: Int,
+    scheduleCount: Int,
+    todoCount: Int,
     onImmersiveModeClick: () -> Unit
 ) {
     val currentTime = remember { mutableStateOf(java.time.LocalTime.now()) }
@@ -359,64 +390,94 @@ fun CurrentTimeCard(
         }
     }
 
-    Card(
+    FreshGradientCard(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 180.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer
-        ),
-        shape = RoundedCornerShape(20.dp)
+            .heightIn(min = 188.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .padding(22.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Text(
-                text = currentTime.value.format(DateTimeFormatter.ofPattern("HH:mm:ss")),
-                fontSize = 64.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
-            )
-            Text(
-                text = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日 E")),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = "今天的学习节奏",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f)
+                )
+                Text(
+                    text = currentTime.value.format(DateTimeFormatter.ofPattern("HH:mm:ss")),
+                    fontSize = 52.sp,
+                    fontWeight = FontWeight.Bold,
+                    lineHeight = 56.sp,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                Text(
+                    text = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日 E")),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f)
+                )
+            }
 
-            // Show timer status if running
-            if (timerState !is TimerState.Idle) {
-                Spacer(modifier = Modifier.height(12.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.62f)
                 ) {
-                    Icon(
-                        Icons.Default.Timer,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = when (timerState) {
-                            is TimerState.Pomodoro -> "番茄钟运行中"
-                            is TimerState.Countdown -> "倒计时运行中"
-                            is TimerState.Stopwatch -> "计时中"
-                            else -> ""
+                        text = buildString {
+                            append("今日 ")
+                            append(formatMinutesToDisplay(todayMinutes))
+                            append(" · ")
+                            append(completedPomodoros)
+                            append(" 个番茄钟")
                         },
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f)
                     )
+                }
+                FilledTonalButton(onClick = onImmersiveModeClick) {
+                    Icon(Icons.Default.Fullscreen, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("专注")
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
-            FilledTonalButton(onClick = onImmersiveModeClick) {
-                Icon(Icons.Default.Fullscreen, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("进入沉浸模式")
+            Text(
+                text = "还有 $scheduleCount 个日程 · $todoCount 个待办，先从最小的一步开始。",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f)
+            )
+
+            if (timerState !is TimerState.Idle) {
+                AssistChip(
+                    onClick = onImmersiveModeClick,
+                    leadingIcon = {
+                        Icon(
+                            Icons.Default.Timer,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    },
+                    label = {
+                        Text(
+                            when (timerState) {
+                                is TimerState.Pomodoro -> "番茄钟运行中"
+                                is TimerState.Countdown -> "倒计时运行中"
+                                is TimerState.Stopwatch -> "计时中"
+                                else -> ""
+                            }
+                        )
+                    }
+                )
             }
         }
     }
@@ -474,69 +535,31 @@ fun QuickStatsPreview(
     completedPomodoros: Int,
     onClick: () -> Unit
 ) {
-    Card(
+    FreshCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.secondaryContainer
-        )
+        containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.62f)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
+                .padding(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Icon(
-                    Icons.Default.Timer,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = formatMinutesToDisplay(todayMinutes),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "今日学习",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
-                )
-            }
-
-            Divider(
-                modifier = Modifier
-                    .height(48.dp)
-                    .width(1.dp),
-                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.2f)
+            MetricTile(
+                icon = Icons.Default.Timer,
+                value = formatMinutesToDisplay(todayMinutes),
+                label = "今日学习",
+                modifier = Modifier.weight(1f)
             )
-
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Icon(
-                    Icons.Default.EmojiEvents,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "$completedPomodoros",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "番茄钟",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
-                )
-            }
+            MetricTile(
+                icon = Icons.Default.EmojiEvents,
+                value = "$completedPomodoros",
+                label = "番茄钟",
+                modifier = Modifier.weight(1f)
+            )
         }
     }
 }
