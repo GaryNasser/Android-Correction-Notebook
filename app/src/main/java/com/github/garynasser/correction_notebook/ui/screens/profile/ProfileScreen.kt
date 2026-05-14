@@ -18,6 +18,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.github.garynasser.correction_notebook.data.model.auth.AuthState
 import com.github.garynasser.correction_notebook.ui.screens.aitutor.AITutorUiState
 import com.github.garynasser.correction_notebook.ui.screens.aitutor.ProviderDialog
+import com.github.garynasser.correction_notebook.ui.components.FreshCard
+import com.github.garynasser.correction_notebook.ui.components.FreshScreen
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,20 +46,28 @@ fun ProfileScreen(
         topBar = {
             TopAppBar(
                 title = { Text("个人中心") },
-                windowInsets = WindowInsets(0, 0, 0, 0)
+                windowInsets = WindowInsets(0, 0, 0, 0),
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0.92f),
+                    scrolledContainerColor = MaterialTheme.colorScheme.surface
+                )
             )
         }
     ) { innerPadding ->
-        LazyColumn(
+        FreshScreen(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding),
+                .padding(innerPadding)
+        ) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize(),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             // 用户信息卡片
             item {
-                Card(
+                FreshCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable {
@@ -129,7 +139,7 @@ fun ProfileScreen(
 
             // AI 功能开关
             item {
-                Card(
+                FreshCard(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     ListItem(
@@ -170,7 +180,7 @@ fun ProfileScreen(
 
             // 设置列表
             item {
-                Card(
+                FreshCard(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column {
@@ -199,6 +209,7 @@ fun ProfileScreen(
             }
 
             item { Spacer(modifier = Modifier.height(80.dp)) }
+        }
         }
     }
 

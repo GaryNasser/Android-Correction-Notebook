@@ -13,6 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -22,6 +23,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.SubcomposeAsyncImage
 import com.github.garynasser.correction_notebook.data.model.yanhe.Course
+import com.github.garynasser.correction_notebook.ui.components.FreshScreen
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -56,6 +58,10 @@ fun CourseListScreen(
             TopAppBar(
                 title = { Text(text = "课程资源", fontWeight = FontWeight.Bold) },
                 windowInsets = WindowInsets(0, 0, 0, 0),
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0.92f),
+                    scrolledContainerColor = MaterialTheme.colorScheme.surface
+                ),
                 actions = {
                     IconButton(onClick = { viewModel.toggleCourseMode() }) {
                         Icon(
@@ -77,7 +83,8 @@ fun CourseListScreen(
             )
         }
     ) { innerPadding ->
-        Column(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
+        FreshScreen(modifier = Modifier.padding(innerPadding)) {
+        Column(modifier = Modifier.fillMaxSize()) {
             // 搜索与下拉框区域
             SearchAndFilterSection(viewModel)
 
@@ -121,13 +128,22 @@ fun CourseListScreen(
                 }
             }
         }
+        }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchAndFilterSection(viewModel: CourseListViewModel) {
-    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f),
+        tonalElevation = 1.dp
+    ) {
+    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         OutlinedTextField(
             value = viewModel.searchQuery,
             onValueChange = { viewModel.searchQuery = it },
@@ -170,6 +186,7 @@ fun SearchAndFilterSection(viewModel: CourseListViewModel) {
             }
         }
     }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -178,14 +195,32 @@ fun CourseCard(
     course: Course,
     onCourseCardClick: (Int) -> Unit
 ) {
-    ElevatedCard(
+    Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)
+        ),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         onClick = { onCourseCardClick(course.id) }
     ) {
         Column {
             Box(
-                modifier = Modifier.fillMaxWidth().height(100.dp).background(MaterialTheme.colorScheme.primaryContainer),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(110.dp)
+                    .background(
+                        Brush.linearGradient(
+                            listOf(
+                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.78f),
+                                MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.62f)
+                            )
+                        )
+                    ),
                 contentAlignment = Alignment.Center
             ) {
                 SubcomposeAsyncImage(
@@ -199,7 +234,21 @@ fun CourseCard(
                         }
                     },
                     error = {
-                        Icon(Icons.Default.PlayCircleOutline, contentDescription = null, tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
+                        Surface(
+                            shape = MaterialTheme.shapes.large,
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.48f),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                            )
+                        ) {
+                            Icon(
+                                Icons.Default.PlayCircleOutline,
+                                contentDescription = null,
+                                modifier = Modifier.padding(16.dp),
+                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.62f)
+                            )
+                        }
                     }
                 )
             }
