@@ -68,6 +68,8 @@ import com.github.garynasser.correction_notebook.data.model.home.ScheduleRange
 import com.github.garynasser.correction_notebook.data.model.home.ScheduleSection
 import com.github.garynasser.correction_notebook.data.model.home.ScheduleSourceType
 import com.github.garynasser.correction_notebook.data.model.home.TodoItem
+import com.github.garynasser.correction_notebook.ui.components.FreshCard
+import com.github.garynasser.correction_notebook.ui.components.SectionHeader
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -89,12 +91,9 @@ fun PlannerSection(
     onDeleteTodo: (String) -> Unit,
     onDeleteSchedule: (String) -> Unit
 ) {
-    Card(
+    FreshCard(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        shape = RoundedCornerShape(20.dp)
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)
     ) {
         Column(
             modifier = Modifier
@@ -102,10 +101,9 @@ fun PlannerSection(
                 .padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text(
-                text = "规划区",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
+            SectionHeader(
+                title = "今日规划",
+                subtitle = "把课程、日程和待办放到同一条学习节奏里"
             )
 
             SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {

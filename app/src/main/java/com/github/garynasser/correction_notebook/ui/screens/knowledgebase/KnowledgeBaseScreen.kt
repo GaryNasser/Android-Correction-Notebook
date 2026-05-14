@@ -49,6 +49,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -73,6 +75,7 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -96,6 +99,7 @@ import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitSha
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.KnowledgeBaseFileSummary
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.KnowledgeBaseFolderChoice
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.KnowledgeBaseFolderSummary
+import com.github.garynasser.correction_notebook.ui.components.FreshScreen
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -315,6 +319,10 @@ fun KnowledgeBaseScreen(
             TopAppBar(
                 title = { Text("知识库") },
                 windowInsets = WindowInsets(0, 0, 0, 0),
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0.92f),
+                    scrolledContainerColor = MaterialTheme.colorScheme.surface
+                ),
                 actions = {
                     if (uiState.selectedTabIndex == 1) {
                         IconButton(onClick = { viewModel.searchRemoteResources() }) {
@@ -333,10 +341,13 @@ fun KnowledgeBaseScreen(
             }
         }
     ) { innerPadding ->
-        Column(
+        FreshScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+        ) {
+        Column(
+            modifier = Modifier.fillMaxSize()
         ) {
             TabRow(selectedTabIndex = uiState.selectedTabIndex) {
                 listOf("文件管理", "BITShare 下载").forEachIndexed { index, title ->
@@ -431,6 +442,7 @@ fun KnowledgeBaseScreen(
                 )
             }
         }
+        }
     }
 }
 
@@ -469,8 +481,8 @@ private fun FileManagementPage(
         .ifBlank { "知识库" }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f)) {
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
+        Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f)) {
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp)) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -589,7 +601,7 @@ private fun FileManagementPage(
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(bottom = 88.dp)
         ) {
             item {
@@ -682,8 +694,8 @@ private fun BitSharePage(
 
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-                color = MaterialTheme.colorScheme.errorContainer,
-                shape = MaterialTheme.shapes.medium
+                color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.58f),
+                shape = MaterialTheme.shapes.large
             ) {
                 Row(
                     modifier = Modifier.padding(12.dp),
@@ -693,12 +705,12 @@ private fun BitSharePage(
                     Icon(
                         Icons.Default.Warning,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onErrorContainer
+                        tint = MaterialTheme.colorScheme.onTertiaryContainer
                     )
                     Text(
-                        text = "⚠️ 仅支持 BIT 校园网内网访问，请在连接校园 WiFi 或 VPN 后使用",
+                        text = "仅支持 BIT 校园网内网访问，请在连接校园 WiFi 或 VPN 后使用",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onErrorContainer
+                        color = MaterialTheme.colorScheme.onTertiaryContainer
                     )
                 }
             }
@@ -762,11 +774,16 @@ private fun FolderRow(
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
-    ElevatedCard(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
-            .clickable(onClick = onClick)
+            .clickable(onClick = onClick),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         ListItem(
             headlineContent = { Text(folder.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
@@ -821,11 +838,20 @@ private fun FileRow(
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
-    ElevatedCard(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
-            .clickable(onClick = if (isSelectionMode) onToggleSelected else onOpen)
+            .clickable(onClick = if (isSelectionMode) onToggleSelected else onOpen),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = if (isSelected) {
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.76f)
+            } else {
+                MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)
+            }
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         ListItem(
             headlineContent = {
@@ -914,11 +940,16 @@ private fun RemoteResultRow(
 ) {
     val isFolder = result.entityType == "folder"
 
-    ElevatedCard(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
-            .clickable(onClick = onClick)
+            .clickable(onClick = onClick),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         ListItem(
             headlineContent = {
@@ -1212,7 +1243,18 @@ private fun EmptyStateCard(
             .padding(24.dp),
         contentAlignment = Alignment.Center
     ) {
-        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.large,
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
+            ),
+            border = androidx.compose.foundation.BorderStroke(
+                1.dp,
+                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        ) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Text(text = title, style = MaterialTheme.typography.titleMedium)
                 Spacer(modifier = Modifier.height(8.dp))
