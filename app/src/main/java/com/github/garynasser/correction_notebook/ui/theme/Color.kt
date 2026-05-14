@@ -2,22 +2,27 @@ package com.github.garynasser.correction_notebook.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Teal tones for light theme
-val Teal80 = Color(0xFF4FD8EB)
-val Teal40 = Color(0xFF006781)
+val CampusMint = Color(0xFF2F8F7B)
+val CampusMintDark = Color(0xFF91DDCD)
+val CampusSky = Color(0xFF3B8EA5)
+val CampusLeaf = Color(0xFF5AA981)
+val CampusCream = Color(0xFFFFF8EE)
 
-// Sea Green tones for secondary
-val SeaGreen80 = Color(0xFF7CF5C2)
-val SeaGreen40 = Color(0xFF006A40)
-
-// Light theme colors
-val LightBackground = Color(0xFFFAFDFB)
+val LightBackground = Color(0xFFF6FBF8)
 val LightSurface = Color(0xFFFFFFFF)
-val LightOnBackground = Color(0xFF191C1B)
-val LightOnSurface = Color(0xFF191C1B)
+val LightSurfaceVariant = Color(0xFFE8F2EE)
+val LightPrimaryContainer = Color(0xFFDDF4EC)
+val LightSecondaryContainer = Color(0xFFE8F6FA)
+val LightTertiaryContainer = Color(0xFFFFEFD8)
+val LightOnBackground = Color(0xFF17211F)
+val LightOnSurface = Color(0xFF17211F)
+val LightOutline = Color(0xFF6F827D)
 
-// Dark theme colors
-val DarkBackground = Color(0xFF191C1B)
-val DarkSurface = Color(0xFF191C1B)
-val DarkOnBackground = Color(0xFFFAFDFB)
-val DarkOnSurface = Color(0xFFFAFDFB)
+val DarkBackground = Color(0xFF101816)
+val DarkSurface = Color(0xFF17211F)
+val DarkSurfaceVariant = Color(0xFF344A45)
+val DarkPrimaryContainer = Color(0xFF0D4D41)
+val DarkSecondaryContainer = Color(0xFF164D5C)
+val DarkTertiaryContainer = Color(0xFF5B3E16)
+val DarkOnBackground = Color(0xFFEAF4F0)
+val DarkOnSurface = Color(0xFFEAF4F0)
