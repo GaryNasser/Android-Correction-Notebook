@@ -414,6 +414,21 @@ class KnowledgeBaseViewModel @Inject constructor(
         }
     }
 
+    fun updateFileLearningContext(
+        fileId: String,
+        courseId: Int?,
+        courseName: String?,
+        tags: List<String>
+    ) {
+        viewModelScope.launch {
+            isLocalBusy.value = true
+            knowledgeBaseRepository.updateFileLearningContext(fileId, courseId, courseName, tags)
+                .onSuccess { snackbarMessage.value = "已更新资料学习信息" }
+                .onFailure { snackbarMessage.value = it.message ?: "更新失败" }
+            isLocalBusy.value = false
+        }
+    }
+
     fun deleteFiles(fileIds: Set<String>) {
         if (fileIds.isEmpty()) return
         viewModelScope.launch {
