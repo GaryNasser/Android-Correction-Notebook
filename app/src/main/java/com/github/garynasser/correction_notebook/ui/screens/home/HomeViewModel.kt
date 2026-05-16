@@ -8,6 +8,7 @@ import com.github.garynasser.correction_notebook.data.model.home.IcsImportPrevie
 import com.github.garynasser.correction_notebook.data.model.home.ImportDecision
 import com.github.garynasser.correction_notebook.data.model.home.PlannerTab
 import com.github.garynasser.correction_notebook.data.model.home.PomodoroSettings
+import com.github.garynasser.correction_notebook.data.model.home.Priority
 import com.github.garynasser.correction_notebook.data.model.home.ScheduleEvent
 import com.github.garynasser.correction_notebook.data.model.home.ScheduleOccurrence
 import com.github.garynasser.correction_notebook.data.model.home.ScheduleRange
@@ -16,8 +17,13 @@ import com.github.garynasser.correction_notebook.data.model.home.SessionType
 import com.github.garynasser.correction_notebook.data.model.home.StudySession
 import com.github.garynasser.correction_notebook.data.model.home.TodoHistoryItem
 import com.github.garynasser.correction_notebook.data.model.home.TodoItem
+import com.github.garynasser.correction_notebook.data.model.home.TodoSource
+import com.github.garynasser.correction_notebook.data.model.knowledgebase.KnowledgeBaseFileSummary
+import com.github.garynasser.correction_notebook.data.model.yanhe.CourseProgress
 import com.github.garynasser.correction_notebook.data.repository.ArticleRepository
+import com.github.garynasser.correction_notebook.data.repository.CourseLearningRepository
 import com.github.garynasser.correction_notebook.data.repository.IcsImportRepository
+import com.github.garynasser.correction_notebook.data.repository.KnowledgeBaseRepository
 import com.github.garynasser.correction_notebook.data.repository.ScheduleRepository
 import com.github.garynasser.correction_notebook.data.repository.StudySessionRepository
 import com.github.garynasser.correction_notebook.data.repository.TodoHistoryRepository
@@ -46,6 +52,8 @@ data class HomeUiState(
     val articleErrorMessage: String? = null,
     val todayStudyMinutes: Int = 0,
     val completedPomodoros: Int = 0,
+    val recentCourseProgress: List<CourseProgress> = emptyList(),
+    val recentKnowledgeFiles: List<KnowledgeBaseFileSummary> = emptyList(),
     val plannerTab: PlannerTab = PlannerTab.SCHEDULE,
     val scheduleRange: ScheduleRange = ScheduleRange.TODAY,
     val scheduleSections: List<ScheduleSection> = emptyList(),
@@ -85,6 +93,8 @@ class HomeViewModel @Inject constructor(
     private val todoHistoryRepository: TodoHistoryRepository,
     private val scheduleRepository: ScheduleRepository,
     private val icsImportRepository: IcsImportRepository,
+    private val courseLearningRepository: CourseLearningRepository,
+    private val knowledgeBaseRepository: KnowledgeBaseRepository,
     private val aiStudyUseCase: AiStudyUseCase
 ) : ViewModel() {
 
@@ -168,6 +178,22 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             scheduleRepository.scheduleEvents.collect {
                 refreshScheduleSections()
+            }
+        }
+
+        viewModelScope.launch {
+            courseLearningRepository.progressItems.collect { progressItems ->
+                _uiState.value = _uiState.value.copy(
+                    recentCourseProgress = progressItems
+                        .sortedByDescending { it.lastAccessedAt }
+                        .take(3)
+                )
+            }
+        }
+
+        viewModelScope.launch {
+            knowledgeBaseRepository.observeRecentFiles(limit = 3).collect { files ->
+                _uiState.value = _uiState.value.copy(recentKnowledgeFiles = files)
             }
         }
 
@@ -295,6 +321,24 @@ class HomeViewModel @Inject constructor(
             aiTodoBreakdown = null,
             aiErrorMessage = null
         )
+    }
+
+    fun saveAdviceAsTodo(text: String) {
+        val normalized = text.trim()
+            .trimStart('-', '•', '*')
+            .trim()
+        if (normalized.isBlank()) return
+        viewModelScope.launch {
+            todoRepository.addTodo(
+                TodoItem(
+                    title = normalized.take(40),
+                    description = normalized,
+                    priority = Priority.MEDIUM,
+                    dueDate = LocalDate.now(),
+                    source = TodoSource.AI_TODAY_ADVICE
+                )
+            )
+        }
     }
 
     fun showAddScheduleDialog() {
