@@ -33,7 +33,7 @@ data class KnowledgeBaseFileViewer(val fileId: String)
 object AITutor
 
 @Serializable
-data class VideoList(val courseId: Int)
+data class VideoList(val courseId: Int, val courseName: String = "")
 
 @Serializable
 data class VideoPlayer(val url: String)

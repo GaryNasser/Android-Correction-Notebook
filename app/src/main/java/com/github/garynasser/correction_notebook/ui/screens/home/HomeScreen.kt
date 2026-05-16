@@ -27,6 +27,8 @@ import com.github.garynasser.correction_notebook.data.model.home.Article
 import com.github.garynasser.correction_notebook.data.model.home.ImportDecision
 import com.github.garynasser.correction_notebook.data.model.home.PlannerTab
 import com.github.garynasser.correction_notebook.data.model.home.TimerState
+import com.github.garynasser.correction_notebook.data.model.knowledgebase.KnowledgeBaseFileSummary
+import com.github.garynasser.correction_notebook.data.model.yanhe.CourseProgress
 import com.github.garynasser.correction_notebook.ui.components.FreshCard
 import com.github.garynasser.correction_notebook.ui.components.FreshGradientCard
 import com.github.garynasser.correction_notebook.ui.components.FreshScreen
@@ -151,12 +153,14 @@ fun HomeScreen(
             item { Spacer(modifier = Modifier.height(10.dp)) }
 
             item {
-                CurrentTimeCard(
+                TodayStudyWorkbench(
                     timerState = timerState,
                     todayMinutes = uiState.todayStudyMinutes,
                     completedPomodoros = uiState.completedPomodoros,
-                    scheduleCount = uiState.scheduleSections.sumOf { it.items.size },
+                    scheduleCount = uiState.scheduleSections.firstOrNull()?.items?.size ?: 0,
                     todoCount = uiState.todoItems.count { !it.isCompleted },
+                    recentCourses = uiState.recentCourseProgress,
+                    recentFiles = uiState.recentKnowledgeFiles,
                     onImmersiveModeClick = { homeViewModel.showModeSelector() }
                 )
             }
@@ -187,7 +191,8 @@ fun HomeScreen(
                 AiStudyAdviceCard(
                     advice = uiState.aiAdvice,
                     isLoading = uiState.isAiAdviceLoading,
-                    onGenerate = { homeViewModel.generateTodayAdvice() }
+                    onGenerate = { homeViewModel.generateTodayAdvice() },
+                    onSaveAdvice = { homeViewModel.saveAdviceAsTodo(it) }
                 )
             }
 
@@ -318,7 +323,8 @@ fun HomeScreen(
 private fun AiStudyAdviceCard(
     advice: String?,
     isLoading: Boolean,
-    onGenerate: () -> Unit
+    onGenerate: () -> Unit,
+    onSaveAdvice: (String) -> Unit
 ) {
     FreshCard(
         modifier = Modifier.fillMaxWidth(),
@@ -345,13 +351,48 @@ private fun AiStudyAdviceCard(
                     }
                 }
             }
-            Text(
-                text = advice ?: "结合今日日程、待办和学习记录，生成 3-5 条可执行建议。",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = if (advice == null) 0.72f else 1f)
-            )
+            if (advice.isNullOrBlank()) {
+                Text(
+                    text = "结合今日日程、待办和学习记录，生成 3-5 条可执行建议。AI 未配置时，课表、待办、资料和计时功能仍然可用。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f)
+                )
+            } else {
+                adviceLines(advice).forEach { line ->
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.38f)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = line,
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f)
+                            )
+                            TextButton(onClick = { onSaveAdvice(line) }) {
+                                Icon(Icons.Default.AddTask, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("转待办")
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
+}
+
+private fun adviceLines(advice: String): List<String> {
+    return advice.lines()
+        .map { it.trim().trimStart('-', '•', '*').trim() }
+        .filter { it.isNotBlank() }
+        .take(5)
+        .ifEmpty { listOf(advice.trim()) }
 }
 
 private fun saveBackgroundImageToAppStorage(context: Context, sourceUri: Uri): String? {
@@ -373,12 +414,14 @@ private fun saveBackgroundImageToAppStorage(context: Context, sourceUri: Uri): S
 }
 
 @Composable
-fun CurrentTimeCard(
+fun TodayStudyWorkbench(
     timerState: TimerState,
     todayMinutes: Int,
     completedPomodoros: Int,
     scheduleCount: Int,
     todoCount: Int,
+    recentCourses: List<CourseProgress>,
+    recentFiles: List<KnowledgeBaseFileSummary>,
     onImmersiveModeClick: () -> Unit
 ) {
     val currentTime = remember { mutableStateOf(java.time.LocalTime.now()) }
@@ -451,10 +494,11 @@ fun CurrentTimeCard(
                 }
             }
 
-            Text(
-                text = "还有 $scheduleCount 个日程 · $todoCount 个待办，先从最小的一步开始。",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f)
+            TodaySummaryGrid(
+                scheduleCount = scheduleCount,
+                todoCount = todoCount,
+                recentCourses = recentCourses,
+                recentFiles = recentFiles
             )
 
             if (timerState !is TimerState.Idle) {
@@ -477,6 +521,80 @@ fun CurrentTimeCard(
                             }
                         )
                     }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TodaySummaryGrid(
+    scheduleCount: Int,
+    todoCount: Int,
+    recentCourses: List<CourseProgress>,
+    recentFiles: List<KnowledgeBaseFileSummary>
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            WorkbenchChip(
+                icon = Icons.Default.Event,
+                label = "今日课程/日程",
+                value = if (scheduleCount == 0) "待导入课表" else "$scheduleCount 项",
+                modifier = Modifier.weight(1f)
+            )
+            WorkbenchChip(
+                icon = Icons.Default.Checklist,
+                label = "待办",
+                value = if (todoCount == 0) "暂无压力" else "$todoCount 项",
+                modifier = Modifier.weight(1f)
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            WorkbenchChip(
+                icon = Icons.Default.School,
+                label = "继续学习",
+                value = recentCourses.firstOrNull()?.lastSectionTitle?.ifBlank { recentCourses.first().courseName } ?: "先看一节课",
+                modifier = Modifier.weight(1f)
+            )
+            WorkbenchChip(
+                icon = Icons.Default.FolderOpen,
+                label = "最近资料",
+                value = recentFiles.firstOrNull()?.displayName ?: "去 BITShare 找资料",
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun WorkbenchChip(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.heightIn(min = 58.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.58f)
+    ) {
+        Row(
+            modifier = Modifier.padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
+            Column {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.64f)
+                )
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
             }
         }

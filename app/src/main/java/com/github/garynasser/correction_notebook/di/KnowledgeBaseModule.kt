@@ -160,6 +160,21 @@ object KnowledgeBaseModule {
         }
     }
 
+    private val MIGRATION_3_4 = object : Migration(3, 4) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            if (!db.hasColumn("kb_file", "courseId")) {
+                db.execSQL("ALTER TABLE `kb_file` ADD COLUMN `courseId` INTEGER")
+            }
+            if (!db.hasColumn("kb_file", "courseName")) {
+                db.execSQL("ALTER TABLE `kb_file` ADD COLUMN `courseName` TEXT")
+            }
+            if (!db.hasColumn("kb_file", "tags")) {
+                db.execSQL("ALTER TABLE `kb_file` ADD COLUMN `tags` TEXT NOT NULL DEFAULT ''")
+            }
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_kb_file_courseId` ON `kb_file` (`courseId`)")
+        }
+    }
+
     @Provides
     @Singleton
     fun provideKnowledgeBaseDatabase(
@@ -170,7 +185,7 @@ object KnowledgeBaseModule {
             KnowledgeBaseDatabase::class.java,
             "knowledge_base.db"
         )
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
             .fallbackToDestructiveMigrationOnDowngrade()
             .build()
     }

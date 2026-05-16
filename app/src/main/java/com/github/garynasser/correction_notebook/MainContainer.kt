@@ -145,8 +145,8 @@ fun MainContainer(
                     onBack = { navController.popBackStack() }
                 )
             }
-            composable<CourseList> { CourseListScreen(onCourseCardClick = { courseId ->
-                navController.navigate(VideoList(courseId))
+            composable<CourseList> { CourseListScreen(onCourseCardClick = { courseId, courseName ->
+                navController.navigate(VideoList(courseId, courseName))
             }) }
             composable<AITutor> { AITutorScreen() }
             composable<KnowledgeBase> {

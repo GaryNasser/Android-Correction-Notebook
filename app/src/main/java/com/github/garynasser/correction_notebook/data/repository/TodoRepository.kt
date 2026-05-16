@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.github.garynasser.correction_notebook.data.model.home.Priority
 import com.github.garynasser.correction_notebook.data.model.home.TodoItem
+import com.github.garynasser.correction_notebook.data.model.home.TodoSource
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
@@ -87,7 +88,9 @@ class TodoRepository(private val context: Context) {
                 item.dueDate?.toString() ?: "",
                 item.isCompleted.toString(),
                 item.createdAt.toString(),
-                item.completedAt?.toString() ?: ""
+                item.completedAt?.toString() ?: "",
+                item.source.name,
+                item.sourceRefId ?: ""
             ).joinToString(":::")
         }
     }
@@ -105,7 +108,11 @@ class TodoRepository(private val context: Context) {
                     dueDate = if (parts[4].isNotBlank()) LocalDate.parse(parts[4]) else null,
                     isCompleted = parts[5].toBoolean(),
                     createdAt = parts[6].toLongOrNull() ?: System.currentTimeMillis(),
-                    completedAt = if (parts[7].isNotBlank()) parts[7].toLongOrNull() else null
+                    completedAt = if (parts[7].isNotBlank()) parts[7].toLongOrNull() else null,
+                    source = parts.getOrNull(8)?.let {
+                        runCatching { TodoSource.valueOf(it) }.getOrDefault(TodoSource.MANUAL)
+                    } ?: TodoSource.MANUAL,
+                    sourceRefId = parts.getOrNull(9)?.takeIf { it.isNotBlank() }
                 )
             } else null
         }
