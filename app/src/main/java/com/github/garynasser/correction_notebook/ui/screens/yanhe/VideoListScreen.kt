@@ -23,15 +23,18 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Camera
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -66,9 +69,8 @@ fun CourseVideoListScreen(
     onNavigateToPlayer: (String) -> Unit,
     onBackButtonClick: () -> Unit
 ) {
-    val context = LocalContext.current
     val assistantState by assistantViewModel.uiState.collectAsState()
-    var selectedSectionTitle by remember { mutableStateOf<String?>(null) }
+    var selectedSection by remember { mutableStateOf<CourseSection?>(null) }
     var noteInput by remember { mutableStateOf("") }
 
     LaunchedEffect(viewModel.playState) {
@@ -123,23 +125,39 @@ fun CourseVideoListScreen(
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(1),
                         contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
+                        item {
+                            CourseProgressHeader(
+                                progressPercent = viewModel.progress?.progressPercent ?: 0,
+                                lastTitle = viewModel.progress?.lastSectionTitle,
+                                completedCount = viewModel.progress?.completedCount ?: 0,
+                                totalCount = state.videos.size
+                            )
+                        }
                         items(state.videos) { video ->
+                            val isCompleted = viewModel.progress?.completedSectionIds?.contains(video.id) == true
                             VideoCard(
                                 section = video,
+                                isCompleted = isCompleted,
+                                onCompletedChange = { checked ->
+                                    viewModel.setSectionCompleted(video, checked)
+                                },
                                 onAiAssistantClick = { sectionTitle ->
-                                    selectedSectionTitle = sectionTitle
+                                    selectedSection = video
                                     noteInput = ""
                                 },
                                 onCameraPlayClick = { videos ->
                                     Log.i("VIDEO", "Play btn pressed")
                                     if (videos.isNotEmpty()) {
+                                        viewModel.recordWatch(video, videos[0].mainUrl)
                                         onNavigateToPlayer(videos[0].mainUrl)
                                     }
                                 },
                                 onScreenPlayClick = {videos ->
                                     Log.i("VIDEO", "Play btn pressed")
                                     if (videos.isNotEmpty()) {
+                                        viewModel.recordWatch(video, videos[0].vgaUrl)
                                         onNavigateToPlayer(videos[0].vgaUrl)
                                     }
                                 }
@@ -152,16 +170,16 @@ fun CourseVideoListScreen(
         }
     }
 
-    selectedSectionTitle?.let { title ->
+    selectedSection?.let { section ->
         AlertDialog(
             onDismissRequest = {
-                selectedSectionTitle = null
+                selectedSection = null
                 assistantViewModel.clear()
             },
             title = { Text("课程助手") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(title, style = MaterialTheme.typography.titleSmall)
+                    Text(section.title, style = MaterialTheme.typography.titleSmall)
                     OutlinedTextField(
                         value = noteInput,
                         onValueChange = { noteInput = it },
@@ -184,14 +202,29 @@ fun CourseVideoListScreen(
                 }
             },
             confirmButton = {
-                TextButton(
-                    onClick = { assistantViewModel.summarize(title, noteInput) },
-                    enabled = !assistantState.isLoading
-                ) { Text(if (assistantState.result == null) "生成" else "重新生成") }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (assistantState.result != null) {
+                        TextButton(onClick = {
+                            assistantViewModel.saveResultAsNote(
+                                viewModel.courseId,
+                                viewModel.courseName,
+                                section.id,
+                                section.title
+                            )
+                        }) { Text("存笔记") }
+                        TextButton(onClick = {
+                            assistantViewModel.saveResultAsTodo(viewModel.courseId, section.title)
+                        }) { Text("转待办") }
+                    }
+                    TextButton(
+                        onClick = { assistantViewModel.summarize(section.title, noteInput) },
+                        enabled = !assistantState.isLoading
+                    ) { Text(if (assistantState.result == null) "生成" else "重新生成") }
+                }
             },
             dismissButton = {
                 TextButton(onClick = {
-                    selectedSectionTitle = null
+                    selectedSection = null
                     assistantViewModel.clear()
                 }) { Text("关闭") }
             }
@@ -202,6 +235,8 @@ fun CourseVideoListScreen(
 @Composable
 fun VideoCard(
     section: CourseSection,
+    isCompleted: Boolean,
+    onCompletedChange: (Boolean) -> Unit,
     onAiAssistantClick: (String) -> Unit,
     onCameraPlayClick: (List<Video>) -> Unit,
     onScreenPlayClick: (List<Video>) -> Unit,
@@ -245,6 +280,11 @@ fun VideoCard(
 
             val hasVideo = section.videos.isNotEmpty()
 
+            Checkbox(
+                checked = isCompleted,
+                onCheckedChange = onCompletedChange
+            )
+
             FilledIconButton(
                 onClick = { onAiAssistantClick(timeInfo) },
                 modifier = Modifier.size(48.dp),
@@ -279,6 +319,48 @@ fun VideoCard(
                     contentDescription = "播放屏幕录像"
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun CourseProgressHeader(
+    progressPercent: Int,
+    lastTitle: String?,
+    completedCount: Int,
+    totalCount: Int
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.School, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    "课程进度",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
+                )
+                Text("$completedCount/$totalCount")
+            }
+            LinearProgressIndicator(
+                progress = { progressPercent / 100f },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Text(
+                text = lastTitle?.takeIf { it.isNotBlank() }?.let { "上次看到：$it" } ?: "播放任意章节后会记录继续学习位置",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

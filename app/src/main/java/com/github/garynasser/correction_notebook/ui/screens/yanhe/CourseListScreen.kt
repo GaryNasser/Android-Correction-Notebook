@@ -30,7 +30,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun CourseListScreen(
     viewModel: CourseListViewModel = hiltViewModel(),
-    onCourseCardClick: (Int) -> Unit
+    onCourseCardClick: (Int, String) -> Unit
 ) {
     val scope = rememberCoroutineScope()
     val gridState = rememberLazyGridState()
@@ -193,7 +193,7 @@ fun SearchAndFilterSection(viewModel: CourseListViewModel) {
 @Composable
 fun CourseCard(
     course: Course,
-    onCourseCardClick: (Int) -> Unit
+    onCourseCardClick: (Int, String) -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -206,7 +206,7 @@ fun CourseCard(
             MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        onClick = { onCourseCardClick(course.id) }
+        onClick = { onCourseCardClick(course.id, course.nameZh) }
     ) {
         Column {
             Box(

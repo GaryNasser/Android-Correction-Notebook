@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.DriveFileMove
 import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
@@ -143,6 +144,7 @@ fun KnowledgeBaseScreen(
     var fileToRename by remember { mutableStateOf<KnowledgeBaseFileSummary?>(null) }
     var fileToDelete by remember { mutableStateOf<KnowledgeBaseFileSummary?>(null) }
     var fileToMove by remember { mutableStateOf<KnowledgeBaseFileSummary?>(null) }
+    var fileToContext by remember { mutableStateOf<KnowledgeBaseFileSummary?>(null) }
     var showBatchMovePicker by remember { mutableStateOf(false) }
     var showBatchDeleteConfirm by remember { mutableStateOf(false) }
     var showDownloadFolderPicker by rememberSaveable { mutableStateOf(false) }
@@ -246,6 +248,17 @@ fun KnowledgeBaseScreen(
             onSelect = { folderId ->
                 viewModel.moveFile(file.id, folderId)
                 fileToMove = null
+            }
+        )
+    }
+
+    fileToContext?.let { file ->
+        LearningContextDialog(
+            file = file,
+            onDismiss = { fileToContext = null },
+            onConfirm = { courseId, courseName, tags ->
+                viewModel.updateFileLearningContext(file.id, courseId, courseName, tags)
+                fileToContext = null
             }
         )
     }
@@ -409,6 +422,7 @@ fun KnowledgeBaseScreen(
                     onFileRename = { fileToRename = it },
                     onFileDelete = { fileToDelete = it },
                     onFileMove = { fileToMove = it },
+                    onFileContext = { fileToContext = it },
                     onFileExport = {
                         fileToExport = it
                         exportLauncher.launch(it.displayName)
@@ -471,6 +485,7 @@ private fun FileManagementPage(
     onFileRename: (KnowledgeBaseFileSummary) -> Unit,
     onFileDelete: (KnowledgeBaseFileSummary) -> Unit,
     onFileMove: (KnowledgeBaseFileSummary) -> Unit,
+    onFileContext: (KnowledgeBaseFileSummary) -> Unit,
     onFileExport: (KnowledgeBaseFileSummary) -> Unit,
     onImportLocalFile: () -> Unit,
     onFileShare: (KnowledgeBaseFileSummary) -> Unit
@@ -638,6 +653,7 @@ private fun FileManagementPage(
                         onToggleSelected = { onToggleFileSelection(file) },
                         onRename = { onFileRename(file) },
                         onMove = { onFileMove(file) },
+                        onContext = { onFileContext(file) },
                         onExport = { onFileExport(file) },
                         onDelete = { onFileDelete(file) },
                         onShare = { onFileShare(file) }
@@ -832,6 +848,7 @@ private fun FileRow(
     onToggleSelected: () -> Unit,
     onRename: () -> Unit,
     onMove: () -> Unit,
+    onContext: () -> Unit,
     onExport: () -> Unit,
     onDelete: () -> Unit,
     onShare: () -> Unit
@@ -861,6 +878,8 @@ private fun FileRow(
                 Text(
                     listOfNotNull(
                         formatFileSize(file.sizeBytes),
+                        file.courseName?.let { "课程: $it" },
+                        file.tags.takeIf { it.isNotEmpty() }?.joinToString(", ") { "#$it" },
                         file.sourceTitle?.takeIf { file.sourceType == "bitshare" }?.let { "来源: BITShare" }
                     ).joinToString(" · ")
                 )
@@ -899,6 +918,14 @@ private fun FileRow(
                                 onClick = {
                                     menuExpanded = false
                                     onMove()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("关联课程/标签") },
+                                leadingIcon = { Icon(Icons.Default.Link, contentDescription = null) },
+                                onClick = {
+                                    menuExpanded = false
+                                    onContext()
                                 }
                             )
                             DropdownMenuItem(
@@ -984,6 +1011,67 @@ private fun RemoteResultRow(
             }
         )
     }
+}
+
+@Composable
+private fun LearningContextDialog(
+    file: KnowledgeBaseFileSummary,
+    onDismiss: () -> Unit,
+    onConfirm: (Int?, String?, List<String>) -> Unit
+) {
+    var courseIdText by rememberSaveable(file.id) { mutableStateOf(file.courseId?.toString().orEmpty()) }
+    var courseName by rememberSaveable(file.id) { mutableStateOf(file.courseName.orEmpty()) }
+    var tagsText by rememberSaveable(file.id) { mutableStateOf(file.tags.joinToString(", ")) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("关联课程/标签") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    file.displayName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                OutlinedTextField(
+                    value = courseIdText,
+                    onValueChange = { courseIdText = it.filter(Char::isDigit) },
+                    label = { Text("课程 ID，可留空") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = courseName,
+                    onValueChange = { courseName = it },
+                    label = { Text("课程名称") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = tagsText,
+                    onValueChange = { tagsText = it },
+                    label = { Text("标签，用逗号分隔") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onConfirm(
+                        courseIdText.toIntOrNull(),
+                        courseName.trim().takeIf { it.isNotBlank() },
+                        tagsText.split(",").map { it.trim() }.filter { it.isNotBlank() }
+                    )
+                }
+            ) { Text("保存") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        }
+    )
 }
 
 @Composable

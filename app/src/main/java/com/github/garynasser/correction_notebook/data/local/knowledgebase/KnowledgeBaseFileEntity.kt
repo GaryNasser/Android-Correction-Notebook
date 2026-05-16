@@ -8,7 +8,8 @@ import androidx.room.PrimaryKey
     tableName = "kb_file",
     indices = [
         Index(value = ["folderId"]),
-        Index(value = ["sourceFileId"])
+        Index(value = ["sourceFileId"]),
+        Index(value = ["courseId"])
     ]
 )
 data class KnowledgeBaseFileEntity(
@@ -23,6 +24,9 @@ data class KnowledgeBaseFileEntity(
     val sourceFileId: String?,
     val sourceTitle: String?,
     val sourcePath: String?,
+    val courseId: Int?,
+    val courseName: String?,
+    val tags: String,
     val downloadedAt: Long?,
     val createdAt: Long,
     val updatedAt: Long

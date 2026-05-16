@@ -24,10 +24,12 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.garynasser.correction_notebook.data.repository.StudySessionRepository
+import com.github.garynasser.correction_notebook.data.repository.CourseLearningRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.TextStyle
@@ -50,7 +52,8 @@ data class StatsUiState(
 
 @HiltViewModel
 class StatisticsViewModel @Inject constructor(
-    private val studySessionRepository: StudySessionRepository
+    private val studySessionRepository: StudySessionRepository,
+    private val courseLearningRepository: CourseLearningRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(StatsUiState())
@@ -88,13 +91,29 @@ class StatisticsViewModel @Inject constructor(
             val avgMinutes = if (dailyStats.isNotEmpty()) totalMinutes / dailyStats.size else 0
             val dailyMinutes = dailyStats.map { it.totalStudyMinutes }
             val chartLabels = buildChartLabels(dateRange, _uiState.value.period)
+            val subjectDistribution = sessions
+                .groupBy { it.subject }
+                .mapValues { (_, items) -> items.sumOf { it.durationMinutes } }
+                .filterValues { it > 0 }
+                .toMutableMap()
+
+            courseLearningRepository.progressItems.first()
+                .filter { progress -> progress.completedCount > 0 || progress.lastAccessedAt > 0L }
+                .forEach { progress ->
+                    val name = progress.courseName.ifBlank { "课程学习" }
+                    val minutes = (progress.watchedMinutes.takeIf { it > 0 } ?: progress.completedCount * 45).coerceAtLeast(0)
+                    if (minutes > 0) {
+                        subjectDistribution[name] = (subjectDistribution[name] ?: 0) + minutes
+                    }
+                }
 
             _uiState.value = _uiState.value.copy(
                 totalStudyMinutes = totalMinutes,
                 averageDailyMinutes = avgMinutes,
                 completedPomodoros = pomodoros,
                 dailyMinutes = dailyMinutes,
-                chartLabels = chartLabels
+                chartLabels = chartLabels,
+                subjectDistribution = subjectDistribution
             )
         }
     }

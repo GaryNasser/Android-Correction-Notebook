@@ -9,7 +9,7 @@ import androidx.room.RoomDatabase
         KnowledgeBaseFileEntity::class,
         KnowledgeBaseChunkEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class KnowledgeBaseDatabase : RoomDatabase() {

@@ -4,6 +4,7 @@ import android.content.Context
 import com.github.garynasser.correction_notebook.data.local.StudyPreferencesManager
 import com.github.garynasser.correction_notebook.data.remote.api.ArticleApiService
 import com.github.garynasser.correction_notebook.data.repository.ArticleRepository
+import com.github.garynasser.correction_notebook.data.repository.CourseLearningRepository
 import com.github.garynasser.correction_notebook.data.repository.IcsImportRepository
 import com.github.garynasser.correction_notebook.data.repository.ScheduleRepository
 import com.github.garynasser.correction_notebook.data.repository.StudySessionRepository
@@ -42,6 +43,14 @@ object HomeModule {
         @ApplicationContext context: Context
     ): TodoHistoryRepository {
         return TodoHistoryRepository(context)
+    }
+
+    @Provides
+    @Singleton
+    fun provideCourseLearningRepository(
+        @ApplicationContext context: Context
+    ): CourseLearningRepository {
+        return CourseLearningRepository(context)
     }
 
     @Provides

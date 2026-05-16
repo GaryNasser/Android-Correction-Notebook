@@ -10,9 +10,19 @@ data class TodoItem(
     val dueDate: LocalDate? = null,
     val isCompleted: Boolean = false,
     val createdAt: Long = System.currentTimeMillis(),
-    val completedAt: Long? = null
+    val completedAt: Long? = null,
+    val source: TodoSource = TodoSource.MANUAL,
+    val sourceRefId: String? = null
 )
 
 enum class Priority {
     LOW, MEDIUM, HIGH
+}
+
+enum class TodoSource {
+    MANUAL,
+    AI_TODAY_ADVICE,
+    AI_TODO_BREAKDOWN,
+    COURSE_ASSISTANT,
+    KNOWLEDGE_ASSISTANT
 }

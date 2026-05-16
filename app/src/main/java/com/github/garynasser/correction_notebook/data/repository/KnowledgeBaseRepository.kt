@@ -57,6 +57,9 @@ class KnowledgeBaseRepository @Inject constructor(
                         sizeBytes = file.sizeBytes,
                         sourceType = file.sourceType,
                         sourceTitle = file.sourceTitle,
+                        courseId = file.courseId,
+                        courseName = file.courseName,
+                        tags = file.tags.toTagList(),
                         downloadedAt = file.downloadedAt
                     )
                 }
@@ -98,6 +101,9 @@ class KnowledgeBaseRepository @Inject constructor(
                     sizeBytes = file.sizeBytes,
                     sourceType = file.sourceType,
                     sourceTitle = file.sourceTitle,
+                    courseId = file.courseId,
+                    courseName = file.courseName,
+                    tags = file.tags.toTagList(),
                     downloadedAt = file.downloadedAt
                 )
             }
@@ -218,6 +224,9 @@ class KnowledgeBaseRepository @Inject constructor(
                 sourceFileId = null,
                 sourceTitle = metadata.displayName,
                 sourcePath = fileUri.toString(),
+                courseId = null,
+                courseName = null,
+                tags = "",
                 downloadedAt = now,
                 createdAt = now,
                 updatedAt = now
@@ -256,6 +265,9 @@ class KnowledgeBaseRepository @Inject constructor(
                 sourceFileId = detail.id,
                 sourceTitle = detail.title,
                 sourcePath = detail.path,
+                courseId = null,
+                courseName = null,
+                tags = "",
                 downloadedAt = now,
                 createdAt = now,
                 updatedAt = now
@@ -265,6 +277,23 @@ class KnowledgeBaseRepository @Inject constructor(
 
     suspend fun getFolderName(folderId: String?): String {
         return folderId?.let { dao.getFolderById(it)?.name } ?: "知识库根目录"
+    }
+
+    suspend fun updateFileLearningContext(
+        fileId: String,
+        courseId: Int?,
+        courseName: String?,
+        tags: List<String>
+    ): Result<Unit> = runCatching {
+        val file = requireNotNull(dao.getFileById(fileId)) { "文件不存在" }
+        dao.updateFile(
+            file.copy(
+                courseId = courseId,
+                courseName = courseName?.trim()?.takeIf { it.isNotBlank() },
+                tags = tags.map { it.trim() }.filter { it.isNotBlank() }.distinct().joinToString(","),
+                updatedAt = System.currentTimeMillis()
+            )
+        )
     }
 
     private suspend fun getFolderPathIds(folderId: String?): List<String> {
@@ -385,6 +414,12 @@ private fun KnowledgeBaseFileEntity.toSummary(): KnowledgeBaseFileSummary {
         sizeBytes = sizeBytes,
         sourceType = sourceType,
         sourceTitle = sourceTitle,
+        courseId = courseId,
+        courseName = courseName,
+        tags = tags.toTagList(),
         downloadedAt = downloadedAt
     )
 }
+
+private fun String.toTagList(): List<String> =
+    split(",").map { it.trim() }.filter { it.isNotBlank() }

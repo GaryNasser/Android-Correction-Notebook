@@ -21,6 +21,9 @@ data class KnowledgeBaseFileSummary(
     val sizeBytes: Long,
     val sourceType: String,
     val sourceTitle: String?,
+    val courseId: Int?,
+    val courseName: String?,
+    val tags: List<String>,
     val downloadedAt: Long?
 )
 
