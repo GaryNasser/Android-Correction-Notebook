@@ -43,6 +43,10 @@ class VideoPlaybackService : MediaSessionService() {
             val databaseProvider = StandaloneDatabaseProvider(this)
             cache = SimpleCache(cacheDir, LeastRecentlyUsedCacheEvictor(200 * 1024 * 1024), databaseProvider)
         }
+        val videoCache = cache ?: run {
+            stopSelf()
+            return
+        }
 
         // 2. 构造带逆向授权逻辑的数据源
         val httpDataSourceFactory = DefaultHttpDataSource.Factory()
@@ -54,17 +58,18 @@ class VideoPlaybackService : MediaSessionService() {
 
         // 3. 将缓存和授权数据源整合
         val cacheDataSourceFactory = CacheDataSource.Factory()
-            .setCache(cache!!)
+            .setCache(videoCache)
             .setUpstreamDataSourceFactory(yanheDataSourceFactory)
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
 
         // 4. 创建播放器实例
-        player = ExoPlayer.Builder(this)
+        val createdPlayer = ExoPlayer.Builder(this)
             .setMediaSourceFactory(DefaultMediaSourceFactory(cacheDataSourceFactory))
             .build()
+        player = createdPlayer
 
         // 5. 创建 MediaSession
-        mediaSession = MediaSession.Builder(this, player!!).build()
+        mediaSession = MediaSession.Builder(this, createdPlayer).build()
     }
 
     // 修复报错：必须实现这个抽象方法

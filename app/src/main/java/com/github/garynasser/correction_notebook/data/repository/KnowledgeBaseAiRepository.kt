@@ -43,6 +43,7 @@ class KnowledgeBaseAiRepository @Inject constructor(
         question: String,
         folderId: String? = null,
         fileId: String? = null,
+        courseId: Int? = null,
         limit: Int = 5
     ): List<KnowledgeContextChunk> = withContext(Dispatchers.IO) {
         val terms = tokenize(question)
@@ -56,6 +57,8 @@ class KnowledgeBaseAiRepository @Inject constructor(
                     query = term,
                     folderId = folderId,
                     folderIdFilter = folderId != null,
+                    courseId = courseId,
+                    courseIdFilter = courseId != null,
                     limit = 30
                 )
             }
@@ -94,6 +97,10 @@ class KnowledgeBaseAiRepository @Inject constructor(
         if (dao.getChunksForFile(fileId).isEmpty()) {
             rebuildIndexForFile(fileId)
         }
+    }
+
+    suspend fun indexStatus(fileId: String): Result<Int> = withContext(Dispatchers.IO) {
+        runCatching { dao.countChunksForFile(fileId) }
     }
 
     private suspend fun rebuildIndexForFile(file: KnowledgeBaseFileEntity): Int {

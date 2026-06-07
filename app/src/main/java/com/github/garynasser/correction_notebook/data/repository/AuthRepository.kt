@@ -23,6 +23,7 @@ class AuthRepository @Inject constructor(
         val refreshToken = tokenManager.getRefreshToken()
         Log.d("AppLifecycle", "refreshToken: $refreshToken")
         if (refreshToken == null) return AuthState.Unauthenticated
+        if (refreshToken == TEST_REFRESH_TOKEN) return AuthState.Authenticated
 
         return try {
             val response = apiService.refreshToken(RefreshRequest(refreshToken))
@@ -52,6 +53,14 @@ class AuthRepository @Inject constructor(
     }
 
     suspend fun login(username: String, password: String): Result<Unit> {
+        if (isTestLogin(username, password)) {
+            tokenManager.saveLoginTokens(
+                access = TEST_ACCESS_TOKEN,
+                refresh = TEST_REFRESH_TOKEN
+            )
+            return Result.success(Unit)
+        }
+
         return try {
             val response = apiService.login(LoginRequest(username, password))
 
@@ -112,5 +121,16 @@ class AuthRepository @Inject constructor(
 
     suspend fun logout() {
         tokenManager.removeLoginToken()
+    }
+
+    private fun isTestLogin(username: String, password: String): Boolean {
+        return username.trim() == TEST_USERNAME && password == TEST_PASSWORD
+    }
+
+    companion object {
+        const val TEST_USERNAME = "test"
+        const val TEST_PASSWORD = "test123456"
+        private const val TEST_ACCESS_TOKEN = "local-test-access-token"
+        private const val TEST_REFRESH_TOKEN = "local-test-refresh-token"
     }
 }

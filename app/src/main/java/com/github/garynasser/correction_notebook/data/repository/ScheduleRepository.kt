@@ -339,16 +339,21 @@ class ScheduleRepository(private val context: Context) {
         return raw.split("|||").mapNotNull { itemStr ->
             val parts = itemStr.split(":::")
             if (parts.size < 16) return@mapNotNull null
+            val sourceType = runCatching { ScheduleSourceType.valueOf(parts[8]) }.getOrDefault(ScheduleSourceType.MANUAL)
+            fun decodeText(index: Int): String {
+                val decoded = Uri.decode(parts[index])
+                return if (sourceType == ScheduleSourceType.ICS_IMPORT) unescapeIcsText(decoded) else decoded
+            }
             ScheduleEvent(
                 id = Uri.decode(parts[0]),
-                title = Uri.decode(parts[1]),
-                description = Uri.decode(parts[2]),
-                location = Uri.decode(parts[3]),
+                title = decodeText(1),
+                description = decodeText(2),
+                location = decodeText(3),
                 startAt = LocalDateTime.parse(parts[4], formatter),
                 endAt = LocalDateTime.parse(parts[5], formatter),
                 allDay = parts[6].toBoolean(),
                 timezoneId = Uri.decode(parts[7]).ifBlank { null },
-                sourceType = runCatching { ScheduleSourceType.valueOf(parts[8]) }.getOrDefault(ScheduleSourceType.MANUAL),
+                sourceType = sourceType,
                 sourceCalendarId = Uri.decode(parts[9]).ifBlank { null },
                 sourceEventUid = Uri.decode(parts[10]).ifBlank { null },
                 recurrenceRule = Uri.decode(parts[11]).ifBlank { null },

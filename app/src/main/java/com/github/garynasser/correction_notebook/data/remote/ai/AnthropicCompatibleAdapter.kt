@@ -89,20 +89,49 @@ class AnthropicCompatibleAdapter @Inject constructor(
 
     suspend fun listModels(config: AIProviderConfig): Result<List<String>> {
         return runCatching {
-            val response = aiApiService.getJson(
-                url = resolveAnthropicUrl(config.baseUrl, "models"),
-                headers = buildHeaders(config)
+            var lastError: Throwable? = null
+            resolveAnthropicModelUrls(config.baseUrl).forEach { url ->
+                val models = runCatching {
+                    val response = aiApiService.getJson(
+                        url = url,
+                        headers = buildHeaders(config)
+                    )
+                    val body = if (response.isSuccessful) {
+                        response.body()?.string().orEmpty()
+                    } else {
+                        throw IllegalStateException(
+                            errorMapper.mapHttpError(response.code(), response.errorBody()?.string())
+                        )
+                    }
+                    AiResponseParser.extractModelIds(body, "Anthropic 兼容")
+                }.onFailure { throwable ->
+                    lastError = throwable
+                }.getOrNull()
+
+                if (!models.isNullOrEmpty()) {
+                    return@runCatching models
+                }
+            }
+
+            if (shouldUseKnownModelFallback(config.baseUrl, lastError)) {
+                return@runCatching knownProviderModels(config.baseUrl).orEmpty()
+            }
+
+            throw IllegalStateException(
+                lastError?.message ?: "Anthropic 兼容接口未返回可用模型列表，请检查 Base URL、API Key 和服务商是否开放模型列表接口"
             )
-            val body = if (response.isSuccessful) {
-                response.body()?.string().orEmpty()
+        }.recoverCatching { throwable ->
+            val fallbackModels = knownProviderModels(config.baseUrl).takeIf {
+                shouldUseKnownModelFallback(config.baseUrl, throwable)
+            }
+            if (fallbackModels != null) {
+                fallbackModels
             } else {
                 throw IllegalStateException(
-                    errorMapper.mapHttpError(response.code(), response.errorBody()?.string())
+                    errorMapper.mapThrowable(throwable),
+                    throwable
                 )
             }
-            AiResponseParser.extractModelIds(body, "Anthropic 兼容")
-        }.recoverCatching { throwable ->
-            throw IllegalStateException(errorMapper.mapThrowable(throwable), throwable)
         }
     }
 
@@ -133,25 +162,103 @@ class AnthropicCompatibleAdapter @Inject constructor(
         }
     }
 
-    private fun resolveAnthropicUrl(baseUrl: String, suffix: String = "messages"): String {
-        val rawBase = baseUrl.trim().trimEnd('/')
-        val baseWithoutQuery = rawBase.substringBefore("?")
-        if (baseWithoutQuery.endsWith(suffix)) return rawBase
-
-        val normalizedBase = baseWithoutQuery
-            .removeSuffix("/messages")
-            .removeSuffix("/models")
-        return when {
-            normalizedBase.endsWith(suffix) -> normalizedBase
-            normalizedBase.endsWith("/v1") -> "$normalizedBase/$suffix"
-            else -> "$normalizedBase/$suffix"
-        }
-    }
-
     companion object {
         private val JSON_MEDIA_TYPE = "application/json".toMediaType()
         private const val DEFAULT_ANTHROPIC_VERSION = "2023-06-01"
         private const val DEFAULT_MAX_TOKENS = 1024
         private val errorMapper = AiErrorMapper
     }
+}
+
+internal fun resolveAnthropicModelUrls(baseUrl: String): List<String> {
+    val rawBase = baseUrl.trim().trimEnd('/')
+    val baseWithoutQuery = rawBase.substringBefore("?")
+    val urls = linkedSetOf(resolveAnthropicUrl(baseWithoutQuery, "models"))
+    val endpointBase = stripKnownAnthropicEndpointSuffixes(baseWithoutQuery)
+
+    deepSeekProviderRoots(endpointBase).forEach { providerRoot ->
+        urls += resolveAnthropicUrl(providerRoot, "models")
+    }
+
+    return urls.toList()
+}
+
+private fun stripKnownAnthropicEndpointSuffixes(baseUrl: String): String {
+    return baseUrl
+        .removeSuffix("/v1/messages")
+        .removeSuffix("/messages")
+        .removeSuffix("/v1/models")
+        .removeSuffix("/models")
+}
+
+private fun deepSeekProviderRoots(baseUrl: String): List<String> {
+    val lowerBase = baseUrl.lowercase()
+    if ("api.deepseek.com" !in lowerBase) return emptyList()
+
+    val roots = linkedSetOf<String>()
+    when {
+        baseUrl.endsWith("/v1/anthropic") -> {
+            val v1Root = baseUrl.removeSuffix("/anthropic")
+            roots += v1Root
+            roots += v1Root.removeSuffix("/v1")
+        }
+        baseUrl.endsWith("/anthropic/v1") -> {
+            roots += baseUrl.removeSuffix("/anthropic/v1")
+        }
+        baseUrl.endsWith("/anthropic") -> {
+            roots += baseUrl.removeSuffix("/anthropic")
+        }
+        baseUrl.endsWith("/v1") -> {
+            roots += baseUrl.removeSuffix("/v1")
+        }
+    }
+    return roots.filter { it != baseUrl }
+}
+
+private fun resolveAnthropicUrl(baseUrl: String, suffix: String = "messages"): String {
+    val rawBase = baseUrl.trim().trimEnd('/')
+    val baseWithoutQuery = rawBase.substringBefore("?")
+    if (baseWithoutQuery.endsWith(suffix)) return rawBase
+
+    val normalizedBase = baseWithoutQuery
+        .removeSuffix("/messages")
+        .removeSuffix("/models")
+    return when {
+        normalizedBase.endsWith(suffix) -> normalizedBase
+        normalizedBase.endsWith("/v1") -> "$normalizedBase/$suffix"
+        else -> "$normalizedBase/$suffix"
+    }
+}
+
+private fun knownProviderModels(baseUrl: String): List<String>? {
+    val normalized = baseUrl.lowercase()
+    return when {
+        "api.deepseek.com" in normalized -> listOf(
+            "deepseek-v4-flash",
+            "deepseek-v4-pro",
+            "deepseek-chat",
+            "deepseek-reasoner"
+        )
+        else -> null
+    }
+}
+
+private fun shouldUseKnownModelFallback(baseUrl: String, throwable: Throwable?): Boolean {
+    if (knownProviderModels(baseUrl).isNullOrEmpty()) return false
+    val message = throwable?.message.orEmpty().lowercase()
+    val credentialOrQuotaError = listOf(
+        "api key",
+        "auth",
+        "authentication",
+        "unauthorized",
+        "permission",
+        "权限",
+        "无效",
+        "失效",
+        "额度",
+        "频繁",
+        "quota",
+        "rate limit"
+    ).any { it in message }
+    return !credentialOrQuotaError
 }

@@ -3,6 +3,9 @@ package com.github.garynasser.correction_notebook.ui.screens.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.garynasser.correction_notebook.data.local.StudyPreferencesManager
+import com.github.garynasser.correction_notebook.data.model.ai.AiAction
+import com.github.garynasser.correction_notebook.data.model.ai.AiActionType
+import com.github.garynasser.correction_notebook.data.model.ai.AiPlanBlock
 import com.github.garynasser.correction_notebook.data.model.home.Article
 import com.github.garynasser.correction_notebook.data.model.home.IcsImportPreview
 import com.github.garynasser.correction_notebook.data.model.home.ImportDecision
@@ -75,6 +78,9 @@ data class HomeUiState(
     val soundEnabled: Boolean = true,
     val vibrationEnabled: Boolean = true,
     val aiAdvice: String? = null,
+    val aiPlanBlocks: List<AiPlanBlock> = emptyList(),
+    val aiActions: List<AiAction> = emptyList(),
+    val aiReferencedMemories: List<String> = emptyList(),
     val isAiAdviceLoading: Boolean = false,
     val aiTodoBreakdown: String? = null,
     val aiErrorMessage: String? = null
@@ -172,12 +178,14 @@ class HomeViewModel @Inject constructor(
                 _uiState.value = _uiState.value.copy(
                     todoItems = sortedTodos
                 )
+                if (_uiState.value.aiPlanBlocks.isEmpty()) refreshLocalPlan()
             }
         }
 
         viewModelScope.launch {
             scheduleRepository.scheduleEvents.collect {
                 refreshScheduleSections()
+                if (_uiState.value.aiPlanBlocks.isEmpty()) refreshLocalPlan()
             }
         }
 
@@ -188,12 +196,14 @@ class HomeViewModel @Inject constructor(
                         .sortedByDescending { it.lastAccessedAt }
                         .take(3)
                 )
+                if (_uiState.value.aiPlanBlocks.isEmpty()) refreshLocalPlan()
             }
         }
 
         viewModelScope.launch {
             knowledgeBaseRepository.observeRecentFiles(limit = 3).collect { files ->
                 _uiState.value = _uiState.value.copy(recentKnowledgeFiles = files)
+                if (_uiState.value.aiPlanBlocks.isEmpty()) refreshLocalPlan()
             }
         }
 
@@ -238,7 +248,14 @@ class HomeViewModel @Inject constructor(
     }
 
     fun setSelectedDate(date: LocalDate) {
-        _uiState.value = _uiState.value.copy(selectedDate = date)
+        _uiState.value = _uiState.value.copy(
+            selectedDate = date,
+            scheduleRange = ScheduleRange.TODAY,
+            plannerTab = PlannerTab.SCHEDULE
+        )
+        viewModelScope.launch {
+            refreshScheduleSections()
+        }
     }
 
     fun setPlannerTab(tab: PlannerTab) {
@@ -253,7 +270,8 @@ class HomeViewModel @Inject constructor(
     }
 
     private suspend fun refreshScheduleSections() {
-        val sections = scheduleRepository.getEventsForRange(_uiState.value.scheduleRange)
+        val state = _uiState.value
+        val sections = scheduleRepository.getEventsForRange(state.scheduleRange, today = state.selectedDate)
         _uiState.value = _uiState.value.copy(scheduleSections = sections)
     }
 
@@ -278,20 +296,28 @@ class HomeViewModel @Inject constructor(
                 isAiAdviceLoading = true,
                 aiErrorMessage = null
             )
-            aiStudyUseCase.generateTodayAdvice()
-                .onSuccess { advice ->
+            aiStudyUseCase.generateTodayPlan(_uiState.value.selectedDate)
+                .onSuccess { result ->
                     _uiState.value = _uiState.value.copy(
-                        aiAdvice = advice,
+                        aiAdvice = result.summary.ifBlank { result.rawText },
+                        aiPlanBlocks = result.planBlocks.ifEmpty { buildLocalPlanBlocks() },
+                        aiActions = result.actions,
+                        aiReferencedMemories = result.referencedMemories,
                         isAiAdviceLoading = false
                     )
                 }
                 .onFailure { throwable ->
                     _uiState.value = _uiState.value.copy(
                         isAiAdviceLoading = false,
-                        aiErrorMessage = throwable.message ?: "AI 建议生成失败"
+                        aiErrorMessage = throwable.message ?: "AI 建议生成失败",
+                        aiPlanBlocks = buildLocalPlanBlocks()
                     )
                 }
         }
+    }
+
+    fun refreshLocalPlan() {
+        _uiState.value = _uiState.value.copy(aiPlanBlocks = buildLocalPlanBlocks())
     }
 
     fun breakDownTodo(todo: TodoItem) {
@@ -300,10 +326,11 @@ class HomeViewModel @Inject constructor(
                 isAiAdviceLoading = true,
                 aiErrorMessage = null
             )
-            aiStudyUseCase.breakDownTodo(todo.title, todo.description)
+            aiStudyUseCase.breakDownTodoStructured(todo.title, todo.description)
                 .onSuccess { breakdown ->
                     _uiState.value = _uiState.value.copy(
-                        aiTodoBreakdown = breakdown,
+                        aiTodoBreakdown = breakdown.summary.ifBlank { breakdown.rawText },
+                        aiActions = breakdown.actions,
                         isAiAdviceLoading = false
                     )
                 }
@@ -339,6 +366,101 @@ class HomeViewModel @Inject constructor(
                 )
             )
         }
+    }
+
+    fun applyAiAction(action: AiAction) {
+        when (action.type) {
+            AiActionType.CREATE_TODO, AiActionType.CREATE_REVIEW_PLAN -> {
+                val content = action.payload["content"] ?: action.description.ifBlank { action.title }
+                if (content.isBlank()) return
+                viewModelScope.launch {
+                    todoRepository.addTodo(
+                        TodoItem(
+                            title = action.title.take(40),
+                            description = content,
+                            priority = runCatching {
+                                Priority.valueOf(action.payload["priority"].orEmpty())
+                            }.getOrDefault(Priority.MEDIUM),
+                            dueDate = LocalDate.now(),
+                            source = TodoSource.AI_TODAY_ADVICE,
+                            sourceRefId = action.id
+                        )
+                    )
+                }
+            }
+            AiActionType.SAVE_MEMORY -> {
+                val content = action.payload["content"] ?: action.description
+                val category = action.payload["category"] ?: "学习偏好"
+                viewModelScope.launch {
+                    aiStudyUseCase.saveMemory(category, content)
+                        .onFailure {
+                            _uiState.value = _uiState.value.copy(aiErrorMessage = it.message ?: "保存记忆失败")
+                        }
+                }
+            }
+            AiActionType.OPEN_COURSE,
+            AiActionType.OPEN_FILE,
+            AiActionType.SAVE_COURSE_NOTE -> {
+                _uiState.value = _uiState.value.copy(aiErrorMessage = "这个动作需要在对应课程或资料页面执行")
+            }
+        }
+    }
+
+    private fun buildLocalPlanBlocks(): List<AiPlanBlock> {
+        val state = _uiState.value
+        val scheduleBlocks = state.scheduleSections
+            .flatMap { it.items }
+            .take(2)
+            .map {
+                AiPlanBlock(
+                    title = it.title,
+                    reason = "来自今日课表/日程",
+                    estimatedMinutes = 45,
+                    priority = "HIGH"
+                )
+            }
+        val todoBlocks = state.todoItems
+            .filterNot { it.isCompleted }
+            .take(2)
+            .map {
+                AiPlanBlock(
+                    title = it.title,
+                    reason = "未完成待办",
+                    estimatedMinutes = 25,
+                    todoId = it.id,
+                    priority = it.priority.name
+                )
+            }
+        val courseBlock = state.recentCourseProgress.firstOrNull()?.let {
+            AiPlanBlock(
+                title = "继续学习 ${it.courseName.ifBlank { "最近课程" }}",
+                reason = it.lastSectionTitle.ifBlank { "根据最近观看记录推荐" },
+                estimatedMinutes = 30,
+                courseId = it.courseId,
+                priority = "MEDIUM"
+            )
+        }
+        val fileBlock = state.recentKnowledgeFiles.firstOrNull()?.let {
+            AiPlanBlock(
+                title = "复习资料：${it.displayName}",
+                reason = it.courseName?.let { name -> "关联课程：$name" } ?: "最近使用资料",
+                estimatedMinutes = 20,
+                fileId = it.id,
+                priority = "MEDIUM"
+            )
+        }
+        return (scheduleBlocks + todoBlocks + listOfNotNull(courseBlock, fileBlock))
+            .take(5)
+            .ifEmpty {
+                listOf(
+                    AiPlanBlock(
+                        title = "导入课表或添加一个待办",
+                        reason = "BITStudy 会根据课表、待办、课程和资料生成今日计划",
+                        estimatedMinutes = 10,
+                        priority = "LOW"
+                    )
+                )
+            }
     }
 
     fun showAddScheduleDialog() {
