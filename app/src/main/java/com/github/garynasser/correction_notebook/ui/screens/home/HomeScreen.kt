@@ -55,8 +55,10 @@ fun HomeScreen(
     homeViewModel: HomeViewModel = hiltViewModel(),
     statisticsViewModel: StatisticsViewModel = hiltViewModel(),
     onNavigateToStatistics: () -> Unit = {},
-    onNavigateToCourses: () -> Unit = {},
+    onNavigateToCourses: (CourseProgress?) -> Unit = {},
+    onOpenCourse: (Int, String) -> Unit = { _, _ -> },
     onNavigateToKnowledgeBase: () -> Unit = {},
+    onOpenKnowledgeFile: (String) -> Unit = {},
     onImmersiveModeChanged: (Boolean) -> Unit = {},
     onOpenArticle: (Article) -> Unit = {}
 ) {
@@ -183,7 +185,7 @@ fun HomeScreen(
                     onImmersiveModeClick = { homeViewModel.showModeSelector() },
                     onScheduleClick = { jumpToPlanner(PlannerTab.SCHEDULE) },
                     onTodoClick = { jumpToPlanner(PlannerTab.TODO) },
-                    onContinueLearningClick = onNavigateToCourses,
+                    onContinueLearningClick = { onNavigateToCourses(uiState.recentCourseProgress.firstOrNull()) },
                     onRecentFilesClick = onNavigateToKnowledgeBase
                 )
             }
@@ -209,11 +211,34 @@ fun HomeScreen(
                     planBlocks = uiState.aiPlanBlocks,
                     actions = uiState.aiActions,
                     referencedMemories = uiState.aiReferencedMemories,
+                    selectedDate = uiState.selectedDate,
                     isLoading = uiState.isAiAdviceLoading,
                     onGenerate = { homeViewModel.generateTodayAdvice() },
                     onSaveAdvice = { homeViewModel.saveAdviceAsTodo(it) },
-                    onApplyAction = { homeViewModel.applyAiAction(it) },
-                    onStartFocus = { homeViewModel.showModeSelector() }
+                    onApplyAction = { action ->
+                        when (action.type) {
+                            AiActionType.OPEN_COURSE -> {
+                                val courseId = action.payload["courseId"]?.toIntOrNull()
+                                if (courseId != null) {
+                                    onOpenCourse(courseId, action.payload["courseName"] ?: action.title)
+                                } else {
+                                    homeViewModel.applyAiAction(action)
+                                }
+                            }
+                            AiActionType.OPEN_FILE -> {
+                                val fileId = action.payload["fileId"]
+                                if (!fileId.isNullOrBlank()) {
+                                    onOpenKnowledgeFile(fileId)
+                                } else {
+                                    homeViewModel.applyAiAction(action)
+                                }
+                            }
+                            else -> homeViewModel.applyAiAction(action)
+                        }
+                    },
+                    onStartFocus = { homeViewModel.showModeSelector() },
+                    onOpenCourse = onOpenCourse,
+                    onOpenFile = onOpenKnowledgeFile
                 )
             }
 
@@ -348,11 +373,14 @@ private fun AiStudyAdviceCard(
     planBlocks: List<AiPlanBlock>,
     actions: List<AiAction>,
     referencedMemories: List<String>,
+    selectedDate: LocalDate,
     isLoading: Boolean,
     onGenerate: () -> Unit,
     onSaveAdvice: (String) -> Unit,
     onApplyAction: (AiAction) -> Unit,
-    onStartFocus: () -> Unit
+    onStartFocus: () -> Unit,
+    onOpenCourse: (Int, String) -> Unit,
+    onOpenFile: (String) -> Unit
 ) {
     FreshCard(
         modifier = Modifier.fillMaxWidth(),
@@ -366,7 +394,7 @@ private fun AiStudyAdviceCard(
                 Icon(Icons.Default.Psychology, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "今日建议",
+                    text = "${selectedDate.format(DateTimeFormatter.ofPattern("M月d日"))}建议",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f)
@@ -403,13 +431,19 @@ private fun AiStudyAdviceCard(
 
             if (planBlocks.isNotEmpty()) {
                 Text(
-                    text = "今日学习计划",
+                    text = "${selectedDate.format(DateTimeFormatter.ofPattern("M月d日"))}学习计划",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold
                 )
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     planBlocks.forEach { block ->
-                        AiPlanBlockRow(block = block, onStartFocus = onStartFocus, onSaveAdvice = onSaveAdvice)
+                        AiPlanBlockRow(
+                            block = block,
+                            onStartFocus = onStartFocus,
+                            onSaveAdvice = onSaveAdvice,
+                            onOpenCourse = onOpenCourse,
+                            onOpenFile = onOpenFile
+                        )
                     }
                 }
             } else if (!advice.isNullOrBlank()) {
@@ -456,10 +490,13 @@ private fun AiStudyAdviceCard(
 }
 
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 private fun AiPlanBlockRow(
     block: AiPlanBlock,
     onStartFocus: () -> Unit,
-    onSaveAdvice: (String) -> Unit
+    onSaveAdvice: (String) -> Unit,
+    onOpenCourse: (Int, String) -> Unit,
+    onOpenFile: (String) -> Unit
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -489,7 +526,10 @@ private fun AiPlanBlockRow(
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f)
                 )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
                 TextButton(onClick = onStartFocus) {
                     Icon(Icons.Default.Timer, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(4.dp))
@@ -499,6 +539,20 @@ private fun AiPlanBlockRow(
                     Icon(Icons.Default.AddTask, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("转待办")
+                }
+                block.courseId?.let { courseId ->
+                    TextButton(onClick = { onOpenCourse(courseId, block.title.removePrefix("继续学习 ")) }) {
+                        Icon(Icons.Default.School, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("打开课程")
+                    }
+                }
+                block.fileId?.let { fileId ->
+                    TextButton(onClick = { onOpenFile(fileId) }) {
+                        Icon(Icons.Default.Description, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("打开资料")
+                    }
                 }
             }
         }
