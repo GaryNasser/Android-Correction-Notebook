@@ -108,6 +108,7 @@ fun AITutorScreen(
     var menuExpanded by remember { mutableStateOf(false) }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
                 title = { Text("AI 学习中枢") },
@@ -178,7 +179,8 @@ fun AITutorScreen(
                 if (uiState.messages.isEmpty()) {
                     EmptyChatState(
                         isKnowledgeMode = uiState.isKnowledgeMode,
-                        onSuggestion = { inputText = it }
+                        onSuggestion = { inputText = it },
+                        modifier = Modifier.weight(1f)
                     )
                 } else {
                     LazyColumn(
@@ -441,11 +443,15 @@ private fun SessionPickerDialog(
 }
 
 @Composable
-private fun EmptyChatState(isKnowledgeMode: Boolean, onSuggestion: (String) -> Unit) {
+private fun EmptyChatState(
+    isKnowledgeMode: Boolean,
+    onSuggestion: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .height(300.dp),
+            .heightIn(min = 220.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
