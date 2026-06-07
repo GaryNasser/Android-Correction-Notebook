@@ -8,6 +8,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -48,6 +50,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -85,6 +88,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.github.garynasser.correction_notebook.data.model.ai.AIProviderType
 import com.github.garynasser.correction_notebook.data.model.ai.AiProviderForm
+import com.github.garynasser.correction_notebook.data.model.ai.MemoryCategory
 import com.github.garynasser.correction_notebook.data.repository.ProviderRecord
 import com.github.garynasser.correction_notebook.ui.components.FreshScreen
 import java.nio.charset.StandardCharsets
@@ -1358,6 +1362,7 @@ fun ProviderDialog(
     )
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun MemoryDialog(
     uiState: AITutorUiState,
@@ -1365,7 +1370,7 @@ private fun MemoryDialog(
     onSave: (String, String) -> Unit,
     onDelete: (Long) -> Unit
 ) {
-    var category by remember { mutableStateOf("学习偏好") }
+    var category by remember { mutableStateOf(MemoryCategory.LEARNING_PREFERENCE.label) }
     var content by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1376,13 +1381,18 @@ private fun MemoryDialog(
                     Text("AI 会把这些信息作为长期学习偏好使用，你可以随时删除。")
                 }
                 item {
-                    OutlinedTextField(
-                        value = category,
-                        onValueChange = { category = it },
-                        label = { Text("分类") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("分类", style = MaterialTheme.typography.labelLarge)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            MemoryCategory.entries.forEach { item ->
+                                FilterChip(
+                                    selected = category == item.label,
+                                    onClick = { category = item.label },
+                                    label = { Text(item.label) }
+                                )
+                            }
+                        }
+                    }
                 }
                 item {
                     OutlinedTextField(

@@ -112,9 +112,9 @@ class IcsImportRepository(
                 }
             }
             ScheduleEvent(
-                title = fields["SUMMARY"]?.firstOrNull()?.second?.ifBlank { "未命名日程" } ?: "未命名日程",
-                description = fields["DESCRIPTION"]?.firstOrNull()?.second?.replace("\\n", "\n").orEmpty(),
-                location = fields["LOCATION"]?.firstOrNull()?.second.orEmpty(),
+                title = fields["SUMMARY"]?.firstOrNull()?.second?.let(::unescapeIcsText)?.ifBlank { "未命名日程" } ?: "未命名日程",
+                description = fields["DESCRIPTION"]?.firstOrNull()?.second?.let(::unescapeIcsText).orEmpty(),
+                location = fields["LOCATION"]?.firstOrNull()?.second?.let(::unescapeIcsText).orEmpty(),
                 startAt = startAt,
                 endAt = endAt,
                 allDay = allDay,
@@ -187,4 +187,27 @@ class IcsImportRepository(
             detail = detail
         )
     }
+}
+
+internal fun unescapeIcsText(raw: String): String {
+    val builder = StringBuilder(raw.length)
+    var index = 0
+    while (index < raw.length) {
+        val current = raw[index]
+        if (current == '\\' && index + 1 < raw.length) {
+            when (val next = raw[index + 1]) {
+                'n', 'N' -> builder.append('\n')
+                ',', ';', '\\' -> builder.append(next)
+                else -> {
+                    builder.append(current)
+                    builder.append(next)
+                }
+            }
+            index += 2
+        } else {
+            builder.append(current)
+            index += 1
+        }
+    }
+    return builder.toString().trim()
 }

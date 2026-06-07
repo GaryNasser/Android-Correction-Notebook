@@ -116,6 +116,9 @@ interface KnowledgeBaseDao {
     @Query("SELECT * FROM kb_chunk WHERE fileId = :fileId ORDER BY chunkIndex ASC")
     suspend fun getChunksForFile(fileId: String): List<KnowledgeBaseChunkEntity>
 
+    @Query("SELECT COUNT(*) FROM kb_chunk WHERE fileId = :fileId")
+    suspend fun countChunksForFile(fileId: String): Int
+
     @Query(
         """
         SELECT * FROM kb_chunk
@@ -123,6 +126,9 @@ interface KnowledgeBaseDao {
             SELECT id FROM kb_file
             WHERE ((:folderId IS NULL AND folderId IS NULL) OR folderId = :folderId)
         ))
+          AND (:courseIdFilter = 0 OR fileId IN (
+            SELECT id FROM kb_file WHERE courseId = :courseId
+          ))
           AND (
             content LIKE '%' || :query || '%'
             OR keywords LIKE '%' || :query || '%'
@@ -136,6 +142,8 @@ interface KnowledgeBaseDao {
         query: String,
         folderId: String?,
         folderIdFilter: Boolean,
+        courseId: Int?,
+        courseIdFilter: Boolean,
         limit: Int
     ): List<KnowledgeBaseChunkEntity>
 }
