@@ -25,6 +25,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.garynasser.correction_notebook.data.repository.StudySessionRepository
 import com.github.garynasser.correction_notebook.data.repository.CourseLearningRepository
+import com.github.garynasser.correction_notebook.domain.usecase.AiStudyUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -47,13 +48,17 @@ data class StatsUiState(
     val completedPomodoros: Int = 0,
     val dailyMinutes: List<Int> = emptyList(),
     val chartLabels: List<String> = emptyList(),
-    val subjectDistribution: Map<String, Int> = emptyMap()
+    val subjectDistribution: Map<String, Int> = emptyMap(),
+    val aiInsight: String? = null,
+    val isAiInsightLoading: Boolean = false,
+    val aiInsightError: String? = null
 )
 
 @HiltViewModel
 class StatisticsViewModel @Inject constructor(
     private val studySessionRepository: StudySessionRepository,
-    private val courseLearningRepository: CourseLearningRepository
+    private val courseLearningRepository: CourseLearningRepository,
+    private val aiStudyUseCase: AiStudyUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(StatsUiState())
@@ -66,6 +71,25 @@ class StatisticsViewModel @Inject constructor(
     fun setPeriod(period: StatsPeriod) {
         _uiState.value = _uiState.value.copy(period = period)
         loadStats()
+    }
+
+    fun generateAiInsight() {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isAiInsightLoading = true, aiInsightError = null)
+            aiStudyUseCase.generateStatsInsight()
+                .onSuccess {
+                    _uiState.value = _uiState.value.copy(
+                        aiInsight = it,
+                        isAiInsightLoading = false
+                    )
+                }
+                .onFailure {
+                    _uiState.value = _uiState.value.copy(
+                        isAiInsightLoading = false,
+                        aiInsightError = it.message ?: "AI 解读失败"
+                    )
+                }
+        }
     }
 
     private fun loadStats() {
@@ -152,6 +176,20 @@ fun StatisticsScreen(
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "返回")
                     }
+                },
+                actions = {
+                    TextButton(
+                        onClick = viewModel::generateAiInsight,
+                        enabled = !uiState.isAiInsightLoading
+                    ) {
+                        if (uiState.isAiInsightLoading) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Default.Psychology, contentDescription = null)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("AI 解读")
+                        }
+                    }
                 }
             )
         }
@@ -217,6 +255,35 @@ fun StatisticsScreen(
                     value = "${uiState.completedPomodoros} 个",
                     icon = Icons.Default.EmojiEvents
                 )
+            }
+
+            if (uiState.aiInsight != null || uiState.aiInsightError != null || uiState.isAiInsightLoading) {
+                item {
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Psychology, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "AI 学习反馈",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            when {
+                                uiState.isAiInsightLoading -> Text("AI 正在解读本周学习情况...")
+                                uiState.aiInsightError != null -> Text(
+                                    uiState.aiInsightError.orEmpty(),
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                                else -> Text(uiState.aiInsight.orEmpty())
+                            }
+                        }
+                    }
+                }
             }
 
             // Bar chart

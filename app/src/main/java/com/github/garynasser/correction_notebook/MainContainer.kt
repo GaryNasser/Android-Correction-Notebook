@@ -137,6 +137,24 @@ fun MainContainer(
                     onOpenArticle = { article ->
                         navController.navigate(ArticleDetailRoute(article.id))
                     },
+                    onNavigateToCourses = {
+                        navController.navigate(CourseList) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    onNavigateToKnowledgeBase = {
+                        navController.navigate(KnowledgeBase) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
                     onImmersiveModeChanged = { hideBottomBar = it }
                 )
             }

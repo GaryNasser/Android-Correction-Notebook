@@ -5,14 +5,13 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -27,14 +26,12 @@ import androidx.compose.material.icons.filled.ImportExport
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.NoteAlt
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -64,12 +61,9 @@ import com.github.garynasser.correction_notebook.data.model.home.ImportDecision
 import com.github.garynasser.correction_notebook.data.model.home.PlannerTab
 import com.github.garynasser.correction_notebook.data.model.home.ScheduleEvent
 import com.github.garynasser.correction_notebook.data.model.home.ScheduleOccurrence
-import com.github.garynasser.correction_notebook.data.model.home.ScheduleRange
 import com.github.garynasser.correction_notebook.data.model.home.ScheduleSection
-import com.github.garynasser.correction_notebook.data.model.home.ScheduleSourceType
 import com.github.garynasser.correction_notebook.data.model.home.TodoItem
 import com.github.garynasser.correction_notebook.ui.components.FreshCard
-import com.github.garynasser.correction_notebook.ui.components.SectionHeader
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -81,7 +75,7 @@ import java.time.format.DateTimeFormatter
 fun PlannerSection(
     uiState: HomeUiState,
     onPlannerTabChange: (PlannerTab) -> Unit,
-    onScheduleRangeChange: (ScheduleRange) -> Unit,
+    onDateChange: (LocalDate) -> Unit,
     onImportIcs: () -> Unit,
     onAddSchedule: () -> Unit,
     onAddTodo: () -> Unit,
@@ -101,9 +95,11 @@ fun PlannerSection(
                 .padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            SectionHeader(
-                title = "今日规划",
-                subtitle = "把课程、日程和待办放到同一条学习节奏里"
+            PlannerHeader(
+                selectedDate = uiState.selectedDate,
+                isImporting = uiState.isImportingSchedule,
+                onImportIcs = onImportIcs,
+                onAddSchedule = onAddSchedule
             )
 
             SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
@@ -127,14 +123,15 @@ fun PlannerSection(
                 }
             }
 
+            DateSelector(
+                selectedDate = uiState.selectedDate,
+                onDateChange = onDateChange
+            )
+
             when (uiState.plannerTab) {
                 PlannerTab.SCHEDULE -> SchedulePlannerContent(
-                    range = uiState.scheduleRange,
+                    selectedDate = uiState.selectedDate,
                     sections = uiState.scheduleSections,
-                    isImporting = uiState.isImportingSchedule,
-                    onRangeChange = onScheduleRangeChange,
-                    onImportIcs = onImportIcs,
-                    onAddSchedule = onAddSchedule,
                     onDeleteSchedule = onDeleteSchedule
                 )
                 PlannerTab.TODO -> TodoPlannerContent(
@@ -150,54 +147,63 @@ fun PlannerSection(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PlannerHeader(
+    selectedDate: LocalDate,
+    isImporting: Boolean,
+    onImportIcs: () -> Unit,
+    onAddSchedule: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Top
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "${selectedDate.format(DateTimeFormatter.ofPattern("M月d日"))}规划",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(3.dp))
+            Text(
+                text = "把课程、日程和待办放到同一条学习节奏里",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            IconButton(onClick = onImportIcs, enabled = !isImporting) {
+                androidx.compose.material3.Icon(
+                    Icons.Default.ImportExport,
+                    contentDescription = if (isImporting) "导入中" else "导入 ICS"
+                )
+            }
+            IconButton(onClick = onAddSchedule) {
+                androidx.compose.material3.Icon(Icons.Default.Add, contentDescription = "添加日程")
+            }
+        }
+    }
+}
+
 @Composable
 private fun SchedulePlannerContent(
-    range: ScheduleRange,
+    selectedDate: LocalDate,
     sections: List<ScheduleSection>,
-    isImporting: Boolean,
-    onRangeChange: (ScheduleRange) -> Unit,
-    onImportIcs: () -> Unit,
-    onAddSchedule: () -> Unit,
     onDeleteSchedule: (String) -> Unit
 ) {
+    var selectedOccurrence by remember { mutableStateOf<ScheduleOccurrence?>(null) }
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ScheduleRange.entries.forEach { item ->
-                FilterChip(
-                    selected = range == item,
-                    onClick = { onRangeChange(item) },
-                    label = {
-                        Text(
-                            when (item) {
-                                ScheduleRange.TODAY -> "今天"
-                                ScheduleRange.TOMORROW -> "明天"
-                                ScheduleRange.WEEK -> "本周"
-                            }
-                        )
-                    }
-                )
-            }
-        }
-    }
-
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        OutlinedButton(onClick = onImportIcs) {
-            androidx.compose.material3.Icon(Icons.Default.ImportExport, contentDescription = null)
-            Spacer(modifier = Modifier.size(6.dp))
-            Text(if (isImporting) "导入中..." else "导入 ICS")
-        }
-        OutlinedButton(onClick = onAddSchedule) {
-            androidx.compose.material3.Icon(Icons.Default.Add, contentDescription = null)
-            Spacer(modifier = Modifier.size(6.dp))
-            Text("添加日程")
-        }
+        Text(
+            text = "显示 ${selectedDate.format(DateTimeFormatter.ofPattern("M月d日"))} 的课程和日程",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+        )
     }
 
     if (sections.all { it.items.isEmpty() }) {
@@ -206,20 +212,34 @@ private fun SchedulePlannerContent(
             description = "你可以导入 ICS 文件，或者手动添加一个时间、地点、活动安排。"
         )
     } else {
-        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             sections.filter { it.items.isNotEmpty() }.forEach { section ->
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
                         text = section.title,
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold
                     )
                     section.items.forEach { item ->
-                        ScheduleOccurrenceCard(item = item, onDelete = { onDeleteSchedule(item.eventId) })
+                        ScheduleOccurrenceCard(
+                            item = item,
+                            onClick = { selectedOccurrence = item }
+                        )
                     }
                 }
             }
         }
+    }
+
+    selectedOccurrence?.let { item ->
+        ScheduleOccurrenceDetailDialog(
+            item = item,
+            onDismiss = { selectedOccurrence = null },
+            onDelete = {
+                selectedOccurrence = null
+                onDeleteSchedule(item.eventId)
+            }
+        )
     }
 }
 
@@ -304,65 +324,94 @@ private fun PlannerEmptyState(
 @Composable
 private fun ScheduleOccurrenceCard(
     item: ScheduleOccurrence,
-    onDelete: () -> Unit
+    onClick: () -> Unit
 ) {
     Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
-            containerColor = if (item.sourceType == ScheduleSourceType.ICS_IMPORT) {
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
-            } else {
-                MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
-            }
+            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.42f)
         )
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
+            Text(
+                text = formatScheduleTimeCompact(item),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.width(76.dp)
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(text = item.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    AssistChip(
-                        onClick = {},
-                        enabled = false,
-                        colors = AssistChipDefaults.assistChipColors(
-                            disabledContainerColor = Color.White.copy(alpha = 0.65f)
-                        ),
-                        label = {
-                            Text(if (item.sourceType == ScheduleSourceType.ICS_IMPORT) "ICS 导入" else "手动添加")
-                        }
+                Text(
+                    text = item.title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1
+                )
+                if (item.location.isNotBlank()) {
+                    Text(
+                        text = item.location,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.64f),
+                        maxLines = 1
                     )
                 }
-                TextButton(onClick = onDelete) {
-                    androidx.compose.material3.Icon(Icons.Default.Delete, contentDescription = null)
-                }
-            }
-
-            PlannerMetaRow(
-                icon = Icons.Default.Event,
-                text = formatScheduleTime(item)
-            )
-            if (item.location.isNotBlank()) {
-                PlannerMetaRow(
-                    icon = Icons.Default.LocationOn,
-                    text = item.location
-                )
-            }
-            if (item.description.isNotBlank()) {
-                PlannerMetaRow(
-                    icon = Icons.Default.NoteAlt,
-                    text = item.description
-                )
             }
         }
     }
+}
+
+@Composable
+private fun ScheduleOccurrenceDetailDialog(
+    item: ScheduleOccurrence,
+    onDismiss: () -> Unit,
+    onDelete: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(item.title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                PlannerMetaRow(
+                    icon = Icons.Default.Event,
+                    text = formatScheduleTime(item)
+                )
+                if (item.location.isNotBlank()) {
+                    PlannerMetaRow(
+                        icon = Icons.Default.LocationOn,
+                        text = item.location
+                    )
+                }
+                if (item.description.isNotBlank()) {
+                    PlannerMetaRow(
+                        icon = Icons.Default.NoteAlt,
+                        text = item.description
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("关闭")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDelete) {
+                androidx.compose.material3.Icon(Icons.Default.Delete, contentDescription = null)
+                Spacer(modifier = Modifier.size(4.dp))
+                Text("删除")
+            }
+        }
+    )
 }
 
 @Composable
@@ -387,6 +436,14 @@ private fun formatScheduleTime(item: ScheduleOccurrence): String {
         "全天"
     } else {
         "${item.startAt.format(DateTimeFormatter.ofPattern("MM月dd日 HH:mm"))} - ${item.endAt.format(DateTimeFormatter.ofPattern("HH:mm"))}"
+    }
+}
+
+private fun formatScheduleTimeCompact(item: ScheduleOccurrence): String {
+    return if (item.allDay) {
+        "全天"
+    } else {
+        "${item.startAt.format(DateTimeFormatter.ofPattern("HH:mm"))}\n${item.endAt.format(DateTimeFormatter.ofPattern("HH:mm"))}"
     }
 }
 

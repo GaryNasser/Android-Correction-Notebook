@@ -8,6 +8,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -24,6 +27,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.github.garynasser.correction_notebook.data.model.home.Article
+import com.github.garynasser.correction_notebook.data.model.ai.AiAction
+import com.github.garynasser.correction_notebook.data.model.ai.AiActionType
+import com.github.garynasser.correction_notebook.data.model.ai.AiPlanBlock
 import com.github.garynasser.correction_notebook.data.model.home.ImportDecision
 import com.github.garynasser.correction_notebook.data.model.home.PlannerTab
 import com.github.garynasser.correction_notebook.data.model.home.TimerState
@@ -41,6 +47,7 @@ import java.time.format.TextStyle
 import java.time.format.DateTimeFormatter
 import java.io.File
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -48,6 +55,8 @@ fun HomeScreen(
     homeViewModel: HomeViewModel = hiltViewModel(),
     statisticsViewModel: StatisticsViewModel = hiltViewModel(),
     onNavigateToStatistics: () -> Unit = {},
+    onNavigateToCourses: () -> Unit = {},
+    onNavigateToKnowledgeBase: () -> Unit = {},
     onImmersiveModeChanged: (Boolean) -> Unit = {},
     onOpenArticle: (Article) -> Unit = {}
 ) {
@@ -56,6 +65,15 @@ fun HomeScreen(
     var showCustomTimer by remember { mutableStateOf(false) }
     var startPomodoroAfterSettings by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
+
+    fun jumpToPlanner(tab: PlannerTab) {
+        homeViewModel.setPlannerTab(tab)
+        coroutineScope.launch {
+            listState.animateScrollToItem(HOME_PLANNER_INDEX)
+        }
+    }
 
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -145,6 +163,7 @@ fun HomeScreen(
                 .padding(innerPadding)
         ) {
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 16.dp),
@@ -161,14 +180,11 @@ fun HomeScreen(
                     todoCount = uiState.todoItems.count { !it.isCompleted },
                     recentCourses = uiState.recentCourseProgress,
                     recentFiles = uiState.recentKnowledgeFiles,
-                    onImmersiveModeClick = { homeViewModel.showModeSelector() }
-                )
-            }
-
-            item {
-                DateSelector(
-                    selectedDate = uiState.selectedDate,
-                    onDateChange = { homeViewModel.setSelectedDate(it) }
+                    onImmersiveModeClick = { homeViewModel.showModeSelector() },
+                    onScheduleClick = { jumpToPlanner(PlannerTab.SCHEDULE) },
+                    onTodoClick = { jumpToPlanner(PlannerTab.TODO) },
+                    onContinueLearningClick = onNavigateToCourses,
+                    onRecentFilesClick = onNavigateToKnowledgeBase
                 )
             }
 
@@ -190,9 +206,14 @@ fun HomeScreen(
             item {
                 AiStudyAdviceCard(
                     advice = uiState.aiAdvice,
+                    planBlocks = uiState.aiPlanBlocks,
+                    actions = uiState.aiActions,
+                    referencedMemories = uiState.aiReferencedMemories,
                     isLoading = uiState.isAiAdviceLoading,
                     onGenerate = { homeViewModel.generateTodayAdvice() },
-                    onSaveAdvice = { homeViewModel.saveAdviceAsTodo(it) }
+                    onSaveAdvice = { homeViewModel.saveAdviceAsTodo(it) },
+                    onApplyAction = { homeViewModel.applyAiAction(it) },
+                    onStartFocus = { homeViewModel.showModeSelector() }
                 )
             }
 
@@ -200,7 +221,7 @@ fun HomeScreen(
                 PlannerSection(
                     uiState = uiState,
                     onPlannerTabChange = { homeViewModel.setPlannerTab(it) },
-                    onScheduleRangeChange = { homeViewModel.setScheduleRange(it) },
+                    onDateChange = { homeViewModel.setSelectedDate(it) },
                     onImportIcs = { icsPickerLauncher.launch("*/*") },
                     onAddSchedule = { homeViewModel.showAddScheduleDialog() },
                     onAddTodo = { homeViewModel.showAddTodoDialog() },
@@ -319,12 +340,19 @@ fun HomeScreen(
     }
 }
 
+private const val HOME_PLANNER_INDEX = 5
+
 @Composable
 private fun AiStudyAdviceCard(
     advice: String?,
+    planBlocks: List<AiPlanBlock>,
+    actions: List<AiAction>,
+    referencedMemories: List<String>,
     isLoading: Boolean,
     onGenerate: () -> Unit,
-    onSaveAdvice: (String) -> Unit
+    onSaveAdvice: (String) -> Unit,
+    onApplyAction: (AiAction) -> Unit,
+    onStartFocus: () -> Unit
 ) {
     FreshCard(
         modifier = Modifier.fillMaxWidth(),
@@ -358,6 +386,33 @@ private fun AiStudyAdviceCard(
                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f)
                 )
             } else {
+                Text(
+                    text = advice,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.82f)
+                )
+            }
+
+            if (referencedMemories.isNotEmpty()) {
+                Text(
+                    text = "参考记忆：${referencedMemories.joinToString("、")}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            if (planBlocks.isNotEmpty()) {
+                Text(
+                    text = "今日学习计划",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    planBlocks.forEach { block ->
+                        AiPlanBlockRow(block = block, onStartFocus = onStartFocus, onSaveAdvice = onSaveAdvice)
+                    }
+                }
+            } else if (!advice.isNullOrBlank()) {
                 adviceLines(advice).forEach { line ->
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
@@ -383,6 +438,111 @@ private fun AiStudyAdviceCard(
                     }
                 }
             }
+
+            if (actions.isNotEmpty()) {
+                Text(
+                    text = "可确认执行",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    actions.forEach { action ->
+                        AiActionRow(action = action, onApply = { onApplyAction(action) })
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AiPlanBlockRow(
+    block: AiPlanBlock,
+    onStartFocus: () -> Unit,
+    onSaveAdvice: (String) -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.34f)
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = block.title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f)
+                )
+                AssistChip(
+                    onClick = {},
+                    label = { Text("${block.estimatedMinutes} 分钟") }
+                )
+            }
+            if (block.reason.isNotBlank()) {
+                Text(
+                    text = block.reason,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f)
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onStartFocus) {
+                    Icon(Icons.Default.Timer, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("开始专注")
+                }
+                TextButton(onClick = { onSaveAdvice("${block.title}：${block.reason}") }) {
+                    Icon(Icons.Default.AddTask, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("转待办")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AiActionRow(
+    action: AiAction,
+    onApply: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.42f)
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                imageVector = when (action.type) {
+                    AiActionType.CREATE_TODO,
+                    AiActionType.CREATE_REVIEW_PLAN -> Icons.Default.AddTask
+                    AiActionType.SAVE_MEMORY -> Icons.Default.BookmarkAdd
+                    AiActionType.SAVE_COURSE_NOTE -> Icons.Default.NoteAlt
+                    AiActionType.OPEN_COURSE -> Icons.Default.School
+                    AiActionType.OPEN_FILE -> Icons.Default.Description
+                },
+                contentDescription = null
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(action.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                if (action.description.isNotBlank()) {
+                    Text(
+                        action.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f),
+                        maxLines = 2
+                    )
+                }
+            }
+            TextButton(onClick = onApply) { Text("确认") }
         }
     }
 }
@@ -422,7 +582,11 @@ fun TodayStudyWorkbench(
     todoCount: Int,
     recentCourses: List<CourseProgress>,
     recentFiles: List<KnowledgeBaseFileSummary>,
-    onImmersiveModeClick: () -> Unit
+    onImmersiveModeClick: () -> Unit,
+    onScheduleClick: () -> Unit,
+    onTodoClick: () -> Unit,
+    onContinueLearningClick: () -> Unit,
+    onRecentFilesClick: () -> Unit
 ) {
     val currentTime = remember { mutableStateOf(java.time.LocalTime.now()) }
 
@@ -498,7 +662,11 @@ fun TodayStudyWorkbench(
                 scheduleCount = scheduleCount,
                 todoCount = todoCount,
                 recentCourses = recentCourses,
-                recentFiles = recentFiles
+                recentFiles = recentFiles,
+                onScheduleClick = onScheduleClick,
+                onTodoClick = onTodoClick,
+                onContinueLearningClick = onContinueLearningClick,
+                onRecentFilesClick = onRecentFilesClick
             )
 
             if (timerState !is TimerState.Idle) {
@@ -532,7 +700,11 @@ private fun TodaySummaryGrid(
     scheduleCount: Int,
     todoCount: Int,
     recentCourses: List<CourseProgress>,
-    recentFiles: List<KnowledgeBaseFileSummary>
+    recentFiles: List<KnowledgeBaseFileSummary>,
+    onScheduleClick: () -> Unit,
+    onTodoClick: () -> Unit,
+    onContinueLearningClick: () -> Unit,
+    onRecentFilesClick: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
@@ -540,12 +712,14 @@ private fun TodaySummaryGrid(
                 icon = Icons.Default.Event,
                 label = "今日课程/日程",
                 value = if (scheduleCount == 0) "待导入课表" else "$scheduleCount 项",
+                onClick = onScheduleClick,
                 modifier = Modifier.weight(1f)
             )
             WorkbenchChip(
                 icon = Icons.Default.Checklist,
                 label = "待办",
                 value = if (todoCount == 0) "暂无压力" else "$todoCount 项",
+                onClick = onTodoClick,
                 modifier = Modifier.weight(1f)
             )
         }
@@ -554,12 +728,14 @@ private fun TodaySummaryGrid(
                 icon = Icons.Default.School,
                 label = "继续学习",
                 value = recentCourses.firstOrNull()?.lastSectionTitle?.ifBlank { recentCourses.first().courseName } ?: "先看一节课",
+                onClick = onContinueLearningClick,
                 modifier = Modifier.weight(1f)
             )
             WorkbenchChip(
                 icon = Icons.Default.FolderOpen,
                 label = "最近资料",
                 value = recentFiles.firstOrNull()?.displayName ?: "去 BITShare 找资料",
+                onClick = onRecentFilesClick,
                 modifier = Modifier.weight(1f)
             )
         }
@@ -571,10 +747,14 @@ private fun WorkbenchChip(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
     value: String,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Surface(
-        modifier = modifier.heightIn(min = 58.dp),
+        modifier = modifier
+            .heightIn(min = 58.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick),
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.58f)
     ) {
@@ -606,13 +786,24 @@ fun DateSelector(
     selectedDate: LocalDate,
     onDateChange: (LocalDate) -> Unit
 ) {
-    val dates = remember { (-3..3).map { LocalDate.now().plusDays(it.toLong()) } }
+    val today = remember { LocalDate.now() }
+    val dates = remember(today) { (-30..30).map { today.plusDays(it.toLong()) } }
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = 27)
 
-    Row(
+    LaunchedEffect(selectedDate) {
+        val selectedIndex = dates.indexOf(selectedDate)
+        if (selectedIndex >= 0) {
+            listState.animateScrollToItem((selectedIndex - 3).coerceAtLeast(0))
+        }
+    }
+
+    LazyRow(
+        state = listState,
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceEvenly
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = PaddingValues(horizontal = 2.dp)
     ) {
-        dates.forEach { date ->
+        items(dates) { date ->
             val isSelected = date == selectedDate
             Column(
                 modifier = Modifier
@@ -622,11 +813,12 @@ fun DateSelector(
                         if (isSelected) MaterialTheme.colorScheme.primary
                         else Color.Transparent
                     )
-                    .padding(12.dp),
+                    .width(56.dp)
+                    .padding(vertical = 10.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = if (date == LocalDate.now()) {
+                    text = if (date == today) {
                         "今天"
                     } else {
                         date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.CHINA)

@@ -10,6 +10,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.navigation.toRoute
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.KnowledgeBaseFileSummary
 import com.github.garynasser.correction_notebook.data.repository.KnowledgeBasePreviewRenderer
+import com.github.garynasser.correction_notebook.data.repository.KnowledgeBaseAiRepository
 import com.github.garynasser.correction_notebook.data.repository.KnowledgeBaseRepository
 import com.github.garynasser.correction_notebook.domain.usecase.AiStudyUseCase
 import com.github.garynasser.correction_notebook.domain.usecase.KnowledgeAiMode
@@ -39,6 +40,8 @@ data class KnowledgeBaseFileViewerUiState(
     val isTextTruncated: Boolean = false,
     val pdfPages: List<Bitmap> = emptyList(),
     val htmlPreviewPath: String? = null,
+    val indexChunkCount: Int? = null,
+    val isIndexing: Boolean = false,
     val aiResult: String? = null,
     val isAiLoading: Boolean = false,
     val errorMessage: String? = null
@@ -47,6 +50,7 @@ data class KnowledgeBaseFileViewerUiState(
 @HiltViewModel
 class KnowledgeBaseFileViewerViewModel @Inject constructor(
     private val knowledgeBaseRepository: KnowledgeBaseRepository,
+    private val knowledgeBaseAiRepository: KnowledgeBaseAiRepository,
     private val previewRenderer: KnowledgeBasePreviewRenderer,
     private val aiStudyUseCase: AiStudyUseCase,
     savedStateHandle: SavedStateHandle
@@ -82,6 +86,23 @@ class KnowledgeBaseFileViewerViewModel @Inject constructor(
         }
     }
 
+    fun rebuildIndex() {
+        val fileId = uiState.value.file?.id ?: return
+        viewModelScope.launch {
+            uiState.value = uiState.value.copy(isIndexing = true, errorMessage = null)
+            knowledgeBaseAiRepository.rebuildIndexForFile(fileId)
+                .onSuccess { count ->
+                    uiState.value = uiState.value.copy(isIndexing = false, indexChunkCount = count)
+                }
+                .onFailure { throwable ->
+                    uiState.value = uiState.value.copy(
+                        isIndexing = false,
+                        errorMessage = throwable.message ?: "索引重建失败"
+                    )
+                }
+        }
+    }
+
     fun clearAiResult() {
         uiState.value = uiState.value.copy(aiResult = null)
     }
@@ -110,6 +131,7 @@ class KnowledgeBaseFileViewerViewModel @Inject constructor(
             }
 
             val previewType = resolvePreviewType(file)
+            val chunkCount = knowledgeBaseAiRepository.indexStatus(args.fileId).getOrNull()
             when (previewType) {
                 KnowledgeBasePreviewType.TEXT -> loadTextPreview(file, previewType)
                 KnowledgeBasePreviewType.PDF -> loadPdfPreview(file, previewType)
@@ -118,10 +140,12 @@ class KnowledgeBaseFileViewerViewModel @Inject constructor(
                     uiState.value = KnowledgeBaseFileViewerUiState(
                         isLoading = false,
                         file = file,
-                        previewType = previewType
+                        previewType = previewType,
+                        indexChunkCount = chunkCount
                     )
                 }
             }
+            uiState.value = uiState.value.copy(indexChunkCount = chunkCount)
         }
     }
 

@@ -21,6 +21,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Camera
+import androidx.compose.material.icons.filled.AddTask
+import androidx.compose.material.icons.filled.NoteAlt
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.School
@@ -38,6 +40,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -57,6 +60,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.github.garynasser.correction_notebook.data.model.yanhe.CourseSection
 import com.github.garynasser.correction_notebook.data.model.yanhe.Video
+import com.github.garynasser.correction_notebook.data.model.ai.AiActionType
 import com.github.garynasser.correction_notebook.ui.components.FreshScreen
 
 
@@ -199,6 +203,39 @@ fun CourseVideoListScreen(
                             color = MaterialTheme.colorScheme.error
                         )
                     }
+                    assistantState.actions.forEach { action ->
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.45f)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    if (action.type == AiActionType.SAVE_COURSE_NOTE) Icons.Default.NoteAlt else Icons.Default.AddTask,
+                                    contentDescription = null
+                                )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(action.title, fontWeight = FontWeight.SemiBold)
+                                    if (action.description.isNotBlank()) {
+                                        Text(action.description, style = MaterialTheme.typography.bodySmall, maxLines = 2)
+                                    }
+                                }
+                                TextButton(onClick = {
+                                    assistantViewModel.applyAction(
+                                        action = action,
+                                        courseId = viewModel.courseId,
+                                        courseName = viewModel.courseName,
+                                        sectionId = section.id,
+                                        sectionTitle = section.title
+                                    )
+                                }) { Text("确认") }
+                            }
+                        }
+                    }
                 }
             },
             confirmButton = {
@@ -217,9 +254,17 @@ fun CourseVideoListScreen(
                         }) { Text("转待办") }
                     }
                     TextButton(
-                        onClick = { assistantViewModel.summarize(section.title, noteInput) },
+                        onClick = {
+                            assistantViewModel.summarizeLearningPackage(
+                                viewModel.courseId,
+                                viewModel.courseName,
+                                section.id,
+                                section.title,
+                                noteInput
+                            )
+                        },
                         enabled = !assistantState.isLoading
-                    ) { Text(if (assistantState.result == null) "生成" else "重新生成") }
+                    ) { Text(if (assistantState.result == null) "生成学习包" else "重新生成") }
                 }
             },
             dismissButton = {

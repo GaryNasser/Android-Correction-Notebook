@@ -2,6 +2,7 @@ package com.github.garynasser.correction_notebook.ui.update
 
 import android.content.Context
 import android.content.pm.PackageManager
+import androidx.core.content.pm.PackageInfoCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.garynasser.correction_notebook.data.model.appupdate.AppVersionInfo
@@ -73,7 +74,7 @@ class AppUpdateViewModel @Inject constructor(
 
     private fun readCurrentVersionCode(): Long {
         val packageInfo = context.packageManager.getPackageInfoCompat(context.packageName)
-        return packageInfo.longVersionCode
+        return PackageInfoCompat.getLongVersionCode(packageInfo)
     }
 }
 

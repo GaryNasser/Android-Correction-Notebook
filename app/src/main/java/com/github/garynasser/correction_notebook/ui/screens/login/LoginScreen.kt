@@ -1,6 +1,5 @@
 package com.github.garynasser.correction_notebook.ui.screens.login
 
-import android.R
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -40,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.github.garynasser.correction_notebook.data.repository.AuthRepository
 import com.github.garynasser.correction_notebook.ui.components.AuthFormTemplate
 
 @Composable
@@ -94,17 +94,24 @@ fun UsernameLoginScreen(
                 )
             },
             footer = {
-                TextButton(
-                    onClick = {
-                        onNavigateToRegister()
-                    },
-                ) {
+                Column {
                     Text(
-                        text = "没有账号？立即注册",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
+                        text = "测试账号：${AuthRepository.TEST_USERNAME} / ${AuthRepository.TEST_PASSWORD}",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    TextButton(
+                        onClick = {
+                            onNavigateToRegister()
+                        },
+                    ) {
+                        Text(
+                            text = "没有账号？立即注册",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
             },
         )
