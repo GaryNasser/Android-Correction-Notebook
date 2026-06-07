@@ -7,7 +7,9 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.garynasser.correction_notebook.data.model.yanhe.Course
+import com.github.garynasser.correction_notebook.data.model.yanhe.CourseProgress
 import com.github.garynasser.correction_notebook.data.repository.AuthStateManager
+import com.github.garynasser.correction_notebook.data.repository.CourseLearningRepository
 import com.github.garynasser.correction_notebook.data.repository.VideoRepository
 import com.github.garynasser.correction_notebook.data.repository.YanheRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -24,7 +26,8 @@ sealed interface CourseUiState {
 class CourseListViewModel @Inject constructor(
     private val yanheRepository: YanheRepository,
     private val authStateManager: AuthStateManager,
-    private val videoRepository: VideoRepository
+    private val videoRepository: VideoRepository,
+    private val courseLearningRepository: CourseLearningRepository
 ) : ViewModel() {
 
     // 搜索与筛选状态
@@ -43,6 +46,8 @@ class CourseListViewModel @Inject constructor(
     // UI 状态
     var uiState: CourseUiState by mutableStateOf(CourseUiState.Loading)
         private set
+    var recentProgress by mutableStateOf<List<CourseProgress>>(emptyList())
+        private set
 
     // 学期映射表：注意 "全部学期" 映射为 null
     val semesters = listOf("全部学期", "2023-2024 秋季", "2023-2024 春季")
@@ -54,6 +59,13 @@ class CourseListViewModel @Inject constructor(
 
     init {
         loadCourses(isNextPage = false)
+        viewModelScope.launch {
+            courseLearningRepository.progressItems.collect { items ->
+                recentProgress = items
+                    .sortedByDescending { it.lastAccessedAt }
+                    .take(3)
+            }
+        }
     }
 
     fun loadCourses(isNextPage: Boolean = false) {

@@ -137,14 +137,21 @@ fun MainContainer(
                     onOpenArticle = { article ->
                         navController.navigate(ArticleDetailRoute(article.id))
                     },
-                    onNavigateToCourses = {
-                        navController.navigate(CourseList) {
-                            popUpTo(navController.graph.findStartDestination().id) {
-                                saveState = true
+                    onNavigateToCourses = { progress ->
+                        if (progress != null) {
+                            navController.navigate(VideoList(progress.courseId, progress.courseName))
+                        } else {
+                            navController.navigate(CourseList) {
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
                             }
-                            launchSingleTop = true
-                            restoreState = true
                         }
+                    },
+                    onOpenCourse = { courseId, courseName ->
+                        navController.navigate(VideoList(courseId, courseName))
                     },
                     onNavigateToKnowledgeBase = {
                         navController.navigate(KnowledgeBase) {
@@ -154,6 +161,9 @@ fun MainContainer(
                             launchSingleTop = true
                             restoreState = true
                         }
+                    },
+                    onOpenKnowledgeFile = { fileId ->
+                        navController.navigate(KnowledgeBaseFileViewer(fileId))
                     },
                     onImmersiveModeChanged = { hideBottomBar = it }
                 )

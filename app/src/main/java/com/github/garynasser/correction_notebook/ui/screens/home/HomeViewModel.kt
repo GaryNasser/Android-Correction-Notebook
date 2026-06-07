@@ -41,6 +41,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
 enum class StudyMode {
@@ -251,10 +252,15 @@ class HomeViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(
             selectedDate = date,
             scheduleRange = ScheduleRange.TODAY,
-            plannerTab = PlannerTab.SCHEDULE
+            plannerTab = PlannerTab.SCHEDULE,
+            aiAdvice = null,
+            aiActions = emptyList(),
+            aiReferencedMemories = emptyList(),
+            aiPlanBlocks = emptyList()
         )
         viewModelScope.launch {
             refreshScheduleSections()
+            refreshLocalPlan()
         }
     }
 
@@ -414,7 +420,7 @@ class HomeViewModel @Inject constructor(
             .map {
                 AiPlanBlock(
                     title = it.title,
-                    reason = "来自今日课表/日程",
+                    reason = "来自 ${state.selectedDate.format(DateTimeFormatter.ofPattern("M月d日"))} 课表/日程",
                     estimatedMinutes = 45,
                     priority = "HIGH"
                 )

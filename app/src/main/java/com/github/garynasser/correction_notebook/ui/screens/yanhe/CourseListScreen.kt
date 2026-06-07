@@ -1,6 +1,7 @@
 package com.github.garynasser.correction_notebook.ui.screens.yanhe
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -12,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
@@ -23,6 +25,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.SubcomposeAsyncImage
 import com.github.garynasser.correction_notebook.data.model.yanhe.Course
+import com.github.garynasser.correction_notebook.data.model.yanhe.CourseProgress
 import com.github.garynasser.correction_notebook.ui.components.FreshScreen
 import kotlinx.coroutines.launch
 
@@ -108,6 +111,15 @@ fun CourseListScreen(
                             verticalArrangement = Arrangement.spacedBy(16.dp),
                             modifier = Modifier.fillMaxSize()
                         ) {
+                            if (viewModel.recentProgress.isNotEmpty()) {
+                                item(span = { GridItemSpan(maxLineSpan) }) {
+                                    RecentLearningSection(
+                                        items = viewModel.recentProgress,
+                                        onCourseClick = onCourseCardClick
+                                    )
+                                }
+                            }
+
                             items(state.courses) { course ->
                                 CourseCard(
                                     course = course,
@@ -128,6 +140,97 @@ fun CourseListScreen(
                 }
             }
         }
+        }
+    }
+}
+
+@Composable
+private fun RecentLearningSection(
+    items: List<CourseProgress>,
+    onCourseClick: (Int, String) -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.34f),
+        tonalElevation = 0.dp
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.History, contentDescription = null, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = "最近学习",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    text = "继续上次进度",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            items.forEach { progress ->
+                RecentLearningRow(
+                    progress = progress,
+                    onClick = { onCourseClick(progress.courseId, progress.courseName) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecentLearningRow(
+    progress: CourseProgress,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Icon(
+                Icons.Default.PlayCircle,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = progress.courseName.ifBlank { "课程 ${progress.courseId}" },
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = progress.lastSectionTitle.ifBlank { "继续查看课程章节" },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            AssistChip(
+                onClick = onClick,
+                label = { Text("${progress.progressPercent}%") },
+                leadingIcon = {
+                    Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp))
+                }
+            )
         }
     }
 }
