@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
@@ -177,6 +178,38 @@ fun KnowledgeBaseFileViewerScreen(
                                     }
                                 )
                                 DropdownMenuItem(
+                                    text = { Text("AI 术语表") },
+                                    leadingIcon = { Icon(Icons.Default.Description, contentDescription = null) },
+                                    onClick = {
+                                        menuExpanded = false
+                                        viewModel.runAiAction(KnowledgeAiMode.GLOSSARY)
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("AI 公式表") },
+                                    leadingIcon = { Icon(Icons.Default.Lightbulb, contentDescription = null) },
+                                    onClick = {
+                                        menuExpanded = false
+                                        viewModel.runAiAction(KnowledgeAiMode.FORMULA_SHEET)
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("AI 复习清单") },
+                                    leadingIcon = { Icon(Icons.Default.Quiz, contentDescription = null) },
+                                    onClick = {
+                                        menuExpanded = false
+                                        viewModel.runAiAction(KnowledgeAiMode.REVIEW_CHECKLIST)
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("重建 AI 索引") },
+                                    leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) },
+                                    onClick = {
+                                        menuExpanded = false
+                                        viewModel.rebuildIndex()
+                                    }
+                                )
+                                DropdownMenuItem(
                                     text = { Text("其他应用打开") },
                                     leadingIcon = { Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null) },
                                     onClick = {
@@ -264,6 +297,33 @@ fun KnowledgeBaseFileViewerScreen(
                                 CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                                 Spacer(modifier = Modifier.size(12.dp))
                                 Text("AI 正在阅读这份资料...")
+                            }
+                        }
+                    }
+
+                    ElevatedCard(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Psychology, contentDescription = null)
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = when {
+                                    uiState.isIndexing -> "AI 索引正在重建..."
+                                    uiState.indexChunkCount == null -> "AI 索引状态未知，可从菜单重建索引"
+                                    uiState.indexChunkCount == 0 -> "当前资料尚未建立可用文本索引"
+                                    else -> "AI 索引可用：${uiState.indexChunkCount} 个片段"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.weight(1f)
+                            )
+                            TextButton(onClick = viewModel::rebuildIndex, enabled = !uiState.isIndexing) {
+                                Text("重建")
                             }
                         }
                     }

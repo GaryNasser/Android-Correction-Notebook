@@ -10,8 +10,8 @@ object AiErrorMapper {
         val apiMessage = extractMessage(body)
         return when (code) {
             400 -> apiMessage ?: "请求格式不正确或接口地址与所选协议不匹配"
-            401 -> apiMessage ?: "API Key 无效或已失效"
-            403 -> apiMessage ?: "当前 API Key 无权限访问该模型或接口"
+            401 -> authError("API Key 无效或已失效", body, apiMessage)
+            403 -> authError("当前 API Key 无权限访问该模型或接口", body, apiMessage)
             404 -> apiMessage ?: "接口地址或模型不存在"
             408 -> "请求超时，请稍后重试"
             409 -> "请求冲突，请稍后重试"
@@ -46,6 +46,24 @@ object AiErrorMapper {
             ?: body.takeIf { !it.trim().startsWith("{") }?.let {
                 "AI 接口返回异常响应：${AiResponseParser.preview(it)}"
             }
+    }
+
+    private fun authError(defaultMessage: String, body: String, apiMessage: String?): String {
+        if (apiMessage == null) return defaultMessage
+        val normalized = apiMessage.lowercase()
+        val isPlainAuthMessage = listOf(
+            "authentication",
+            "auth",
+            "unauthorized",
+            "api key",
+            "invalid key",
+            "permission"
+        ).any { it in normalized }
+        return if (isPlainAuthMessage || apiMessage.startsWith("AI 接口返回异常响应")) {
+            "$defaultMessage。响应片段：${AiResponseParser.preview(body)}"
+        } else {
+            apiMessage
+        }
     }
 
     private fun mapServerError(code: Int, body: String, apiMessage: String?): String {
