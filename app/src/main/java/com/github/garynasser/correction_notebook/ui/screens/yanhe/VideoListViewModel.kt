@@ -16,6 +16,7 @@ import com.github.garynasser.correction_notebook.data.repository.VideoRepository
 import com.github.garynasser.correction_notebook.ui.navigation.VideoList
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import javax.inject.Inject
 
 sealed interface VideoUIState {
@@ -60,13 +61,16 @@ class VideoListViewModel @Inject constructor(
 
     fun getVideoList(courseId: Int) {
         viewModelScope.launch {
+            uiState = VideoUIState.Loading
             try {
-                val results = videoRepository.getCourseSession(courseId)
+                val results = withTimeout(20_000) {
+                    videoRepository.getCourseSession(courseId)
+                }
 
                 uiState = VideoUIState.Success(results)
                 progress = courseLearningRepository.getProgressForCourse(courseId)
             } catch (e: Exception) {
-                uiState = VideoUIState.Error("加载失败: ${e.message}")
+                uiState = VideoUIState.Error("加载失败: ${e.message ?: "延河课堂课程资源请求超时"}")
             }
         }
 
@@ -74,16 +78,30 @@ class VideoListViewModel @Inject constructor(
 
     fun recordWatch(section: CourseSection, videoUrl: String) {
         viewModelScope.launch {
-            val total = (uiState as? VideoUIState.Success)?.videos?.size ?: 0
-            courseLearningRepository.recordWatch(
-                courseId = courseId,
-                courseName = courseName,
-                sectionId = section.id,
-                sectionTitle = section.title,
-                videoUrl = videoUrl,
-                totalSections = total
-            )
+            recordWatchInternal(section, videoUrl)
             loadProgress()
+        }
+    }
+
+    fun playSection(section: CourseSection, preferScreen: Boolean) {
+        viewModelScope.launch {
+            playState = PlayState.Loading
+            try {
+                val playableSection = if (section.videos.any { it.mainUrl.isNotBlank() || it.vgaUrl.isNotBlank() }) {
+                    section
+                } else {
+                    withTimeout(12_000) {
+                        videoRepository.getCourseSessionDetail(section.id)
+                    }
+                }
+                val videoUrl = selectVideoUrl(playableSection, preferScreen)
+                    ?: throw Exception("该节次没有可播放的视频")
+                recordWatchInternal(playableSection, videoUrl)
+                loadProgress()
+                playState = PlayState.Success(videoUrl)
+            } catch (e: Exception) {
+                playState = PlayState.Error("播放失败: ${e.message ?: "延河课堂视频地址获取失败"}")
+            }
         }
     }
 
@@ -106,5 +124,30 @@ class VideoListViewModel @Inject constructor(
         viewModelScope.launch {
             progress = courseLearningRepository.getProgressForCourse(courseId)
         }
+    }
+
+    private suspend fun recordWatchInternal(section: CourseSection, videoUrl: String) {
+        val total = (uiState as? VideoUIState.Success)?.videos?.size ?: 0
+        courseLearningRepository.recordWatch(
+            courseId = courseId,
+            courseName = courseName,
+            sectionId = section.id,
+            sectionTitle = section.title,
+            videoUrl = videoUrl,
+            totalSections = total
+        )
+    }
+
+    private fun selectVideoUrl(section: CourseSection, preferScreen: Boolean): String? {
+        section.videos.forEach { video ->
+            val preferred = if (preferScreen) video.vgaUrl else video.mainUrl
+            val fallback = if (preferScreen) video.mainUrl else video.vgaUrl
+            firstNonBlank(preferred, fallback, video.room, video.path)?.let { return it }
+        }
+        return null
+    }
+
+    private fun firstNonBlank(vararg values: String): String? {
+        return values.firstOrNull { it.isNotBlank() }
     }
 }

@@ -12,7 +12,7 @@ import com.github.garynasser.correction_notebook.data.remote.api.UpdateApiServic
 import com.github.garynasser.correction_notebook.data.remote.api.VideoApiService
 import com.github.garynasser.correction_notebook.data.remote.network.AuthInterceptor
 import com.github.garynasser.correction_notebook.data.remote.network.TokenAuthenticator
-import com.github.garynasser.correction_notebook.data.repository.AuthStateManager
+import com.github.garynasser.correction_notebook.utils.SignatureUtils
 import com.github.garynasser.correction_notebook.utils.BitShareNetworkDetector
 import com.google.gson.Gson
 import dagger.Module
@@ -24,6 +24,7 @@ import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 import javax.inject.Qualifier
 import javax.inject.Singleton
@@ -94,8 +95,29 @@ object NetworkModule {
     @Provides
     @Singleton
     fun provideVideoApiService(): VideoApiService {
+        val yanheClient = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val signature = SignatureUtils.getSignature()
+                val request = chain.request().newBuilder()
+                    .header("Accept", "application/json, text/plain, */*")
+                    .header("Origin", "https://www.yanhekt.cn")
+                    .header("Referer", "https://www.yanhekt.cn/")
+                    .header("xdomain-client", "web_user")
+                    .header("Xdomain-Client", "web_user")
+                    .header("X-TRACE-ID", UUID.randomUUID().toString())
+                    .header("xclient-timestamp", signature["Xclient-Timestamp"].orEmpty())
+                    .header("xclient-signature", signature["Xclient-Signature"].orEmpty())
+                    .header("xclient-version", "v1")
+                    .header("Xclient-Version", "v1")
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                    .build()
+                chain.proceed(request)
+            }
+            .addInterceptor(createLoggingInterceptor())
+            .build()
         val retrofit = Retrofit.Builder()
             .baseUrl("https://cbiz.yanhekt.cn/")
+            .client(yanheClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
 
@@ -148,14 +170,11 @@ object NetworkModule {
     fun provideBusinessOkHttpClient(
         tokenManager: TokenManager,
         authApiService: AuthApiService,
-        authStateManager: AuthStateManager
     ): OkHttpClient {
         return OkHttpClient.Builder()
             .addInterceptor(AuthInterceptor(tokenManager))
             .addInterceptor(createLoggingInterceptor())
-            .authenticator(TokenAuthenticator(
-                tokenManager, authApiService, authStateManager
-            ))
+            .authenticator(TokenAuthenticator(tokenManager, authApiService))
             .build()
     }
 
