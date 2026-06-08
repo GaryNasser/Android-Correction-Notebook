@@ -6,7 +6,12 @@ enum class AiActionType {
     CREATE_REVIEW_PLAN,
     SAVE_MEMORY,
     OPEN_COURSE,
-    OPEN_FILE
+    OPEN_FILE,
+    CREATE_STUDY_SET,
+    CREATE_FLASHCARDS,
+    CREATE_QUIZ,
+    SCHEDULE_REVIEW,
+    UPDATE_COURSE_GOAL
 }
 
 enum class MemoryCategory(val label: String) {

@@ -7,9 +7,13 @@ import androidx.room.RoomDatabase
     entities = [
         KnowledgeBaseFolderEntity::class,
         KnowledgeBaseFileEntity::class,
-        KnowledgeBaseChunkEntity::class
+        KnowledgeBaseChunkEntity::class,
+        StudySetEntity::class,
+        FlashcardEntity::class,
+        QuizQuestionEntity::class,
+        AiResultCacheEntity::class
     ],
-    version = 4,
+    version = 7,
     exportSchema = false
 )
 abstract class KnowledgeBaseDatabase : RoomDatabase() {

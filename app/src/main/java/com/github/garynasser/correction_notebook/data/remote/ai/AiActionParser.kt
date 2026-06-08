@@ -43,7 +43,7 @@ object AiActionParser {
           ],
           "actions": [
             {
-              "type": "CREATE_TODO|SAVE_COURSE_NOTE|CREATE_REVIEW_PLAN|SAVE_MEMORY|OPEN_COURSE|OPEN_FILE",
+              "type": "CREATE_TODO|SAVE_COURSE_NOTE|CREATE_REVIEW_PLAN|SAVE_MEMORY|OPEN_COURSE|OPEN_FILE|CREATE_STUDY_SET|CREATE_FLASHCARDS|CREATE_QUIZ|SCHEDULE_REVIEW|UPDATE_COURSE_GOAL",
               "title": "动作标题",
               "description": "动作说明",
               "payload": {

@@ -11,6 +11,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.github.garynasser.correction_notebook.data.model.home.Priority
 import com.github.garynasser.correction_notebook.data.model.home.TodoItem
 import com.github.garynasser.correction_notebook.data.model.home.TodoSource
+import com.github.garynasser.correction_notebook.data.model.home.TodoTaskType
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
@@ -90,7 +91,11 @@ class TodoRepository(private val context: Context) {
                 item.createdAt.toString(),
                 item.completedAt?.toString() ?: "",
                 item.source.name,
-                item.sourceRefId ?: ""
+                item.sourceRefId ?: "",
+                item.taskType.name,
+                item.courseId?.toString() ?: "",
+                item.estimatedMinutes?.toString() ?: "",
+                item.weight?.toString() ?: ""
             ).joinToString(":::")
         }
     }
@@ -112,7 +117,13 @@ class TodoRepository(private val context: Context) {
                     source = parts.getOrNull(8)?.let {
                         runCatching { TodoSource.valueOf(it) }.getOrDefault(TodoSource.MANUAL)
                     } ?: TodoSource.MANUAL,
-                    sourceRefId = parts.getOrNull(9)?.takeIf { it.isNotBlank() }
+                    sourceRefId = parts.getOrNull(9)?.takeIf { it.isNotBlank() },
+                    taskType = parts.getOrNull(10)?.let {
+                        runCatching { TodoTaskType.valueOf(it) }.getOrDefault(TodoTaskType.GENERAL)
+                    } ?: TodoTaskType.GENERAL,
+                    courseId = parts.getOrNull(11)?.toIntOrNull(),
+                    estimatedMinutes = parts.getOrNull(12)?.toIntOrNull(),
+                    weight = parts.getOrNull(13)?.toFloatOrNull()
                 )
             } else null
         }

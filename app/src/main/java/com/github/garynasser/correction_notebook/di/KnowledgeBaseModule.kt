@@ -175,6 +175,95 @@ object KnowledgeBaseModule {
         }
     }
 
+    private val MIGRATION_4_5 = object : Migration(4, 5) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `study_set` (
+                    `id` TEXT NOT NULL,
+                    `courseId` INTEGER,
+                    `courseName` TEXT,
+                    `title` TEXT NOT NULL,
+                    `sourceType` TEXT NOT NULL,
+                    `sourceRefId` TEXT,
+                    `createdByAi` INTEGER NOT NULL,
+                    `createdAt` INTEGER NOT NULL,
+                    `updatedAt` INTEGER NOT NULL,
+                    PRIMARY KEY(`id`)
+                )
+                """.trimIndent()
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_study_set_courseId` ON `study_set` (`courseId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_study_set_sourceType_sourceRefId` ON `study_set` (`sourceType`, `sourceRefId`)")
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `flashcard` (
+                    `id` TEXT NOT NULL,
+                    `studySetId` TEXT NOT NULL,
+                    `front` TEXT NOT NULL,
+                    `back` TEXT NOT NULL,
+                    `hint` TEXT NOT NULL,
+                    `difficulty` TEXT NOT NULL,
+                    `nextReviewAt` INTEGER NOT NULL,
+                    `lastReviewedAt` INTEGER,
+                    `reviewCount` INTEGER NOT NULL,
+                    PRIMARY KEY(`id`),
+                    FOREIGN KEY(`studySetId`) REFERENCES `study_set`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+                )
+                """.trimIndent()
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_flashcard_studySetId` ON `flashcard` (`studySetId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_flashcard_nextReviewAt` ON `flashcard` (`nextReviewAt`)")
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `quiz_question` (
+                    `id` TEXT NOT NULL,
+                    `studySetId` TEXT NOT NULL,
+                    `type` TEXT NOT NULL,
+                    `question` TEXT NOT NULL,
+                    `options` TEXT NOT NULL,
+                    `answer` TEXT NOT NULL,
+                    `explanation` TEXT NOT NULL,
+                    `sourceChunkId` INTEGER,
+                    PRIMARY KEY(`id`),
+                    FOREIGN KEY(`studySetId`) REFERENCES `study_set`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+                )
+                """.trimIndent()
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_quiz_question_studySetId` ON `quiz_question` (`studySetId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_quiz_question_sourceChunkId` ON `quiz_question` (`sourceChunkId`)")
+        }
+    }
+
+    private val MIGRATION_5_6 = object : Migration(5, 6) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            createAiResultCacheTable(db)
+        }
+    }
+
+    private val MIGRATION_6_7 = object : Migration(6, 7) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            addFlashcardColumn(db, "type", "TEXT NOT NULL DEFAULT 'QA_FLASHCARD'")
+            addFlashcardColumn(db, "title", "TEXT NOT NULL DEFAULT ''")
+            addFlashcardColumn(db, "explanation", "TEXT NOT NULL DEFAULT ''")
+            addFlashcardColumn(db, "example", "TEXT NOT NULL DEFAULT ''")
+            addFlashcardColumn(db, "pitfall", "TEXT NOT NULL DEFAULT ''")
+            addFlashcardColumn(db, "formula", "TEXT NOT NULL DEFAULT ''")
+            addFlashcardColumn(db, "tags", "TEXT NOT NULL DEFAULT ''")
+            addFlashcardColumn(db, "sourceLocation", "TEXT NOT NULL DEFAULT ''")
+            addFlashcardColumn(db, "sourceQuote", "TEXT NOT NULL DEFAULT ''")
+            addFlashcardColumn(db, "confidence", "REAL NOT NULL DEFAULT 0.7")
+            addFlashcardColumn(db, "createdByAi", "INTEGER NOT NULL DEFAULT 1")
+            addFlashcardColumn(db, "editedByUser", "INTEGER NOT NULL DEFAULT 0")
+            addFlashcardColumn(db, "createdAt", "INTEGER NOT NULL DEFAULT 0")
+            addFlashcardColumn(db, "updatedAt", "INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("UPDATE `flashcard` SET `title` = `front` WHERE `title` = ''")
+            val nowExpression = "strftime('%s','now') * 1000"
+            db.execSQL("UPDATE `flashcard` SET `createdAt` = $nowExpression WHERE `createdAt` = 0")
+            db.execSQL("UPDATE `flashcard` SET `updatedAt` = $nowExpression WHERE `updatedAt` = 0")
+        }
+    }
+
     @Provides
     @Singleton
     fun provideKnowledgeBaseDatabase(
@@ -185,7 +274,7 @@ object KnowledgeBaseModule {
             KnowledgeBaseDatabase::class.java,
             "knowledge_base.db"
         )
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
             .fallbackToDestructiveMigrationOnDowngrade()
             .build()
     }
@@ -232,5 +321,30 @@ object KnowledgeBaseModule {
             }
         }
         return false
+    }
+
+    private fun createAiResultCacheTable(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `ai_result_cache` (
+                `id` TEXT NOT NULL,
+                `fileId` TEXT NOT NULL,
+                `mode` TEXT NOT NULL,
+                `title` TEXT NOT NULL,
+                `content` TEXT NOT NULL,
+                `createdAt` INTEGER NOT NULL,
+                `updatedAt` INTEGER NOT NULL,
+                PRIMARY KEY(`id`)
+            )
+            """.trimIndent()
+        )
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_ai_result_cache_fileId_mode` ON `ai_result_cache` (`fileId`, `mode`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_ai_result_cache_updatedAt` ON `ai_result_cache` (`updatedAt`)")
+    }
+
+    private fun addFlashcardColumn(db: SupportSQLiteDatabase, columnName: String, definition: String) {
+        if (!db.hasColumn("flashcard", columnName)) {
+            db.execSQL("ALTER TABLE `flashcard` ADD COLUMN `$columnName` $definition")
+        }
     }
 }
