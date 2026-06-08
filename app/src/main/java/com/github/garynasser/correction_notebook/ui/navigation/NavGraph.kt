@@ -6,24 +6,17 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import androidx.navigation.toRoute
-import com.github.garynasser.correction_notebook.data.model.auth.AuthState
-import com.github.garynasser.correction_notebook.ui.screens.login.UsernameLoginScreen
 import com.github.garynasser.correction_notebook.ui.screens.main.MainViewModel
 import com.github.garynasser.correction_notebook.MainContainer
 import com.github.garynasser.correction_notebook.data.model.auth.AuthEvent
 import com.github.garynasser.correction_notebook.ui.screens.register.CasScreen
 import com.github.garynasser.correction_notebook.ui.screens.register.RegistrationViewModel
-import com.github.garynasser.correction_notebook.ui.screens.register.RegisterScreen
 
 
 @Composable
@@ -32,84 +25,31 @@ fun NavGraph(
     mainViewModel: MainViewModel = hiltViewModel(),
 ) {
     val authStateManager = mainViewModel.authStateManager
-    val authState by mainViewModel.authState.collectAsState()
     val aiSettingsManager = mainViewModel.aiSettingsManager
 
-    when(val state = authState) {
-        is AuthState.Loading -> {
-            LoadingSplashScreen()
+    NavHost(
+        navController = navController,
+        startDestination = Home
+    ) {
+        composable<Home> {
+            MainContainer(
+                aiSettingsManager = aiSettingsManager,
+                outerNavController = navController
+            )
         }
-        is AuthState.Authenticated, is AuthState.Unauthenticated -> {
-            NavHost(
-                navController = navController,
-                startDestination = if (state is AuthState.Authenticated) Home else Login
-            ) {
-                composable<Home> {
-                    MainContainer(
-                        aiSettingsManager = aiSettingsManager,
-                        outerNavController = navController
+
+        composable<CasAuth> { backStackEntry ->
+            val authViewModel: RegistrationViewModel = hiltViewModel(backStackEntry)
+
+            CasScreen(
+                viewModel = authViewModel,
+                onBackButtonClick = { navController.popBackStack() },
+                onConfirm = {
+                    authViewModel.submitYanheLogin(
+                        onSuccess = { navController.popBackStack() }
                     )
                 }
-
-                composable<Login> {
-                    UsernameLoginScreen(
-                        onNavigateToRegister = { navController.navigate(Register) }
-                    )
-                }
-
-                composable<Register> { backStackEntry ->
-                    val registerViewModel: RegistrationViewModel = hiltViewModel(backStackEntry)
-
-                    RegisterScreen(
-                        onNext = { navController.navigate(CasAuth) },
-                        viewModel = registerViewModel,
-                        onNavigateToLogin = { navController.navigate(Login) }
-                    )
-                }
-
-                composable<CasAuth> { backStackEntry ->
-                    val registerEntry = remember(backStackEntry) {
-                        try {
-                            navController.getBackStackEntry<Register>()
-                        } catch (e: Exception) {
-                            null
-                        }
-                    }
-
-                    val authViewModel: RegistrationViewModel = if (registerEntry != null) {
-                        hiltViewModel(registerEntry)
-                    } else {
-                        hiltViewModel(backStackEntry)
-                    }
-
-                    CasScreen(
-                        viewModel = authViewModel,
-                        onBackButtonClick = { navController.popBackStack() },
-                        onConfirm = {
-                            if (registerEntry != null) {
-                                authViewModel.submit()
-                            } else {
-                                authViewModel.submitReauthentication(
-                                    onConfirmClick = { navController.popBackStack() }
-                                )
-                            }
-                        }
-                    )
-                }
-            }
-        }
-    }
-
-    LaunchedEffect(authState) {
-        if (authState is AuthState.Unauthenticated) {
-            navController.navigate(Login) {
-                popUpTo(0) { inclusive = true }
-            }
-        } else if (authState is AuthState.Authenticated) {
-            navController.navigate(Home) {
-                launchSingleTop = true
-                popUpTo(Login) { inclusive = true }
-            }
+            )
         }
     }
 

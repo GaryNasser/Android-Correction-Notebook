@@ -8,7 +8,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.garynasser.correction_notebook.data.model.auth.AuthState
 import com.github.garynasser.correction_notebook.data.model.auth.UserCredential
-import com.github.garynasser.correction_notebook.data.repository.AuthRepository
 import com.github.garynasser.correction_notebook.data.repository.AuthStateManager
 import com.github.garynasser.correction_notebook.data.repository.YanheRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -17,9 +16,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class RegistrationViewModel @Inject constructor(
-    private val authRepository: AuthRepository,
+    private val yanheRepository: YanheRepository,
     private val authStateManager: AuthStateManager,
-    private val yanheRepository: YanheRepository
 ): ViewModel() {
     var username by mutableStateOf("")
     var password by mutableStateOf("")
@@ -56,35 +54,32 @@ class RegistrationViewModel @Inject constructor(
 
     fun submitReauthentication(onConfirmClick: () -> Unit) {
         Log.d("AUTH", "Student credential saved")
-        yanheRepository.saveStudentCredential(UserCredential(studentId, casPassword))
-        onConfirmClick()
+        submitYanheLogin(onConfirmClick)
     }
 
     fun submit() {
+        submitYanheLogin()
+    }
+
+    fun submitYanheLogin(onSuccess: () -> Unit = {}) {
         if (isCasLoading) return
 
         errorMessage = null
 
         viewModelScope.launch {
             isCasLoading = true
-            authStateManager.updateState(AuthState.Loading)
-
-            val result = authRepository.casAuth(
-                studentId,
-                casPassword,
-                username,
-                password
-            )
+            yanheRepository.saveStudentCredential(UserCredential(studentId, casPassword))
+            val result = yanheRepository.getYanheLoginToken()
 
             result.onSuccess {
                 isCasLoading = false
                 authStateManager.updateState(AuthState.Authenticated)
-                yanheRepository.saveStudentCredential(UserCredential(studentId, casPassword))
+                onSuccess()
             } .onFailure { exception ->
-                errorMessage = exception.message ?: "登录失败，请检查网络"
+                errorMessage = exception.message ?: "延河课堂登录失败，请检查网络"
                 isCasLoading = false
-                authStateManager.updateState(AuthState.Unauthenticated)
                 yanheRepository.removeStudentCredential()
+                authStateManager.updateState(AuthState.Unauthenticated)
             }
         }
     }

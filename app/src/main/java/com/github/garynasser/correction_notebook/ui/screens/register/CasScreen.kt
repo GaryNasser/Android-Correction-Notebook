@@ -61,8 +61,8 @@ fun CasScreen(
                 Spacer(modifier = Modifier.height(200.dp))
 
                 AuthFormTemplate(
-                    title = "统一认证",
-                    buttonText = "确定",
+                    title = "延河课堂登录",
+                    buttonText = if (viewModel.isCasLoading) "正在验证" else "登录延河课堂",
                     onButtonClick = { onConfirm() },
                     isButtonEnabled = viewModel.isCasEnabled,
                     inputFields = {
@@ -100,7 +100,20 @@ fun CasScreen(
                         )
                     },
                     footer = {
-
+                        val message = viewModel.errorMessage
+                        if (message != null) {
+                            Text(
+                                text = message,
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        } else {
+                            Text(
+                                text = "使用北理工统一认证，仅用于拉取延河课堂我的课程和视频。",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
                     }
                 )
             }
