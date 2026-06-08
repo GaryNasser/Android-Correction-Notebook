@@ -12,7 +12,11 @@ data class TodoItem(
     val createdAt: Long = System.currentTimeMillis(),
     val completedAt: Long? = null,
     val source: TodoSource = TodoSource.MANUAL,
-    val sourceRefId: String? = null
+    val sourceRefId: String? = null,
+    val taskType: TodoTaskType = TodoTaskType.GENERAL,
+    val courseId: Int? = null,
+    val estimatedMinutes: Int? = null,
+    val weight: Float? = null
 )
 
 enum class Priority {
@@ -25,4 +29,13 @@ enum class TodoSource {
     AI_TODO_BREAKDOWN,
     COURSE_ASSISTANT,
     KNOWLEDGE_ASSISTANT
+}
+
+enum class TodoTaskType {
+    GENERAL,
+    HOMEWORK,
+    EXAM,
+    PROJECT,
+    READING,
+    REVIEW
 }

@@ -22,6 +22,7 @@ import com.github.garynasser.correction_notebook.data.model.home.TodoHistoryItem
 import com.github.garynasser.correction_notebook.data.model.home.TodoItem
 import com.github.garynasser.correction_notebook.data.model.home.TodoSource
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.KnowledgeBaseFileSummary
+import com.github.garynasser.correction_notebook.data.model.studyset.DueReviewItem
 import com.github.garynasser.correction_notebook.data.model.yanhe.CourseProgress
 import com.github.garynasser.correction_notebook.data.repository.ArticleRepository
 import com.github.garynasser.correction_notebook.data.repository.CourseLearningRepository
@@ -29,6 +30,7 @@ import com.github.garynasser.correction_notebook.data.repository.IcsImportReposi
 import com.github.garynasser.correction_notebook.data.repository.KnowledgeBaseRepository
 import com.github.garynasser.correction_notebook.data.repository.ScheduleRepository
 import com.github.garynasser.correction_notebook.data.repository.StudySessionRepository
+import com.github.garynasser.correction_notebook.data.repository.StudySetRepository
 import com.github.garynasser.correction_notebook.data.repository.TodoHistoryRepository
 import com.github.garynasser.correction_notebook.data.repository.TodoRepository
 import com.github.garynasser.correction_notebook.domain.usecase.AiStudyUseCase
@@ -58,6 +60,7 @@ data class HomeUiState(
     val completedPomodoros: Int = 0,
     val recentCourseProgress: List<CourseProgress> = emptyList(),
     val recentKnowledgeFiles: List<KnowledgeBaseFileSummary> = emptyList(),
+    val dueReviewItems: List<DueReviewItem> = emptyList(),
     val plannerTab: PlannerTab = PlannerTab.SCHEDULE,
     val scheduleRange: ScheduleRange = ScheduleRange.TODAY,
     val scheduleSections: List<ScheduleSection> = emptyList(),
@@ -102,6 +105,7 @@ class HomeViewModel @Inject constructor(
     private val icsImportRepository: IcsImportRepository,
     private val courseLearningRepository: CourseLearningRepository,
     private val knowledgeBaseRepository: KnowledgeBaseRepository,
+    private val studySetRepository: StudySetRepository,
     private val aiStudyUseCase: AiStudyUseCase
 ) : ViewModel() {
 
@@ -204,6 +208,13 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             knowledgeBaseRepository.observeRecentFiles(limit = 3).collect { files ->
                 _uiState.value = _uiState.value.copy(recentKnowledgeFiles = files)
+                if (_uiState.value.aiPlanBlocks.isEmpty()) refreshLocalPlan()
+            }
+        }
+
+        viewModelScope.launch {
+            studySetRepository.observeDueReviewItems(limit = 5).collect { items ->
+                _uiState.value = _uiState.value.copy(dueReviewItems = items)
                 if (_uiState.value.aiPlanBlocks.isEmpty()) refreshLocalPlan()
             }
         }
@@ -406,9 +417,23 @@ class HomeViewModel @Inject constructor(
             }
             AiActionType.OPEN_COURSE,
             AiActionType.OPEN_FILE,
-            AiActionType.SAVE_COURSE_NOTE -> {
+            AiActionType.SAVE_COURSE_NOTE,
+            AiActionType.CREATE_STUDY_SET,
+            AiActionType.CREATE_FLASHCARDS,
+            AiActionType.CREATE_QUIZ,
+            AiActionType.SCHEDULE_REVIEW,
+            AiActionType.UPDATE_COURSE_GOAL -> {
                 _uiState.value = _uiState.value.copy(aiErrorMessage = "这个动作需要在对应课程或资料页面执行")
             }
+        }
+    }
+
+    fun markReviewDone(flashcardId: String) {
+        viewModelScope.launch {
+            studySetRepository.markFlashcardReviewed(flashcardId, remembered = true)
+                .onFailure {
+                    _uiState.value = _uiState.value.copy(aiErrorMessage = it.message ?: "复习状态更新失败")
+                }
         }
     }
 
@@ -455,7 +480,15 @@ class HomeViewModel @Inject constructor(
                 priority = "MEDIUM"
             )
         }
-        return (scheduleBlocks + todoBlocks + listOfNotNull(courseBlock, fileBlock))
+        val reviewBlock = state.dueReviewItems.firstOrNull()?.let {
+            AiPlanBlock(
+                title = "复习：${it.studySetTitle}",
+                reason = it.courseName?.let { name -> "关联课程：$name" } ?: "学习集闪卡已到复习时间",
+                estimatedMinutes = 15,
+                priority = "HIGH"
+            )
+        }
+        return (scheduleBlocks + todoBlocks + listOfNotNull(reviewBlock, courseBlock, fileBlock))
             .take(5)
             .ifEmpty {
                 listOf(

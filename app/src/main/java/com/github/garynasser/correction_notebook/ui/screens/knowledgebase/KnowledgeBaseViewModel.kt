@@ -13,8 +13,13 @@ import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitSha
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.KnowledgeBaseFileSummary
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.KnowledgeBaseFolderChoice
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.KnowledgeBaseFolderContent
+import com.github.garynasser.correction_notebook.data.model.studyset.DueReviewItem
+import com.github.garynasser.correction_notebook.data.model.studyset.KnowledgeCardType
+import com.github.garynasser.correction_notebook.data.model.studyset.StudySetQuizItem
+import com.github.garynasser.correction_notebook.data.model.studyset.StudySetSummary
 import com.github.garynasser.correction_notebook.data.repository.BitShareRepository
 import com.github.garynasser.correction_notebook.data.repository.KnowledgeBaseRepository
+import com.github.garynasser.correction_notebook.data.repository.StudySetRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Dispatchers
@@ -49,6 +54,10 @@ data class KnowledgeBaseUiState(
     val isRemoteFolderLoading: Boolean = false,
     val isImportingLocalFile: Boolean = false,
     val remoteErrorMessage: String? = null,
+    val studySets: List<StudySetSummary> = emptyList(),
+    val knowledgeCards: List<DueReviewItem> = emptyList(),
+    val reviewedCards: List<DueReviewItem> = emptyList(),
+    val quizQuestions: List<StudySetQuizItem> = emptyList(),
     val isLocalBusy: Boolean = false,
     val activeDownloadId: String? = null,
     val snackbarMessage: String? = null
@@ -86,11 +95,19 @@ private data class RemoteLoadingSnapshot(
     val remoteErrorMessage: String?
 )
 
+private data class StudyContentSnapshot(
+    val studySets: List<StudySetSummary>,
+    val knowledgeCards: List<DueReviewItem>,
+    val reviewedCards: List<DueReviewItem>,
+    val quizQuestions: List<StudySetQuizItem>
+)
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class KnowledgeBaseViewModel @Inject constructor(
     private val knowledgeBaseRepository: KnowledgeBaseRepository,
-    private val bitShareRepository: BitShareRepository
+    private val bitShareRepository: BitShareRepository,
+    private val studySetRepository: StudySetRepository
 ) : ViewModel() {
 
     private val selectedTabIndex = MutableStateFlow(0)
@@ -135,6 +152,30 @@ class KnowledgeBaseViewModel @Inject constructor(
     )
 
     private val folderChoices = knowledgeBaseRepository.observeFolderChoices().stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = emptyList()
+    )
+
+    private val studySets = studySetRepository.observeStudySets().stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = emptyList()
+    )
+
+    private val knowledgeCards = studySetRepository.observeKnowledgeCards().stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = emptyList()
+    )
+
+    private val reviewedCards = studySetRepository.observeReviewedCards().stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = emptyList()
+    )
+
+    private val quizQuestions = studySetRepository.observeQuizQuestions().stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
         initialValue = emptyList()
@@ -196,8 +237,11 @@ class KnowledgeBaseViewModel @Inject constructor(
 
     val uiState: StateFlow<KnowledgeBaseUiState> = combine(
         localUiSnapshot,
-        remoteUiSnapshot
-    ) { local, remote ->
+        remoteUiSnapshot,
+        combine(studySets, knowledgeCards, reviewedCards, quizQuestions) { sets, cards, reviewed, quizzes ->
+            StudyContentSnapshot(sets, cards, reviewed, quizzes)
+        }
+    ) { local, remote, study ->
         KnowledgeBaseUiState(
             selectedTabIndex = local.selectedTabIndex,
             currentFolderId = local.currentFolderId,
@@ -214,6 +258,10 @@ class KnowledgeBaseViewModel @Inject constructor(
             isRemoteDetailLoading = remote.isRemoteDetailLoading,
             isImportingLocalFile = remote.isImportingLocalFile,
             remoteErrorMessage = remote.remoteErrorMessage,
+            studySets = study.studySets,
+            knowledgeCards = study.knowledgeCards,
+            reviewedCards = study.reviewedCards,
+            quizQuestions = study.quizQuestions,
             isLocalBusy = remote.isLocalBusy,
             activeDownloadId = remote.activeDownloadId,
             snackbarMessage = remote.snackbarMessage
@@ -426,6 +474,98 @@ class KnowledgeBaseViewModel @Inject constructor(
                 .onSuccess { snackbarMessage.value = "已更新资料学习信息" }
                 .onFailure { snackbarMessage.value = it.message ?: "更新失败" }
             isLocalBusy.value = false
+        }
+    }
+
+    fun markFlashcardReviewed(flashcardId: String, remembered: Boolean = true) {
+        viewModelScope.launch {
+            studySetRepository.markFlashcardReviewed(flashcardId, remembered = remembered)
+                .onSuccess { snackbarMessage.value = if (remembered) "已加入历史闪卡" else "已安排再次复习" }
+                .onFailure { snackbarMessage.value = it.message ?: "复习状态更新失败" }
+        }
+    }
+
+    fun addManualKnowledgeCard(
+        title: String,
+        type: KnowledgeCardType,
+        front: String,
+        back: String,
+        hint: String,
+        courseName: String?,
+        explanation: String,
+        example: String,
+        pitfall: String,
+        formula: String,
+        tags: List<String>,
+        studySetId: String? = null
+    ) {
+        viewModelScope.launch {
+            isLocalBusy.value = true
+            studySetRepository.saveManualCard(
+                title = title,
+                type = type,
+                front = front,
+                back = back,
+                hint = hint,
+                courseName = courseName,
+                explanation = explanation,
+                example = example,
+                pitfall = pitfall,
+                formula = formula,
+                tags = tags,
+                studySetId = studySetId
+            )
+                .onSuccess { snackbarMessage.value = "知识点已保存" }
+                .onFailure { snackbarMessage.value = it.message ?: "保存知识点失败" }
+            isLocalBusy.value = false
+        }
+    }
+
+    fun updateKnowledgeCard(card: DueReviewItem) {
+        viewModelScope.launch {
+            studySetRepository.updateKnowledgeCard(card)
+                .onSuccess { snackbarMessage.value = "知识卡片已更新" }
+                .onFailure { snackbarMessage.value = it.message ?: "更新知识卡片失败" }
+        }
+    }
+
+    fun deleteKnowledgeCard(cardId: String) {
+        viewModelScope.launch {
+            studySetRepository.deleteKnowledgeCard(cardId)
+                .onSuccess { snackbarMessage.value = "知识卡片已删除" }
+                .onFailure { snackbarMessage.value = it.message ?: "删除知识卡片失败" }
+        }
+    }
+
+    fun renameStudySet(studySetId: String, title: String) {
+        viewModelScope.launch {
+            studySetRepository.renameStudySet(studySetId, title)
+                .onSuccess { snackbarMessage.value = "学习集已重命名" }
+                .onFailure { snackbarMessage.value = it.message ?: "重命名学习集失败" }
+        }
+    }
+
+    fun deleteStudySet(studySetId: String) {
+        viewModelScope.launch {
+            studySetRepository.deleteStudySet(studySetId)
+                .onSuccess { snackbarMessage.value = "学习集已删除" }
+                .onFailure { snackbarMessage.value = it.message ?: "删除学习集失败" }
+        }
+    }
+
+    fun mergeStudySets(sourceStudySetIds: List<String>, targetStudySetId: String) {
+        viewModelScope.launch {
+            studySetRepository.mergeStudySets(sourceStudySetIds, targetStudySetId)
+                .onSuccess { snackbarMessage.value = "学习集已合并" }
+                .onFailure { snackbarMessage.value = it.message ?: "合并学习集失败" }
+        }
+    }
+
+    fun moveKnowledgeCard(cardId: String, targetStudySetId: String) {
+        viewModelScope.launch {
+            studySetRepository.moveKnowledgeCard(cardId, targetStudySetId)
+                .onSuccess { snackbarMessage.value = "知识卡片已移动" }
+                .onFailure { snackbarMessage.value = it.message ?: "移动知识卡片失败" }
         }
     }
 

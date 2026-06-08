@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Quiz
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Style
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -75,6 +76,8 @@ import androidx.media3.ui.PlayerView
 import androidx.compose.ui.viewinterop.AndroidView
 import coil.compose.AsyncImage
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.KnowledgeBaseFileSummary
+import com.github.garynasser.correction_notebook.data.model.studyset.KnowledgeCardType
+import com.github.garynasser.correction_notebook.data.model.studyset.StudySetDraft
 import com.github.garynasser.correction_notebook.domain.usecase.KnowledgeAiMode
 import java.io.File
 import java.util.Locale
@@ -153,6 +156,14 @@ fun KnowledgeBaseFileViewerScreen(
                             onDismissRequest = { menuExpanded = false }
                         ) {
                             uiState.file?.let { file ->
+                                DropdownMenuItem(
+                                    text = { Text("AI 生成学习集") },
+                                    leadingIcon = { Icon(Icons.Default.Style, contentDescription = null) },
+                                    onClick = {
+                                        menuExpanded = false
+                                        viewModel.generateStudySet()
+                                    }
+                                )
                                 DropdownMenuItem(
                                     text = { Text("AI 总结") },
                                     leadingIcon = { Icon(Icons.Default.Psychology, contentDescription = null) },
@@ -363,6 +374,86 @@ fun KnowledgeBaseFileViewerScreen(
             }
         )
     }
+
+    uiState.studySetDraft?.let { draft ->
+        StudySetDraftDialog(
+            draft = draft,
+            onDismiss = viewModel::clearAiResult,
+            onSave = viewModel::saveStudySetDraft
+        )
+    }
+}
+
+@Composable
+private fun StudySetDraftDialog(
+    draft: StudySetDraft,
+    onDismiss: () -> Unit,
+    onSave: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("保存学习集") },
+        text = {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                item {
+                    Text(draft.title, style = MaterialTheme.typography.titleMedium)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        "将保存 ${draft.cards.count { it.type == KnowledgeCardType.QA_FLASHCARD }} 张问答闪卡、${draft.cards.count { it.type == KnowledgeCardType.KNOWLEDGE_CARD }} 张知识点卡、${draft.quizQuestions.size} 道测验题。",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+                if (draft.cards.isNotEmpty()) {
+                    item {
+                        Text("卡片预览", style = MaterialTheme.typography.titleSmall)
+                    }
+                    itemsIndexed(draft.cards.take(5)) { index, card ->
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                "${index + 1}. ${if (card.type == KnowledgeCardType.QA_FLASHCARD) "问答" else "知识点"} · ${card.title}",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            if (card.type == KnowledgeCardType.QA_FLASHCARD) {
+                                DraftPreviewLine("问题", card.front)
+                                DraftPreviewLine("答案", card.back)
+                                DraftPreviewLine("提示", card.hint)
+                            } else {
+                                DraftPreviewLine("解释", card.explanation.ifBlank { card.back })
+                                DraftPreviewLine("例子", card.example)
+                                DraftPreviewLine("易错点", card.pitfall)
+                            }
+                        }
+                    }
+                }
+                if (draft.quizQuestions.isNotEmpty()) {
+                    item {
+                        Text("测验预览", style = MaterialTheme.typography.titleSmall)
+                    }
+                    itemsIndexed(draft.quizQuestions.take(2)) { index, question ->
+                        Text("${index + 1}. ${question.question}", style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onSave) { Text("保存") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        }
+    )
+}
+
+@Composable
+private fun DraftPreviewLine(label: String, content: String) {
+    if (content.isBlank()) return
+    Text(
+        "$label：$content",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis
+    )
 }
 
 @Composable

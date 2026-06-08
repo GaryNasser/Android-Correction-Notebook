@@ -8,7 +8,9 @@ import android.webkit.MimeTypeMap
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,6 +33,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.DriveFileMove
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Download
@@ -43,6 +46,8 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SortByAlpha
+import androidx.compose.material.icons.filled.Style
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.CheckCircle
@@ -88,6 +93,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -100,11 +106,15 @@ import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitSha
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.KnowledgeBaseFileSummary
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.KnowledgeBaseFolderChoice
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.KnowledgeBaseFolderSummary
-import com.github.garynasser.correction_notebook.ui.components.FreshScreen
+import com.github.garynasser.correction_notebook.data.model.studyset.DueReviewItem
+import com.github.garynasser.correction_notebook.data.model.studyset.KnowledgeCardType
+import com.github.garynasser.correction_notebook.data.model.studyset.StudySetQuizItem
+import com.github.garynasser.correction_notebook.data.model.studyset.StudySetSummary
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.abs
 
 private enum class FileSortMode {
     UPDATED,
@@ -153,6 +163,19 @@ fun KnowledgeBaseScreen(
     var isSearchExpanded by rememberSaveable { mutableStateOf(false) }
     var isSelectionMode by remember { mutableStateOf(false) }
     var selectedFileIds by remember { mutableStateOf(emptySet<String>()) }
+    var showManualKnowledgeDialog by rememberSaveable { mutableStateOf(false) }
+    var selectedKnowledgeCard by remember { mutableStateOf<DueReviewItem?>(null) }
+    var editingKnowledgeCard by remember { mutableStateOf<DueReviewItem?>(null) }
+    var movingKnowledgeCard by remember { mutableStateOf<DueReviewItem?>(null) }
+    var cardToDelete by remember { mutableStateOf<DueReviewItem?>(null) }
+    var manualCardTargetStudySet by remember { mutableStateOf<StudySetSummary?>(null) }
+    var selectedStudySetId by rememberSaveable { mutableStateOf<String?>(null) }
+    var studySetToRename by remember { mutableStateOf<StudySetSummary?>(null) }
+    var studySetToDelete by remember { mutableStateOf<StudySetSummary?>(null) }
+    var studySetToMerge by remember { mutableStateOf<StudySetSummary?>(null) }
+    var learningStudySetId by rememberSaveable { mutableStateOf<String?>(null) }
+    var quizStudySetId by rememberSaveable { mutableStateOf<String?>(null) }
+    var quizStartQuestionId by rememberSaveable { mutableStateOf<String?>(null) }
 
     val sortedFiles = remember(uiState.folderContent.files, fileSortMode) {
         when (fileSortMode) {
@@ -163,6 +186,21 @@ fun KnowledgeBaseScreen(
     val selectedFiles = remember(sortedFiles, selectedFileIds) {
         sortedFiles.filter { it.id in selectedFileIds }
     }
+    val selectedStudySet = selectedStudySetId?.let { id ->
+        uiState.studySets.firstOrNull { it.id == id }
+    }
+    val learningStudySet = learningStudySetId?.let { id ->
+        uiState.studySets.firstOrNull { it.id == id }
+    }
+    val learningCards = learningStudySetId?.let { id ->
+        uiState.knowledgeCards.filter { it.studySetId == id }
+    }.orEmpty()
+    val quizStudySet = quizStudySetId?.let { id ->
+        uiState.studySets.firstOrNull { it.id == id }
+    }
+    val quizSessionQuestions = quizStudySetId?.let { id ->
+        uiState.quizQuestions.filter { it.studySetId == id }
+    }.orEmpty()
 
     LaunchedEffect(uiState.currentFolderId, uiState.selectedTabIndex) {
         isSelectionMode = false
@@ -311,6 +349,129 @@ fun KnowledgeBaseScreen(
         )
     }
 
+    if (showManualKnowledgeDialog) {
+        ManualKnowledgeCardDialog(
+            targetStudySetTitle = manualCardTargetStudySet?.title,
+            onDismiss = {
+                manualCardTargetStudySet = null
+                showManualKnowledgeDialog = false
+            },
+            onConfirm = { title, type, front, back, hint, courseName, explanation, example, pitfall, formula, tags ->
+                viewModel.addManualKnowledgeCard(
+                    title = title,
+                    type = type,
+                    front = front,
+                    back = back,
+                    hint = hint,
+                    courseName = courseName,
+                    explanation = explanation,
+                    example = example,
+                    pitfall = pitfall,
+                    formula = formula,
+                    tags = tags,
+                    studySetId = manualCardTargetStudySet?.id
+                )
+                manualCardTargetStudySet = null
+                showManualKnowledgeDialog = false
+            }
+        )
+    }
+
+    selectedKnowledgeCard?.let { card ->
+        KnowledgeCardDetailDialog(
+            item = card,
+            onDismiss = { selectedKnowledgeCard = null },
+            onEdit = {
+                selectedKnowledgeCard = null
+                editingKnowledgeCard = card
+            },
+            onDelete = {
+                cardToDelete = card
+                selectedKnowledgeCard = null
+            },
+            onReviewDone = {
+                viewModel.markFlashcardReviewed(card.flashcardId)
+                selectedKnowledgeCard = null
+            }
+        )
+    }
+
+    movingKnowledgeCard?.let { card ->
+        MoveKnowledgeCardDialog(
+            card = card,
+            studySets = uiState.studySets,
+            onDismiss = { movingKnowledgeCard = null },
+            onConfirm = { targetStudySetId ->
+                viewModel.moveKnowledgeCard(card.flashcardId, targetStudySetId)
+                movingKnowledgeCard = null
+            }
+        )
+    }
+
+    cardToDelete?.let { card ->
+        ConfirmDialog(
+            title = "删除知识卡片",
+            message = "确定删除“${card.title.ifBlank { card.front }}”吗？",
+            confirmText = "删除",
+            onDismiss = { cardToDelete = null },
+            onConfirm = {
+                viewModel.deleteKnowledgeCard(card.flashcardId)
+                cardToDelete = null
+            }
+        )
+    }
+
+    editingKnowledgeCard?.let { card ->
+        EditKnowledgeCardDialog(
+            item = card,
+            onDismiss = { editingKnowledgeCard = null },
+            onSave = {
+                viewModel.updateKnowledgeCard(it)
+                editingKnowledgeCard = null
+            }
+        )
+    }
+
+    studySetToRename?.let { studySet ->
+        NameInputDialog(
+            title = "重命名学习集",
+            initialValue = studySet.title,
+            confirmText = "保存",
+            onDismiss = { studySetToRename = null },
+            onConfirm = {
+                viewModel.renameStudySet(studySet.id, it)
+                studySetToRename = null
+            }
+        )
+    }
+
+    studySetToDelete?.let { studySet ->
+        ConfirmDialog(
+            title = "删除学习集",
+            message = "确定删除“${studySet.title}”吗？其中的知识卡片和测验题也会一起删除。",
+            confirmText = "删除",
+            onDismiss = { studySetToDelete = null },
+            onConfirm = {
+                viewModel.deleteStudySet(studySet.id)
+                if (selectedStudySetId == studySet.id) selectedStudySetId = null
+                if (learningStudySetId == studySet.id) learningStudySetId = null
+                studySetToDelete = null
+            }
+        )
+    }
+
+    studySetToMerge?.let { target ->
+        StudySetMergeDialog(
+            target = target,
+            studySets = uiState.studySets,
+            onDismiss = { studySetToMerge = null },
+            onConfirm = { sourceIds ->
+                viewModel.mergeStudySets(sourceIds, target.id)
+                studySetToMerge = null
+            }
+        )
+    }
+
     uiState.selectedRemoteDetail?.takeIf { !showDownloadFolderPicker && pendingRemoteDownload == null }?.let { detail ->
         RemoteDetailDialog(
             detail = detail,
@@ -327,135 +488,194 @@ fun KnowledgeBaseScreen(
         )
     }
 
+    val isLearningMode = uiState.selectedTabIndex == 1 && learningStudySet != null
+    val isQuizMode = uiState.selectedTabIndex == 1 && quizStudySet != null
+    val isImmersiveMode = isLearningMode || isQuizMode
+
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("知识库") },
-                windowInsets = WindowInsets(0, 0, 0, 0),
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0.92f),
-                    scrolledContainerColor = MaterialTheme.colorScheme.surface
-                ),
-                actions = {
-                    if (uiState.selectedTabIndex == 1) {
-                        IconButton(onClick = { viewModel.searchRemoteResources() }) {
-                            Icon(Icons.Default.Refresh, contentDescription = "刷新搜索")
+            if (!isImmersiveMode) {
+                TopAppBar(
+                    title = { Text("知识库") },
+                    windowInsets = WindowInsets(0, 0, 0, 0),
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0.92f),
+                        scrolledContainerColor = MaterialTheme.colorScheme.surface
+                    ),
+                    actions = {
+                        if (uiState.selectedTabIndex == 2) {
+                            IconButton(onClick = { viewModel.searchRemoteResources() }) {
+                                Icon(Icons.Default.Refresh, contentDescription = "刷新搜索")
+                            }
                         }
                     }
-                }
-            )
+                )
+            }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
-            if (uiState.selectedTabIndex == 0) {
+            if (uiState.selectedTabIndex == 0 && !isImmersiveMode) {
                 FloatingActionButton(onClick = { showCreateFolderDialog = true }) {
                     Icon(Icons.Default.CreateNewFolder, contentDescription = "新建文件夹")
                 }
             }
         }
     ) { innerPadding ->
-        FreshScreen(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-        Column(
-            modifier = Modifier.fillMaxSize()
-        ) {
-            TabRow(selectedTabIndex = uiState.selectedTabIndex) {
-                listOf("文件管理", "BITShare 下载").forEachIndexed { index, title ->
-                    Tab(
-                        selected = uiState.selectedTabIndex == index,
-                        onClick = { viewModel.selectTab(index) },
-                        text = { Text(title) }
+            if (isLearningMode) {
+                StudySetLearningPage(
+                    studySet = requireNotNull(learningStudySet),
+                    cards = learningCards,
+                    onDismiss = { learningStudySetId = null },
+                    onEditCard = { editingKnowledgeCard = it },
+                    onReview = { card, remembered ->
+                        viewModel.markFlashcardReviewed(card.flashcardId, remembered)
+                    }
+                )
+            } else if (isQuizMode) {
+                StudySetQuizPage(
+                    studySet = requireNotNull(quizStudySet),
+                    questions = quizSessionQuestions,
+                    initialQuestionId = quizStartQuestionId,
+                    onDismiss = {
+                        quizStudySetId = null
+                        quizStartQuestionId = null
+                    }
+                )
+            } else {
+                TabRow(selectedTabIndex = uiState.selectedTabIndex) {
+                    listOf("文件管理", "知识空间", "BITShare 下载").forEachIndexed { index, title ->
+                        Tab(
+                            selected = uiState.selectedTabIndex == index,
+                            onClick = { viewModel.selectTab(index) },
+                            text = { Text(title) }
+                        )
+                    }
+                }
+
+                when (uiState.selectedTabIndex) {
+                    0 -> FileManagementPage(
+                        uiState = uiState,
+                        fileSortMode = fileSortMode,
+                        isSelectionMode = isSelectionMode,
+                        selectedFileIds = selectedFileIds,
+                        onToggleSort = {
+                            fileSortMode = when (fileSortMode) {
+                                FileSortMode.UPDATED -> FileSortMode.NAME
+                                FileSortMode.NAME -> FileSortMode.UPDATED
+                            }
+                        },
+                        isSearchExpanded = isSearchExpanded,
+                        onToggleSearch = {
+                            isSearchExpanded = !isSearchExpanded
+                            if (!isSearchExpanded) {
+                                viewModel.updateLocalSearchQuery("")
+                            }
+                        },
+                        files = sortedFiles,
+                        onLocalSearchChanged = viewModel::updateLocalSearchQuery,
+                        onBack = viewModel::navigateBack,
+                        onFolderClick = viewModel::enterFolder,
+                        onFolderRename = { folderToRename = it },
+                        onFolderDelete = { folderToDelete = it },
+                        onFileOpen = { onOpenFile(it.id) },
+                        onToggleSelectionMode = {
+                            isSelectionMode = !isSelectionMode
+                            selectedFileIds = emptySet()
+                        },
+                        onToggleFileSelection = { file ->
+                            selectedFileIds = if (file.id in selectedFileIds) {
+                                selectedFileIds - file.id
+                            } else {
+                                selectedFileIds + file.id
+                            }
+                        },
+                        onSelectAllFiles = {
+                            selectedFileIds = sortedFiles.map { it.id }.toSet()
+                        },
+                        onBatchMove = { showBatchMovePicker = true },
+                        onBatchDelete = { showBatchDeleteConfirm = true },
+                        onBatchShare = {
+                            shareFiles(context, selectedFiles)
+                            selectedFileIds = emptySet()
+                            isSelectionMode = false
+                        },
+                        onFileRename = { fileToRename = it },
+                        onFileDelete = { fileToDelete = it },
+                        onFileMove = { fileToMove = it },
+                        onFileContext = { fileToContext = it },
+                        onFileExport = {
+                            fileToExport = it
+                            exportLauncher.launch(it.displayName)
+                        },
+                        onImportLocalFile = { importLauncher.launch(arrayOf("*/*")) },
+                        onFileShare = {
+                            shareFile(
+                                context = context,
+                                localPath = it.localPath,
+                                mimeType = it.mimeType,
+                                title = it.displayName
+                            )
+                        }
+                    )
+
+                    1 -> KnowledgeSpacePage(
+                        studySets = uiState.studySets,
+                        knowledgeCards = uiState.knowledgeCards,
+                        reviewedCards = uiState.reviewedCards,
+                        quizQuestions = uiState.quizQuestions,
+                        selectedStudySet = selectedStudySet,
+                        onAddManualCard = {
+                            manualCardTargetStudySet = null
+                            showManualKnowledgeDialog = true
+                        },
+                        onOpenStudySet = { selectedStudySetId = it.id },
+                        onBackToStudySets = { selectedStudySetId = null },
+                        onRenameStudySet = { studySetToRename = it },
+                        onDeleteStudySet = { studySetToDelete = it },
+                        onMergeStudySet = { studySetToMerge = it },
+                        onStartStudySet = { learningStudySetId = it.id },
+                        onStartQuizSet = {
+                            quizStudySetId = it.id
+                            quizStartQuestionId = null
+                        },
+                        onAddCardToStudySet = {
+                            manualCardTargetStudySet = it
+                            showManualKnowledgeDialog = true
+                        },
+                        onOpenCard = { selectedKnowledgeCard = it },
+                        onEditCard = { editingKnowledgeCard = it },
+                        onMoveCard = { movingKnowledgeCard = it },
+                        onDeleteCard = { cardToDelete = it },
+                        onOpenQuiz = {
+                            quizStudySetId = it.studySetId
+                            quizStartQuestionId = it.id
+                        },
+                        onReviewDone = { viewModel.markFlashcardReviewed(it) }
+                    )
+
+                    2 -> BitSharePage(
+                        uiState = uiState,
+                        onQueryChanged = viewModel::updateRemoteQuery,
+                        onSortChanged = {
+                            viewModel.updateRemoteSort(it)
+                            if (uiState.remoteQuery.isNotBlank()) {
+                                viewModel.searchRemoteResources()
+                            }
+                        },
+                        onSearchClick = viewModel::searchRemoteResources,
+                        onOpenDetail = {
+                            pendingRemoteDownload = it
+                            showDownloadFolderPicker = true
+                        },
+                        onOpenFolderDetail = viewModel::loadRemoteFolderDetail
                     )
                 }
             }
-
-            when (uiState.selectedTabIndex) {
-                0 -> FileManagementPage(
-                    uiState = uiState,
-                    fileSortMode = fileSortMode,
-                    isSelectionMode = isSelectionMode,
-                    selectedFileIds = selectedFileIds,
-                    onToggleSort = {
-                        fileSortMode = when (fileSortMode) {
-                            FileSortMode.UPDATED -> FileSortMode.NAME
-                            FileSortMode.NAME -> FileSortMode.UPDATED
-                        }
-                    },
-                    isSearchExpanded = isSearchExpanded,
-                    onToggleSearch = {
-                        isSearchExpanded = !isSearchExpanded
-                        if (!isSearchExpanded) {
-                            viewModel.updateLocalSearchQuery("")
-                        }
-                    },
-                    files = sortedFiles,
-                    onLocalSearchChanged = viewModel::updateLocalSearchQuery,
-                    onBack = viewModel::navigateBack,
-                    onFolderClick = viewModel::enterFolder,
-                    onFolderRename = { folderToRename = it },
-                    onFolderDelete = { folderToDelete = it },
-                    onFileOpen = { onOpenFile(it.id) },
-                    onToggleSelectionMode = {
-                        isSelectionMode = !isSelectionMode
-                        selectedFileIds = emptySet()
-                    },
-                    onToggleFileSelection = { file ->
-                        selectedFileIds = if (file.id in selectedFileIds) {
-                            selectedFileIds - file.id
-                        } else {
-                            selectedFileIds + file.id
-                        }
-                    },
-                    onSelectAllFiles = {
-                        selectedFileIds = sortedFiles.map { it.id }.toSet()
-                    },
-                    onBatchMove = { showBatchMovePicker = true },
-                    onBatchDelete = { showBatchDeleteConfirm = true },
-                    onBatchShare = {
-                        shareFiles(context, selectedFiles)
-                        selectedFileIds = emptySet()
-                        isSelectionMode = false
-                    },
-                    onFileRename = { fileToRename = it },
-                    onFileDelete = { fileToDelete = it },
-                    onFileMove = { fileToMove = it },
-                    onFileContext = { fileToContext = it },
-                    onFileExport = {
-                        fileToExport = it
-                        exportLauncher.launch(it.displayName)
-                    },
-                    onImportLocalFile = { importLauncher.launch(arrayOf("*/*")) },
-                    onFileShare = {
-                        shareFile(
-                            context = context,
-                            localPath = it.localPath,
-                            mimeType = it.mimeType,
-                            title = it.displayName
-                        )
-                    }
-                )
-
-                1 -> BitSharePage(
-                    uiState = uiState,
-                    onQueryChanged = viewModel::updateRemoteQuery,
-                    onSortChanged = {
-                        viewModel.updateRemoteSort(it)
-                        if (uiState.remoteQuery.isNotBlank()) {
-                            viewModel.searchRemoteResources()
-                        }
-                    },
-                    onSearchClick = viewModel::searchRemoteResources,
-                    onOpenDetail = {
-                        pendingRemoteDownload = it
-                        showDownloadFolderPicker = true
-                    },
-                    onOpenFolderDetail = viewModel::loadRemoteFolderDetail
-                )
-            }
-        }
         }
     }
 }
@@ -659,6 +879,1171 @@ private fun FileManagementPage(
                         onShare = { onFileShare(file) }
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun KnowledgeSpacePage(
+    studySets: List<StudySetSummary>,
+    knowledgeCards: List<DueReviewItem>,
+    reviewedCards: List<DueReviewItem>,
+    quizQuestions: List<StudySetQuizItem>,
+    selectedStudySet: StudySetSummary?,
+    onAddManualCard: () -> Unit,
+    onOpenStudySet: (StudySetSummary) -> Unit,
+    onBackToStudySets: () -> Unit,
+    onRenameStudySet: (StudySetSummary) -> Unit,
+    onDeleteStudySet: (StudySetSummary) -> Unit,
+    onMergeStudySet: (StudySetSummary) -> Unit,
+    onStartStudySet: (StudySetSummary) -> Unit,
+    onStartQuizSet: (StudySetSummary) -> Unit,
+    onAddCardToStudySet: (StudySetSummary) -> Unit,
+    onOpenCard: (DueReviewItem) -> Unit,
+    onEditCard: (DueReviewItem) -> Unit,
+    onMoveCard: (DueReviewItem) -> Unit,
+    onDeleteCard: (DueReviewItem) -> Unit,
+    onOpenQuiz: (StudySetQuizItem) -> Unit,
+    onReviewDone: (String) -> Unit
+) {
+    if (selectedStudySet != null) {
+        StudySetDetailPage(
+            studySet = selectedStudySet,
+            cards = knowledgeCards.filter { it.studySetId == selectedStudySet.id },
+            reviewedCards = reviewedCards.filter { it.studySetId == selectedStudySet.id },
+            quizQuestions = quizQuestions.filter { it.studySetId == selectedStudySet.id },
+            onBack = onBackToStudySets,
+            onRename = { onRenameStudySet(selectedStudySet) },
+            onDelete = { onDeleteStudySet(selectedStudySet) },
+            onMerge = { onMergeStudySet(selectedStudySet) },
+            onStart = { onStartStudySet(selectedStudySet) },
+            onStartQuiz = { onStartQuizSet(selectedStudySet) },
+            onAddCard = { onAddCardToStudySet(selectedStudySet) },
+            onOpenCard = onOpenCard,
+            onEditCard = onEditCard,
+            onMoveCard = onMoveCard,
+            onDeleteCard = onDeleteCard,
+            onOpenQuiz = onOpenQuiz,
+            onReviewDone = onReviewDone
+        )
+        return
+    }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
+    ) {
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("知识空间", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(
+                        "按学习集管理知识卡片，进入后再学习和复习",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                OutlinedButton(
+                    onClick = onAddManualCard,
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                }
+            }
+        }
+
+        item {
+            KnowledgeSpaceStats(studySets = studySets, cards = knowledgeCards, reviewedCards = reviewedCards)
+        }
+
+        item {
+            Text(
+                "学习集",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+
+        if (studySets.isEmpty()) {
+            item { EmptyStateCard("暂无学习集", "从资料页生成学习集，或手动添加第一组知识点。") }
+        } else {
+            items(studySets, key = { it.id }) { set ->
+                StudySetRow(
+                    set = set,
+                    onClick = { onOpenStudySet(set) },
+                    onRename = { onRenameStudySet(set) },
+                    onDelete = { onDeleteStudySet(set) },
+                    onMerge = { onMergeStudySet(set) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StudySetDetailPage(
+    studySet: StudySetSummary,
+    cards: List<DueReviewItem>,
+    reviewedCards: List<DueReviewItem>,
+    quizQuestions: List<StudySetQuizItem>,
+    onBack: () -> Unit,
+    onRename: () -> Unit,
+    onDelete: () -> Unit,
+    onMerge: () -> Unit,
+    onStart: () -> Unit,
+    onStartQuiz: () -> Unit,
+    onAddCard: () -> Unit,
+    onOpenCard: (DueReviewItem) -> Unit,
+    onEditCard: (DueReviewItem) -> Unit,
+    onMoveCard: (DueReviewItem) -> Unit,
+    onDeleteCard: (DueReviewItem) -> Unit,
+    onOpenQuiz: (StudySetQuizItem) -> Unit,
+    onReviewDone: (String) -> Unit
+) {
+    var filter by rememberSaveable(studySet.id) { mutableStateOf("ALL") }
+    val now = System.currentTimeMillis()
+    val dueCards = cards.filter {
+        it.type == KnowledgeCardType.QA_FLASHCARD && (it.lastReviewedAt == null || it.nextReviewAt <= now)
+    }
+    val visibleCards = when (filter) {
+        "DUE" -> dueCards
+        "QA" -> cards.filter { it.type == KnowledgeCardType.QA_FLASHCARD }
+        "KNOWLEDGE" -> cards.filter { it.type == KnowledgeCardType.KNOWLEDGE_CARD }
+        "HISTORY" -> reviewedCards
+        "QUIZ" -> emptyList()
+        else -> cards
+    }
+    val visibleQuizzes = when (filter) {
+        "ALL", "QUIZ" -> quizQuestions
+        else -> emptyList()
+    }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
+    ) {
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(studySet.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        listOfNotNull(
+                            studySet.courseName,
+                            "${cards.size} 张卡",
+                            if (quizQuestions.isNotEmpty()) "${quizQuestions.size} 道测验" else null,
+                            if (dueCards.isNotEmpty()) "${dueCards.size} 待复习" else null
+                        ).joinToString(" · "),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                IconButton(onClick = onRename) {
+                    Icon(Icons.Default.Edit, contentDescription = "编辑学习集")
+                }
+                IconButton(onClick = onMerge) {
+                    Icon(Icons.Default.Link, contentDescription = "合并学习集")
+                }
+                IconButton(onClick = onAddCard) {
+                    Icon(Icons.Default.Add, contentDescription = "添加知识卡片")
+                }
+                IconButton(onClick = onDelete) {
+                    Icon(Icons.Default.Delete, contentDescription = "删除学习集")
+                }
+            }
+        }
+
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedButton(
+                    onClick = onStart,
+                    enabled = cards.isNotEmpty(),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Icon(Icons.Default.Style, contentDescription = null)
+                    Spacer(modifier = Modifier.size(6.dp))
+                    Text("学习")
+                }
+                OutlinedButton(
+                    onClick = onStartQuiz,
+                    enabled = quizQuestions.isNotEmpty(),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Icon(Icons.Default.Description, contentDescription = null)
+                    Spacer(modifier = Modifier.size(6.dp))
+                    Text("测验")
+                }
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf(
+                        "ALL" to "全部",
+                        "DUE" to "待复习",
+                        "QA" to "问答",
+                        "KNOWLEDGE" to "知识点",
+                        "QUIZ" to "测验",
+                        "HISTORY" to "历史"
+                    ).forEach { (key, label) ->
+                        FilterChip(
+                            selected = filter == key,
+                            onClick = { filter = key },
+                            label = { Text(label) }
+                        )
+                    }
+                }
+            }
+        }
+
+        if (visibleCards.isEmpty() && visibleQuizzes.isEmpty()) {
+            item {
+                EmptyStateCard(
+                    if (filter == "QUIZ") "这里还没有测验" else "这里还没有内容",
+                    "可以从资料生成学习集，或手动添加知识点。"
+                )
+            }
+        } else {
+            if (visibleCards.isNotEmpty()) {
+                item { SectionTitle("知识卡片") }
+                items(visibleCards, key = { "${filter}-${it.flashcardId}" }) { card ->
+                    KnowledgeCardRow(
+                        card = card,
+                        onClick = { onOpenCard(card) },
+                        trailing = {
+                            KnowledgeCardMenu(
+                                card = card,
+                                showReview = card.type == KnowledgeCardType.QA_FLASHCARD && filter != "HISTORY",
+                                onReview = { onReviewDone(card.flashcardId) },
+                                onEdit = { onEditCard(card) },
+                                onMove = { onMoveCard(card) },
+                                onDelete = { onDeleteCard(card) }
+                            )
+                        }
+                    )
+                }
+            }
+            if (visibleQuizzes.isNotEmpty()) {
+                item { SectionTitle("测验题") }
+                items(visibleQuizzes, key = { it.id }) { quiz ->
+                    QuizQuestionRow(
+                        quiz = quiz,
+                        onClick = { onOpenQuiz(quiz) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun KnowledgeSpaceStats(
+    studySets: List<StudySetSummary>,
+    cards: List<DueReviewItem>,
+    reviewedCards: List<DueReviewItem>
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        KnowledgeMetric("学习集", studySets.size.toString(), Modifier.weight(1f))
+        KnowledgeMetric("知识卡", cards.size.toString(), Modifier.weight(1f))
+        KnowledgeMetric("历史", reviewedCards.size.toString(), Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun KnowledgeMetric(label: String, value: String, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier,
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.42f),
+        shape = MaterialTheme.shapes.medium
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun KnowledgeCardRow(
+    card: DueReviewItem,
+    onClick: () -> Unit,
+    trailing: @Composable () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        ListItem(
+            headlineContent = {
+                Text(
+                    if (card.type == KnowledgeCardType.QA_FLASHCARD) card.front else card.title,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            },
+            supportingContent = {
+                Text(
+                    listOfNotNull(
+                        if (card.type == KnowledgeCardType.QA_FLASHCARD) "问答" else "知识点",
+                        card.courseName,
+                        card.studySetTitle,
+                        if (card.type == KnowledgeCardType.QA_FLASHCARD) {
+                            card.hint.takeIf { it.isNotBlank() }
+                        } else {
+                            card.explanation.take(48).takeIf { it.isNotBlank() }
+                        }
+                    )
+                        .joinToString(" · "),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            },
+            leadingContent = { Icon(Icons.Default.Style, contentDescription = null) },
+            trailingContent = trailing
+        )
+    }
+}
+
+@Composable
+private fun QuizQuestionRow(
+    quiz: StudySetQuizItem,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        ListItem(
+            headlineContent = { Text(quiz.question, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+            supportingContent = {
+                Text(
+                    listOfNotNull(
+                        if (quiz.type == "MULTIPLE_CHOICE") "选择题" else "简答题",
+                        quiz.options.takeIf { it.isNotEmpty() }?.let { "${it.size} 个选项" },
+                        "点击开始测验"
+                    ).joinToString(" · "),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            },
+            leadingContent = { Icon(Icons.Default.Description, contentDescription = null) }
+        )
+    }
+}
+
+@Composable
+private fun KnowledgeCardMenu(
+    card: DueReviewItem,
+    showReview: Boolean,
+    onReview: () -> Unit,
+    onEdit: () -> Unit,
+    onMove: () -> Unit,
+    onDelete: () -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (showReview) {
+            TextButton(onClick = onReview) { Text("复习") }
+        } else {
+            Text(
+                if (card.reviewCount > 0) "${card.reviewCount} 次" else "查看",
+                style = MaterialTheme.typography.labelMedium
+            )
+        }
+        Box {
+            IconButton(onClick = { expanded = true }) {
+                Icon(Icons.Default.MoreVert, contentDescription = "知识卡片操作")
+            }
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false }
+            ) {
+                DropdownMenuItem(
+                    text = { Text("编辑") },
+                    leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                    onClick = {
+                        expanded = false
+                        onEdit()
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("移动到其他学习集") },
+                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.DriveFileMove, contentDescription = null) },
+                    onClick = {
+                        expanded = false
+                        onMove()
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("删除") },
+                    leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
+                    onClick = {
+                        expanded = false
+                        onDelete()
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StudySetRow(
+    set: StudySetSummary,
+    onClick: () -> Unit,
+    onRename: () -> Unit,
+    onDelete: () -> Unit,
+    onMerge: () -> Unit
+) {
+    var menuExpanded by remember { mutableStateOf(false) }
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        ListItem(
+            headlineContent = { Text(set.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+            supportingContent = {
+                Text(
+                    listOfNotNull(
+                        set.courseName,
+                        "${set.flashcardCount} 张卡",
+                        "${set.quizCount} 道测验",
+                        if (set.dueFlashcardCount > 0) "${set.dueFlashcardCount} 张待复习" else null
+                    ).joinToString(" · ")
+                )
+            },
+            leadingContent = { Icon(Icons.Default.History, contentDescription = null) }
+            ,
+            trailingContent = {
+                Box {
+                    IconButton(onClick = { menuExpanded = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "学习集操作")
+                    }
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("重命名") },
+                            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                            onClick = {
+                                menuExpanded = false
+                                onRename()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("合并到这里") },
+                            leadingIcon = { Icon(Icons.Default.Link, contentDescription = null) },
+                            onClick = {
+                                menuExpanded = false
+                                onMerge()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("删除") },
+                            leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
+                            onClick = {
+                                menuExpanded = false
+                                onDelete()
+                            }
+                        )
+                    }
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun KnowledgeCardDetailDialog(
+    item: DueReviewItem,
+    onDismiss: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    onReviewDone: () -> Unit
+) {
+    var showAnswer by remember(item.flashcardId) { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(item.title.ifBlank { item.studySetTitle }) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                item.courseName?.let {
+                    Text("课程：$it", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                }
+                if (item.type == KnowledgeCardType.QA_FLASHCARD) {
+                    DetailBlock("问题", item.front)
+                    DetailBlock("提示", item.hint)
+                    if (showAnswer) {
+                        DetailBlock("答案", item.back)
+                    } else {
+                        OutlinedButton(onClick = { showAnswer = true }) { Text("显示答案") }
+                    }
+                } else {
+                    DetailBlock("解释", item.explanation.ifBlank { item.back })
+                    DetailBlock("例子", item.example)
+                    DetailBlock("易错点", item.pitfall)
+                    DetailBlock("公式/术语", item.formula)
+                }
+                DetailBlock("来源", listOf(item.sourceLocation, item.sourceQuote).filter { it.isNotBlank() }.joinToString("\n"))
+                if (item.tags.isNotEmpty()) {
+                    Text(item.tags.joinToString(" ") { "#$it" }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                }
+                Text("复习 ${item.reviewCount} 次 · 置信度 ${(item.confidence * 100).toInt()}%", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        },
+        confirmButton = {
+            Row {
+                TextButton(onClick = onEdit) { Text("编辑") }
+                TextButton(onClick = onReviewDone) { Text("已复习") }
+            }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onDelete) { Text("删除") }
+                TextButton(onClick = onDismiss) { Text("关闭") }
+            }
+        }
+    )
+}
+
+@Composable
+private fun DetailBlock(label: String, content: String) {
+    if (content.isBlank()) return
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+        Text(content, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+@Composable
+private fun ManualKnowledgeCardDialog(
+    targetStudySetTitle: String?,
+    onDismiss: () -> Unit,
+    onConfirm: (
+        title: String,
+        type: KnowledgeCardType,
+        front: String,
+        back: String,
+        hint: String,
+        courseName: String?,
+        explanation: String,
+        example: String,
+        pitfall: String,
+        formula: String,
+        tags: List<String>
+    ) -> Unit
+) {
+    var type by rememberSaveable { mutableStateOf(KnowledgeCardType.QA_FLASHCARD) }
+    var title by rememberSaveable { mutableStateOf("") }
+    var courseName by rememberSaveable { mutableStateOf("") }
+    var front by rememberSaveable { mutableStateOf("") }
+    var back by rememberSaveable { mutableStateOf("") }
+    var hint by rememberSaveable { mutableStateOf("") }
+    var explanation by rememberSaveable { mutableStateOf("") }
+    var example by rememberSaveable { mutableStateOf("") }
+    var pitfall by rememberSaveable { mutableStateOf("") }
+    var formula by rememberSaveable { mutableStateOf("") }
+    var tags by rememberSaveable { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (targetStudySetTitle == null) "新建学习集卡片" else "添加知识卡片") },
+        text = {
+            LazyColumn(
+                modifier = Modifier.heightIn(max = 520.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                item {
+                    Text(
+                        targetStudySetTitle?.let { "保存到：$it" } ?: "保存后会自动创建一个新的学习集",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                item {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.horizontalScroll(rememberScrollState())
+                    ) {
+                        FilterChip(
+                            selected = type == KnowledgeCardType.QA_FLASHCARD,
+                            onClick = { type = KnowledgeCardType.QA_FLASHCARD },
+                            label = { Text("问答闪卡") }
+                        )
+                        FilterChip(
+                            selected = type == KnowledgeCardType.KNOWLEDGE_CARD,
+                            onClick = { type = KnowledgeCardType.KNOWLEDGE_CARD },
+                            label = { Text("知识点卡") }
+                        )
+                    }
+                }
+                if (type == KnowledgeCardType.QA_FLASHCARD) {
+                    item { OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("标题，可留空") }, singleLine = true, modifier = Modifier.fillMaxWidth()) }
+                    if (targetStudySetTitle == null) {
+                        item { OutlinedTextField(value = courseName, onValueChange = { courseName = it }, label = { Text("课程，可留空") }, singleLine = true, modifier = Modifier.fillMaxWidth()) }
+                    }
+                    item { OutlinedTextField(value = front, onValueChange = { front = it }, label = { Text("问题") }, modifier = Modifier.fillMaxWidth(), minLines = 2) }
+                    item { OutlinedTextField(value = back, onValueChange = { back = it }, label = { Text("答案") }, modifier = Modifier.fillMaxWidth(), minLines = 3) }
+                    item { OutlinedTextField(value = hint, onValueChange = { hint = it }, label = { Text("提示关键词，可留空") }, singleLine = true, modifier = Modifier.fillMaxWidth()) }
+                } else {
+                    item { OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("知识点标题") }, singleLine = true, modifier = Modifier.fillMaxWidth()) }
+                    if (targetStudySetTitle == null) {
+                        item { OutlinedTextField(value = courseName, onValueChange = { courseName = it }, label = { Text("课程，可留空") }, singleLine = true, modifier = Modifier.fillMaxWidth()) }
+                    }
+                    item { OutlinedTextField(value = explanation, onValueChange = { explanation = it }, label = { Text("核心解释") }, modifier = Modifier.fillMaxWidth(), minLines = 3) }
+                    item { OutlinedTextField(value = example, onValueChange = { example = it }, label = { Text("例子，可留空") }, modifier = Modifier.fillMaxWidth(), minLines = 2) }
+                    item { OutlinedTextField(value = pitfall, onValueChange = { pitfall = it }, label = { Text("易错点，可留空") }, modifier = Modifier.fillMaxWidth(), minLines = 2) }
+                    item { OutlinedTextField(value = formula, onValueChange = { formula = it }, label = { Text("公式/术语，可留空") }, modifier = Modifier.fillMaxWidth()) }
+                }
+                item { OutlinedTextField(value = tags, onValueChange = { tags = it }, label = { Text("标签，用逗号分隔") }, singleLine = true, modifier = Modifier.fillMaxWidth()) }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onConfirm(
+                        title,
+                        type,
+                        front,
+                        back,
+                        hint,
+                        courseName.takeIf { it.isNotBlank() },
+                        explanation,
+                        example,
+                        pitfall,
+                        formula,
+                        tags.split(",").map { it.trim() }.filter { it.isNotBlank() }
+                    )
+                },
+                enabled = if (type == KnowledgeCardType.QA_FLASHCARD) {
+                    front.isNotBlank() && back.isNotBlank()
+                } else {
+                    title.isNotBlank() && explanation.isNotBlank()
+                }
+            ) { Text("保存") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
+    )
+}
+
+@Composable
+private fun EditKnowledgeCardDialog(
+    item: DueReviewItem,
+    onDismiss: () -> Unit,
+    onSave: (DueReviewItem) -> Unit
+) {
+    var title by rememberSaveable(item.flashcardId) { mutableStateOf(item.title) }
+    var front by rememberSaveable(item.flashcardId) { mutableStateOf(item.front) }
+    var back by rememberSaveable(item.flashcardId) { mutableStateOf(item.back) }
+    var hint by rememberSaveable(item.flashcardId) { mutableStateOf(item.hint) }
+    var explanation by rememberSaveable(item.flashcardId) { mutableStateOf(item.explanation) }
+    var example by rememberSaveable(item.flashcardId) { mutableStateOf(item.example) }
+    var pitfall by rememberSaveable(item.flashcardId) { mutableStateOf(item.pitfall) }
+    var formula by rememberSaveable(item.flashcardId) { mutableStateOf(item.formula) }
+    var tags by rememberSaveable(item.flashcardId) { mutableStateOf(item.tags.joinToString(", ")) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("编辑知识卡片") },
+        text = {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.heightIn(max = 520.dp)) {
+                item {
+                    OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("标题") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                }
+                if (item.type == KnowledgeCardType.QA_FLASHCARD) {
+                    item { OutlinedTextField(value = front, onValueChange = { front = it }, label = { Text("问题") }, modifier = Modifier.fillMaxWidth()) }
+                    item { OutlinedTextField(value = back, onValueChange = { back = it }, label = { Text("答案") }, modifier = Modifier.fillMaxWidth()) }
+                    item { OutlinedTextField(value = hint, onValueChange = { hint = it }, label = { Text("提示") }, singleLine = true, modifier = Modifier.fillMaxWidth()) }
+                } else {
+                    item { OutlinedTextField(value = explanation, onValueChange = { explanation = it }, label = { Text("解释") }, modifier = Modifier.fillMaxWidth()) }
+                    item { OutlinedTextField(value = example, onValueChange = { example = it }, label = { Text("例子") }, modifier = Modifier.fillMaxWidth()) }
+                    item { OutlinedTextField(value = pitfall, onValueChange = { pitfall = it }, label = { Text("易错点") }, modifier = Modifier.fillMaxWidth()) }
+                    item { OutlinedTextField(value = formula, onValueChange = { formula = it }, label = { Text("公式/术语") }, modifier = Modifier.fillMaxWidth()) }
+                }
+                item { OutlinedTextField(value = tags, onValueChange = { tags = it }, label = { Text("标签，用逗号分隔") }, singleLine = true, modifier = Modifier.fillMaxWidth()) }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onSave(
+                        item.copy(
+                            title = title,
+                            front = front,
+                            back = back,
+                            hint = hint,
+                            explanation = explanation,
+                            example = example,
+                            pitfall = pitfall,
+                            formula = formula,
+                            tags = tags.split(",").map { it.trim() }.filter { it.isNotBlank() },
+                            editedByUser = true,
+                            updatedAt = System.currentTimeMillis()
+                        )
+                    )
+                }
+            ) { Text("保存") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
+    )
+}
+
+@Composable
+private fun StudySetMergeDialog(
+    target: StudySetSummary,
+    studySets: List<StudySetSummary>,
+    onDismiss: () -> Unit,
+    onConfirm: (List<String>) -> Unit
+) {
+    var selectedIds by remember(target.id) { mutableStateOf(emptySet<String>()) }
+    val candidates = studySets.filter { it.id != target.id }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("合并学习集") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "合并到：${target.title}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                if (candidates.isEmpty()) {
+                    Text("暂无其他学习集可合并。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.heightIn(max = 360.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        items(candidates, key = { it.id }) { set ->
+                            ListItem(
+                                modifier = Modifier.clickable {
+                                    selectedIds = if (set.id in selectedIds) selectedIds - set.id else selectedIds + set.id
+                                },
+                                headlineContent = { Text(set.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                supportingContent = {
+                                    Text("${set.flashcardCount} 张卡 · ${set.quizCount} 道测验")
+                                },
+                                leadingContent = {
+                                    Checkbox(
+                                        checked = set.id in selectedIds,
+                                        onCheckedChange = { checked ->
+                                            selectedIds = if (checked) selectedIds + set.id else selectedIds - set.id
+                                        }
+                                    )
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(selectedIds.toList()) },
+                enabled = selectedIds.isNotEmpty()
+            ) { Text("合并") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
+    )
+}
+
+@Composable
+private fun MoveKnowledgeCardDialog(
+    card: DueReviewItem,
+    studySets: List<StudySetSummary>,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    val candidates = studySets.filter { it.id != card.studySetId }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("移动知识卡片") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    card.title.ifBlank { card.front },
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (candidates.isEmpty()) {
+                    Text("暂无其他学习集可移动。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.heightIn(max = 360.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        items(candidates, key = { it.id }) { set ->
+                            ListItem(
+                                modifier = Modifier.clickable { onConfirm(set.id) },
+                                headlineContent = { Text(set.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                supportingContent = { Text("${set.flashcardCount} 张卡 · ${set.quizCount} 道测验") },
+                                leadingContent = { Icon(Icons.Default.History, contentDescription = null) }
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
+    )
+}
+
+@Composable
+private fun StudySetQuizPage(
+    studySet: StudySetSummary,
+    questions: List<StudySetQuizItem>,
+    initialQuestionId: String?,
+    onDismiss: () -> Unit
+) {
+    val initialIndex = remember(initialQuestionId, questions) {
+        questions.indexOfFirst { it.id == initialQuestionId }.takeIf { it >= 0 } ?: 0
+    }
+    var index by rememberSaveable(studySet.id, questions.size, initialQuestionId) { mutableStateOf(initialIndex) }
+    var selectedOption by rememberSaveable(studySet.id, index) { mutableStateOf<String?>(null) }
+    var showAnswer by rememberSaveable(studySet.id, index) { mutableStateOf(false) }
+    val safeIndex = index.coerceIn(0, (questions.size - 1).coerceAtLeast(0))
+    val current = questions.getOrNull(safeIndex)
+
+    LaunchedEffect(questions.size) {
+        if (index >= questions.size) index = (questions.size - 1).coerceAtLeast(0)
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "退出测验")
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(studySet.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold)
+                    Text(
+                        if (questions.isEmpty()) "0 / 0" else "${safeIndex + 1} / ${questions.size}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            if (current == null) {
+                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                    EmptyStateCard("没有测验题", "这个学习集里还没有测验题。")
+                }
+            } else {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    color = MaterialTheme.colorScheme.surface,
+                    shape = MaterialTheme.shapes.extraLarge,
+                    tonalElevation = 2.dp
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(22.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            Text(
+                                if (current.type == "MULTIPLE_CHOICE") "选择题" else "简答题",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                current.question,
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            if (current.options.isNotEmpty()) {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    current.options.forEach { option ->
+                                        val isSelected = selectedOption == option
+                                        OutlinedButton(
+                                            onClick = {
+                                                selectedOption = option
+                                                showAnswer = true
+                                            },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
+                                        ) {
+                                            Text(
+                                                option,
+                                                modifier = Modifier.weight(1f),
+                                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
+                                    }
+                                }
+                            } else if (!showAnswer) {
+                                OutlinedButton(
+                                    onClick = { showAnswer = true },
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
+                                    Text("显示答案")
+                                }
+                            }
+
+                            if (showAnswer) {
+                                DetailBlock("答案", current.answer)
+                                DetailBlock("解析", current.explanation)
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            TextButton(
+                                onClick = {
+                                    selectedOption = null
+                                    showAnswer = false
+                                    index = (safeIndex - 1).coerceAtLeast(0)
+                                },
+                                enabled = safeIndex > 0
+                            ) { Text("上一题") }
+                            Text(
+                                selectedOption?.let { "已选择" } ?: if (showAnswer) "已显示答案" else "作答后显示答案",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            TextButton(
+                                onClick = {
+                                    selectedOption = null
+                                    showAnswer = false
+                                    index = (safeIndex + 1).coerceAtMost(questions.lastIndex)
+                                },
+                                enabled = safeIndex < questions.lastIndex
+                            ) { Text("下一题") }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StudySetLearningPage(
+    studySet: StudySetSummary,
+    cards: List<DueReviewItem>,
+    onDismiss: () -> Unit,
+    onEditCard: (DueReviewItem) -> Unit,
+    onReview: (DueReviewItem, Boolean) -> Unit
+) {
+    var index by rememberSaveable(studySet.id, cards.size) { mutableStateOf(0) }
+    var showAnswer by rememberSaveable(studySet.id, index) { mutableStateOf(false) }
+    var dragX by remember { mutableStateOf(0f) }
+    var dragY by remember { mutableStateOf(0f) }
+    val safeIndex = index.coerceIn(0, (cards.size - 1).coerceAtLeast(0))
+    val current = cards.getOrNull(safeIndex)
+
+    LaunchedEffect(cards.size) {
+        if (index >= cards.size) index = (cards.size - 1).coerceAtLeast(0)
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "退出学习")
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(studySet.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold)
+                    Text(
+                        if (cards.isEmpty()) "0 / 0" else "${safeIndex + 1} / ${cards.size}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (current != null) {
+                    IconButton(onClick = { onEditCard(current) }) {
+                        Icon(Icons.Default.Edit, contentDescription = "编辑卡片")
+                    }
+                }
+            }
+
+            if (current == null) {
+                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                    EmptyStateCard("没有可学习的卡片", "这个学习集里还没有知识卡片。")
+                }
+            } else {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .pointerInput(current.flashcardId) {
+                            detectDragGestures(
+                                onDragStart = {
+                                    dragX = 0f
+                                    dragY = 0f
+                                },
+                                onDrag = { _, dragAmount ->
+                                    dragX += dragAmount.x
+                                    dragY += dragAmount.y
+                                },
+                                onDragEnd = {
+                                    when {
+                                        abs(dragX) > abs(dragY) && abs(dragX) > 120f -> {
+                                            onReview(current, dragX > 0)
+                                            if (safeIndex < cards.lastIndex) index = safeIndex + 1
+                                        }
+                                        abs(dragY) > 90f -> {
+                                            index = if (dragY > 0) {
+                                                (safeIndex - 1).coerceAtLeast(0)
+                                            } else {
+                                                (safeIndex + 1).coerceAtMost(cards.lastIndex)
+                                            }
+                                        }
+                                    }
+                                    dragX = 0f
+                                    dragY = 0f
+                                }
+                            )
+                        },
+                    color = MaterialTheme.colorScheme.surface,
+                    shape = MaterialTheme.shapes.extraLarge,
+                    tonalElevation = 2.dp
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(22.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            Text(
+                                if (current.type == KnowledgeCardType.QA_FLASHCARD) "问答闪卡" else "知识点卡",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                current.title.ifBlank { current.front },
+                                style = MaterialTheme.typography.headlineMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            if (current.type == KnowledgeCardType.QA_FLASHCARD) {
+                                DetailBlock("问题", current.front)
+                                DetailBlock("提示", current.hint)
+                                if (showAnswer) {
+                                    DetailBlock("答案", current.back)
+                                } else {
+                                    OutlinedButton(
+                                        onClick = { showAnswer = true },
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                    ) {
+                                        Text("显示答案")
+                                    }
+                                }
+                            } else {
+                                DetailBlock("解释", current.explanation.ifBlank { current.back })
+                                DetailBlock("例子", current.example)
+                                DetailBlock("易错点", current.pitfall)
+                                DetailBlock("公式/术语", current.formula)
+                            }
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            TextButton(onClick = {
+                                onReview(current, false)
+                                if (safeIndex < cards.lastIndex) index = safeIndex + 1
+                            }) {
+                                Text("没记清")
+                            }
+                            Text(
+                                current.tags.take(2).joinToString(" ") { "#$it" },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            TextButton(onClick = {
+                                onReview(current, true)
+                                if (safeIndex < cards.lastIndex) index = safeIndex + 1
+                            }) {
+                                Text("记住了")
+                            }
+                        }
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextButton(
+                    onClick = { index = (safeIndex - 1).coerceAtLeast(0) },
+                    enabled = safeIndex > 0
+                ) { Text("上一张") }
+                Text(
+                    "左滑没记清 · 右滑记住 · 上下切换",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                TextButton(
+                    onClick = { index = (safeIndex + 1).coerceAtMost(cards.lastIndex) },
+                    enabled = current != null && safeIndex < cards.lastIndex
+                ) { Text("下一张") }
             }
         }
     }
