@@ -9,9 +9,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.toRoute
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.KnowledgeBaseFileSummary
+import com.github.garynasser.correction_notebook.data.model.studyset.StudySetDraft
 import com.github.garynasser.correction_notebook.data.repository.KnowledgeBasePreviewRenderer
 import com.github.garynasser.correction_notebook.data.repository.KnowledgeBaseAiRepository
 import com.github.garynasser.correction_notebook.data.repository.KnowledgeBaseRepository
+import com.github.garynasser.correction_notebook.data.repository.StudySetRepository
 import com.github.garynasser.correction_notebook.domain.usecase.AiStudyUseCase
 import com.github.garynasser.correction_notebook.domain.usecase.KnowledgeAiMode
 import com.github.garynasser.correction_notebook.ui.navigation.KnowledgeBaseFileViewer
@@ -43,6 +45,7 @@ data class KnowledgeBaseFileViewerUiState(
     val indexChunkCount: Int? = null,
     val isIndexing: Boolean = false,
     val aiResult: String? = null,
+    val studySetDraft: StudySetDraft? = null,
     val isAiLoading: Boolean = false,
     val errorMessage: String? = null
 )
@@ -53,6 +56,7 @@ class KnowledgeBaseFileViewerViewModel @Inject constructor(
     private val knowledgeBaseAiRepository: KnowledgeBaseAiRepository,
     private val previewRenderer: KnowledgeBasePreviewRenderer,
     private val aiStudyUseCase: AiStudyUseCase,
+    private val studySetRepository: StudySetRepository,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -71,10 +75,22 @@ class KnowledgeBaseFileViewerViewModel @Inject constructor(
 
     fun runAiAction(mode: KnowledgeAiMode) {
         val fileId = uiState.value.file?.id ?: return
+        val fileName = uiState.value.file?.displayName ?: "资料"
         viewModelScope.launch {
             uiState.value = uiState.value.copy(isAiLoading = true, aiResult = null, errorMessage = null)
+            val cached = studySetRepository.getCachedAiResult(fileId, mode.name)
+            if (!cached.isNullOrBlank()) {
+                uiState.value = uiState.value.copy(isAiLoading = false, aiResult = cached)
+                return@launch
+            }
             aiStudyUseCase.summarizeKnowledgeFile(fileId, mode)
                 .onSuccess { result ->
+                    studySetRepository.saveAiResult(
+                        fileId = fileId,
+                        mode = mode.name,
+                        title = "${fileName} · ${mode.displayName()}",
+                        content = result
+                    )
                     uiState.value = uiState.value.copy(isAiLoading = false, aiResult = result)
                 }
                 .onFailure { throwable ->
@@ -82,6 +98,48 @@ class KnowledgeBaseFileViewerViewModel @Inject constructor(
                         isAiLoading = false,
                         errorMessage = throwable.message ?: "AI 处理失败"
                     )
+                }
+        }
+    }
+
+    fun generateStudySet() {
+        val fileId = uiState.value.file?.id ?: return
+        viewModelScope.launch {
+            uiState.value = uiState.value.copy(
+                isAiLoading = true,
+                aiResult = null,
+                studySetDraft = null,
+                errorMessage = null
+            )
+            aiStudyUseCase.generateStudySetFromKnowledgeFile(fileId)
+                .onSuccess { draft ->
+                    uiState.value = uiState.value.copy(
+                        isAiLoading = false,
+                        studySetDraft = draft
+                    )
+                }
+                .onFailure { throwable ->
+                    uiState.value = uiState.value.copy(
+                        isAiLoading = false,
+                        errorMessage = throwable.message ?: "学习集生成失败"
+                    )
+                }
+        }
+    }
+
+    fun saveStudySetDraft() {
+        val file = uiState.value.file ?: return
+        val draft = uiState.value.studySetDraft ?: return
+        viewModelScope.launch {
+            studySetRepository.saveDraftFromFile(file, draft)
+                .onSuccess {
+                    uiState.value = uiState.value.copy(
+                        studySetDraft = null,
+                        errorMessage = null
+                    )
+                }
+                .onFailure { throwable ->
+                    uiState.value = uiState.value.copy(errorMessage = throwable.message ?: "学习集保存失败")
                 }
         }
     }
@@ -104,7 +162,7 @@ class KnowledgeBaseFileViewerViewModel @Inject constructor(
     }
 
     fun clearAiResult() {
-        uiState.value = uiState.value.copy(aiResult = null)
+        uiState.value = uiState.value.copy(aiResult = null, studySetDraft = null)
     }
 
     private fun loadFile() {
@@ -283,5 +341,16 @@ class KnowledgeBaseFileViewerViewModel @Inject constructor(
         private val IMAGE_EXTENSIONS = setOf("png", "jpg", "jpeg", "webp", "gif", "bmp")
         private val TEXT_EXTENSIONS = setOf("txt", "md", "json", "csv", "log", "xml", "yaml", "yml", "kt", "java")
         private val HTML_PREVIEW_EXTENSIONS = setOf("docx", "pptx")
+    }
+}
+
+private fun KnowledgeAiMode.displayName(): String {
+    return when (this) {
+        KnowledgeAiMode.SUMMARY -> "总结"
+        KnowledgeAiMode.KEY_POINTS -> "重点"
+        KnowledgeAiMode.QUIZ -> "复习题"
+        KnowledgeAiMode.GLOSSARY -> "术语表"
+        KnowledgeAiMode.FORMULA_SHEET -> "公式表"
+        KnowledgeAiMode.REVIEW_CHECKLIST -> "复习清单"
     }
 }

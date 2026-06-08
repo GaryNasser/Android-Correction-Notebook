@@ -5,7 +5,9 @@ import com.github.garynasser.correction_notebook.data.model.ai.AiActionResult
 import com.github.garynasser.correction_notebook.data.model.ai.MemoryCategory
 import com.github.garynasser.correction_notebook.data.model.ai.NormalizedChatMessage
 import com.github.garynasser.correction_notebook.data.model.home.ScheduleRange
+import com.github.garynasser.correction_notebook.data.model.studyset.StudySetDraft
 import com.github.garynasser.correction_notebook.data.remote.ai.AiActionParser
+import com.github.garynasser.correction_notebook.data.remote.ai.StudySetDraftParser
 import com.github.garynasser.correction_notebook.data.repository.AIRepository
 import com.github.garynasser.correction_notebook.data.repository.CourseLearningRepository
 import com.github.garynasser.correction_notebook.data.repository.KnowledgeContextChunk
@@ -95,6 +97,30 @@ class AiStudyUseCase @Inject constructor(
         return summarizeKnowledgeFile(fileId, mode).map { raw ->
             AiActionParser.parse(raw)
         }
+    }
+
+    suspend fun generateStudySetFromKnowledgeFile(fileId: String): Result<StudySetDraft> {
+        val file = knowledgeBaseRepository.getFileSummary(fileId)
+        val chunks = knowledgeBaseAiRepository.contextForFile(fileId)
+        if (chunks.isEmpty()) {
+            return Result.failure(Exception("当前文件暂不支持抽取文本，无法生成学习集"))
+        }
+        val context = chunks.toPromptContext()
+        val fallbackTitle = "${file?.displayName ?: "资料"} 复习集"
+        val prompt = """
+            请基于这份 BITStudy 资料生成一个可复习的学习集。
+            ${StudySetDraftParser.instruction()}
+
+            资料名称：${file?.displayName ?: "未知资料"}
+            关联课程：${file?.courseName ?: "未关联课程"}
+            资料内容：
+            $context
+        """.trimIndent()
+        return aiRepository.sendChat(
+            messages = listOf(NormalizedChatMessage("user", prompt)),
+            systemPrompt = DEFAULT_TUTOR_PROMPT,
+            memorySummary = memorySummary()
+        ).map { raw -> StudySetDraftParser.parse(raw, fallbackTitle) }
     }
 
     suspend fun generateTodayPlan(targetDate: LocalDate = LocalDate.now()): Result<AiActionResult> {

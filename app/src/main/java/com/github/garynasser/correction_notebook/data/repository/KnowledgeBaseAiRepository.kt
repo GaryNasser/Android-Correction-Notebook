@@ -131,6 +131,7 @@ class KnowledgeBaseAiRepository @Inject constructor(
             file.mimeType.startsWith("text/") || extension in TEXT_EXTENSIONS ->
                 source.readText(Charsets.UTF_8)
             extension == "docx" -> extractDocxText(source)
+            extension == "doc" -> "${file.displayName}\n旧版 .doc 是二进制 Word 格式，当前仅支持 docx 文本抽取。请转存为 docx 后再生成学习内容。"
             extension == "pptx" -> extractPptxText(source)
             extension == "pdf" -> "${file.displayName}\nPDF 暂不做 OCR，仅可基于文件名和用户问题提供学习建议。"
             else -> ""
@@ -138,13 +139,23 @@ class KnowledgeBaseAiRepository @Inject constructor(
     }
 
     private fun extractDocxText(file: File): String {
-        return ZipFile(file).use { zip ->
-            val entry = zip.getEntry("word/document.xml") ?: return ""
-            val document = zip.getInputStream(entry).use { input ->
-                secureDocumentBuilder().parse(input)
+        return runCatching {
+            ZipFile(file).use { zip ->
+                zip.entries().asSequence()
+                    .filter { entry ->
+                        entry.name.startsWith("word/") &&
+                            entry.name.endsWith(".xml") &&
+                            DOCX_TEXT_PARTS.any { part -> entry.name.startsWith(part) }
+                    }
+                    .sortedBy { it.name }
+                    .joinToString("\n\n") { entry ->
+                        val document = zip.getInputStream(entry).use { input ->
+                            secureDocumentBuilder().parse(input)
+                        }
+                        document.getElementsByTagNameNS("*", "t").asSequenceText()
+                    }
             }
-            document.getElementsByTagNameNS("*", "t").asSequenceText()
-        }
+        }.getOrDefault("")
     }
 
     private fun extractPptxText(file: File): String {
@@ -215,5 +226,13 @@ class KnowledgeBaseAiRepository @Inject constructor(
         private const val CHUNK_SIZE = 900
         private const val CHUNK_OVERLAP = 120
         private val TEXT_EXTENSIONS = setOf("txt", "md", "markdown", "csv", "json", "xml", "html", "kt", "java")
+        private val DOCX_TEXT_PARTS = listOf(
+            "word/document.xml",
+            "word/header",
+            "word/footer",
+            "word/footnotes.xml",
+            "word/endnotes.xml",
+            "word/comments.xml"
+        )
     }
 }
