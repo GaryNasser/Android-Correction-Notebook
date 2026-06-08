@@ -112,22 +112,22 @@ fun ProfileScreen(
 
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = if (authState is AuthState.Authenticated) "已登录" else "未登录",
+                                text = if (authState is AuthState.Authenticated) "延河课堂已登录" else "延河课堂未登录",
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
                                 text = if (authState is AuthState.Authenticated)
-                                    "点击此处退出登录"
+                                    "点击退出延河课堂账号"
                                 else
-                                    "点击登录校园账号",
+                                    "点击登录北理工统一认证",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                             )
                         }
 
                         if (authState is AuthState.Authenticated) {
-                            Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "退出登录")
+                            Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "退出延河课堂")
                         } else {
                             Icon(Icons.Default.ChevronRight, contentDescription = null)
                         }
@@ -239,8 +239,8 @@ fun ProfileScreen(
     if (showLogoutDialog) {
         AlertDialog(
             onDismissRequest = { showLogoutDialog = false },
-            title = { Text("退出登录") },
-            text = { Text("确定要退出当前账号吗？") },
+            title = { Text("退出延河课堂") },
+            text = { Text("确定要清除当前延河课堂登录吗？") },
             confirmButton = {
                 TextButton(
                     onClick = {

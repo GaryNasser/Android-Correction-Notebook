@@ -4,7 +4,7 @@ import com.google.gson.annotations.SerializedName
 
 data class ApiResponse <T> (
     val code: Int,
-    @SerializedName("msg")
-    val message: String,
+    @SerializedName(value = "msg", alternate = ["message"])
+    val message: String = "",
     val data: T?
 )
