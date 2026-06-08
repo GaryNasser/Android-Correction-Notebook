@@ -24,7 +24,7 @@ import com.github.garynasser.correction_notebook.ui.navigation.CourseList
 import com.github.garynasser.correction_notebook.ui.navigation.Home
 import com.github.garynasser.correction_notebook.ui.navigation.KnowledgeBase
 import com.github.garynasser.correction_notebook.ui.navigation.KnowledgeBaseFileViewer
-import com.github.garynasser.correction_notebook.ui.navigation.Login
+import com.github.garynasser.correction_notebook.ui.navigation.CasAuth
 import com.github.garynasser.correction_notebook.ui.navigation.Profile
 import com.github.garynasser.correction_notebook.ui.navigation.VideoList
 import com.github.garynasser.correction_notebook.ui.navigation.VideoPlayer
@@ -217,7 +217,7 @@ fun MainContainer(
                     },
                     currentVersionName = appUpdateUiState.currentVersionName,
                     onNavigateToLogin = {
-                        outerNavController?.navigate(Login)
+                        outerNavController?.navigate(CasAuth)
                     }
                 )
             }

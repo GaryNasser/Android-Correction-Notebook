@@ -7,6 +7,8 @@ import java.security.MessageDigest
 
 object SignatureUtils {
     private const val MAGIC = "1138b69dfef641d9d7ba49137d2d4875"
+    private const val DEFAULT_PLATFORM = "100"
+    private const val DIRECT_MEDIA_HASH = "3af07e494c9f18694d1025e3584865f0"
 
     private fun String.md5(): String {
         val bytes = MessageDigest.getInstance("MD5").digest(this.toByteArray())
@@ -15,35 +17,47 @@ object SignatureUtils {
 
     @OptIn(UnstableApi::class)
     fun encryptURL(url: String): String {
-        // 1. 计算 MD5: MD5(MAGIC + "_100")
-        val input = MAGIC + "_100"
-        val md = MessageDigest.getInstance("MD5")
-        val hashBytes = md.digest(input.toByteArray(Charsets.UTF_8))
-        val hash = hashBytes.joinToString("") { "%02x".format(it) }
+        val queryStart = url.indexOf('?')
+        val baseUrl = if (queryStart >= 0) url.substring(0, queryStart) else url
+        val suffix = if (queryStart >= 0) url.substring(queryStart) else ""
+        val normalizedBaseUrl = if (baseUrl.contains(".ts", ignoreCase = true)) {
+            removeExistingHashSegment(baseUrl)
+        } else {
+            baseUrl
+        }
+        val hash = if (isDirectMediaFile(normalizedBaseUrl)) {
+            DIRECT_MEDIA_HASH
+        } else {
+            "${MAGIC}_$DEFAULT_PLATFORM".md5()
+        }
 
-        // 2. 切割 URL
-        val urlList = url.split("/").toMutableList()
-
-        // 3. 关键修正：检查是否已经加密过
+        val urlList = normalizedBaseUrl.split("/").toMutableList()
         if (urlList.isNotEmpty()) {
             val lastIndex = urlList.size - 1
-
-            // 检查倒数第二个元素（即我们要插入的位置）是否已经是这个 hash
-            // 或者检查整个 URL 是否已经包含了这个路径段
             if (lastIndex >= 1 && urlList[lastIndex - 1] == hash) {
-                // 如果已经存在该 hash 段，直接返回原 URL，不再重复插入
                 Log.d("VIDEO", "检测到路径已加密，跳过: $url")
-                return url
+                return normalizedBaseUrl + suffix
             }
-
-            // 执行插入逻辑
             urlList.add(lastIndex, hash)
         }
 
-        // 4. 重新拼接
-        val finalUrl = urlList.joinToString("/")
+        val finalUrl = urlList.joinToString("/") + suffix
         Log.d("VIDEO", "加密后的 URL: $finalUrl")
         return finalUrl
+    }
+
+    private fun removeExistingHashSegment(url: String): String {
+        val parts = url.split("/").toMutableList()
+        if (parts.size > 2 && parts[parts.size - 2].matches(Regex("^[0-9a-fA-F]{32}$"))) {
+            parts.removeAt(parts.size - 2)
+        }
+        return parts.joinToString("/")
+    }
+
+    private fun isDirectMediaFile(url: String): Boolean {
+        val path = url.substringBefore('?').substringBefore('#')
+        return listOf(".mp4", ".mpg", ".mov", ".aac")
+            .any { path.endsWith(it, ignoreCase = true) }
     }
 
     fun getSignature(): Map<String, String> {

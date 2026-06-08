@@ -7,10 +7,10 @@ import com.github.garynasser.correction_notebook.data.model.ai.AiModelOption
 import com.github.garynasser.correction_notebook.data.model.ai.AiProviderForm
 import com.github.garynasser.correction_notebook.data.repository.AIRepository
 import com.github.garynasser.correction_notebook.data.model.auth.AuthState
-import com.github.garynasser.correction_notebook.data.repository.AuthRepository
 import com.github.garynasser.correction_notebook.data.repository.AuthStateManager
 import com.github.garynasser.correction_notebook.data.repository.ProviderRecord
 import com.github.garynasser.correction_notebook.data.repository.ProviderRepository
+import com.github.garynasser.correction_notebook.data.repository.YanheRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -22,11 +22,11 @@ import javax.inject.Inject
 
 @HiltViewModel
 class ProfileViewModel @Inject constructor(
-    private val authRepository: AuthRepository,
     private val authStateManager: AuthStateManager,
     private val aiSettingsManager: AISettingsManager,
     private val providerRepository: ProviderRepository,
-    private val aiRepository: AIRepository
+    private val aiRepository: AIRepository,
+    private val yanheRepository: YanheRepository,
 ) : ViewModel() {
 
     // Auth state
@@ -133,7 +133,7 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                authRepository.logout()
+                yanheRepository.clearYanheSession()
                 authStateManager.updateState(AuthState.Unauthenticated)
             } finally {
                 _isLoading.value = false

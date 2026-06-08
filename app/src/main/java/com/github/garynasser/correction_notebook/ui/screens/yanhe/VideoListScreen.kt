@@ -139,6 +139,45 @@ fun CourseVideoListScreen(
                                 totalCount = state.videos.size
                             )
                         }
+                        when (val playState = viewModel.playState) {
+                            is PlayState.Loading -> {
+                                item {
+                                    Surface(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(12.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                        ) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(18.dp),
+                                                strokeWidth = 2.dp
+                                            )
+                                            Text("正在获取延河课堂视频地址...")
+                                        }
+                                    }
+                                }
+                            }
+                            is PlayState.Error -> {
+                                item {
+                                    Surface(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.62f)
+                                    ) {
+                                        Text(
+                                            text = playState.message,
+                                            modifier = Modifier.padding(12.dp),
+                                            color = MaterialTheme.colorScheme.onErrorContainer
+                                        )
+                                    }
+                                }
+                            }
+                            else -> Unit
+                        }
                         items(state.videos) { video ->
                             val isCompleted = viewModel.progress?.completedSectionIds?.contains(video.id) == true
                             VideoCard(
@@ -151,19 +190,13 @@ fun CourseVideoListScreen(
                                     selectedSection = video
                                     noteInput = ""
                                 },
-                                onCameraPlayClick = { videos ->
-                                    Log.i("VIDEO", "Play btn pressed")
-                                    if (videos.isNotEmpty()) {
-                                        viewModel.recordWatch(video, videos[0].mainUrl)
-                                        onNavigateToPlayer(videos[0].mainUrl)
-                                    }
+                                onCameraPlayClick = {
+                                    Log.i("VIDEO", "Camera play btn pressed")
+                                    viewModel.playSection(video, preferScreen = false)
                                 },
-                                onScreenPlayClick = {videos ->
-                                    Log.i("VIDEO", "Play btn pressed")
-                                    if (videos.isNotEmpty()) {
-                                        viewModel.recordWatch(video, videos[0].vgaUrl)
-                                        onNavigateToPlayer(videos[0].vgaUrl)
-                                    }
+                                onScreenPlayClick = {
+                                    Log.i("VIDEO", "Screen play btn pressed")
+                                    viewModel.playSection(video, preferScreen = true)
                                 }
                             )
                         }
@@ -283,8 +316,8 @@ fun VideoCard(
     isCompleted: Boolean,
     onCompletedChange: (Boolean) -> Unit,
     onAiAssistantClick: (String) -> Unit,
-    onCameraPlayClick: (List<Video>) -> Unit,
-    onScreenPlayClick: (List<Video>) -> Unit,
+    onCameraPlayClick: () -> Unit,
+    onScreenPlayClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val timeInfo = buildString {
@@ -323,7 +356,7 @@ fun VideoCard(
 
             Spacer(modifier = Modifier.width(16.dp))
 
-            val hasVideo = section.videos.isNotEmpty()
+            val canResolveVideo = section.videos.isNotEmpty() || section.id > 0
 
             Checkbox(
                 checked = isCompleted,
@@ -342,8 +375,8 @@ fun VideoCard(
             }
 
             FilledIconButton(
-                onClick = { onCameraPlayClick(section.videos) },
-                enabled = hasVideo,
+                onClick = onCameraPlayClick,
+                enabled = canResolveVideo,
                 modifier = Modifier.size(48.dp),
                 shape = RoundedCornerShape(12.dp)
             ) {
@@ -354,8 +387,8 @@ fun VideoCard(
             }
 
             FilledIconButton(
-                onClick = { onScreenPlayClick(section.videos) },
-                enabled = hasVideo,
+                onClick = onScreenPlayClick,
+                enabled = canResolveVideo,
                 modifier = Modifier.size(48.dp),
                 shape = RoundedCornerShape(12.dp)
             ) {

@@ -66,21 +66,18 @@ fun CourseListScreen(
                     scrolledContainerColor = MaterialTheme.colorScheme.surface
                 ),
                 actions = {
-                    IconButton(onClick = { viewModel.toggleCourseMode() }) {
+                    FilledTonalButton(
+                        onClick = { viewModel.refreshMySchedule() },
+                        modifier = Modifier.padding(end = 8.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
                         Icon(
                             Icons.Default.CalendarMonth,
-                            contentDescription = "模式切换",
-                            tint = if (viewModel.isPersonalCoursesMode) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.onSurfaceVariant
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
                         )
-                    }
-                    Button(
-                        onClick = { scope.launch { viewModel.logToYanhe() } },
-                        modifier = Modifier.padding(horizontal = 8.dp)
-                    ) {
-                        Icon(Icons.Default.AccountCircle, contentDescription = null)
-                        Spacer(Modifier.width(4.dp))
-                        Text("登录")
+                        Spacer(Modifier.width(6.dp))
+                        Text("课表")
                     }
                 }
             )
@@ -120,6 +117,15 @@ fun CourseListScreen(
                                 }
                             }
 
+                            if (state.courses.isEmpty()) {
+                                item(span = { GridItemSpan(maxLineSpan) }) {
+                                    EmptyCourseState(
+                                        isPersonalMode = viewModel.isPersonalCoursesMode,
+                                        onRefresh = { viewModel.refreshMySchedule() }
+                                    )
+                                }
+                            }
+
                             items(state.courses) { course ->
                                 CourseCard(
                                     course = course,
@@ -140,6 +146,55 @@ fun CourseListScreen(
                 }
             }
         }
+        }
+    }
+}
+
+@Composable
+private fun EmptyCourseState(
+    isPersonalMode: Boolean,
+    onRefresh: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Icon(
+                Icons.Default.CalendarMonth,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = if (isPersonalMode) "还没有显示我的课程" else "没有找到课程",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = if (isPersonalMode) {
+                    "点击上方课表按钮登录并刷新延河课堂我的课程。"
+                } else {
+                    "换个关键词或学期再试试。"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (isPersonalMode) {
+                TextButton(onClick = onRefresh) {
+                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("刷新课表")
+                }
+            }
         }
     }
 }
@@ -249,7 +304,7 @@ fun SearchAndFilterSection(viewModel: CourseListViewModel) {
     Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         OutlinedTextField(
             value = viewModel.searchQuery,
-            onValueChange = { viewModel.searchQuery = it },
+            onValueChange = { viewModel.updateSearchQuery(it) },
             modifier = Modifier.fillMaxWidth(),
             placeholder = { Text("搜索课程名称或老师") },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
@@ -280,9 +335,7 @@ fun SearchAndFilterSection(viewModel: CourseListViewModel) {
                     DropdownMenuItem(
                         text = { Text(semester) },
                         onClick = {
-                            viewModel.selectedSemester = semester
-                            viewModel.expanded = false
-                            viewModel.loadCourses(false)
+                            viewModel.selectSemester(semester)
                         }
                     )
                 }

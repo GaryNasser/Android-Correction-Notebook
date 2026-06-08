@@ -1,12 +1,10 @@
 package com.github.garynasser.correction_notebook.data.remote.manager
 
-import android.util.Log
 import com.github.garynasser.correction_notebook.data.local.CredentialManager
 import com.github.garynasser.correction_notebook.data.local.TokenManager
 import com.github.garynasser.correction_notebook.data.remote.api.VideoApiService
 import com.github.garynasser.correction_notebook.data.repository.AuthStateManager
 import com.github.garynasser.correction_notebook.data.repository.YanheRepository
-import com.github.garynasser.correction_notebook.utils.SignatureUtils
 import javax.inject.Inject
 
 class VideoRemoteManager @Inject constructor(
@@ -18,7 +16,6 @@ class VideoRemoteManager @Inject constructor(
 ) {
     private suspend fun <T> safeApiCall(block: suspend (String) -> T): T? {
         var token = tokenManager.getYanheLoginToken()
-        Log.i("Token", token.toString())
 
         if (token == null) {
             val credential = credentialManager.getCredentials()
@@ -54,31 +51,51 @@ class VideoRemoteManager @Inject constructor(
         )
     }
 
-    suspend fun getPersonalCourseList(
-        semester: Int?,
+    suspend fun getPrivateCourseList(
         page: Int,
-        pageSize: Int,
-        keyword: String?
+        pageSize: Int
     ) = safeApiCall { token ->
-        videoApiService.getPersonalCourseList(
+        videoApiService.getPrivateCourseList(
             token = token,
-            semester = semester,
             page = page,
-            pageSize = pageSize,
-            keyword = keyword
+            pageSize = pageSize
         )
     }
 
-    suspend fun getCourseSession(courseId: Int) = safeApiCall { token ->
+    suspend fun getCourseSession(
+        courseId: Int,
+        withPage: Boolean?,
+        page: Int?,
+        pageSize: Int?,
+        orderType: String?,
+        orderTypeWeight: String?
+    ) = safeApiCall { token ->
         videoApiService.getCourseSession(
             token = token,
-            courseId = courseId
+            courseId = courseId,
+            withPage = withPage,
+            page = page,
+            pageSize = pageSize,
+            orderType = orderType,
+            orderTypeWeight = orderTypeWeight
         )
     }
 
-    suspend fun getVideoToken() = safeApiCall { token ->
+    suspend fun getCourseSessionDetail(sessionId: Int) = safeApiCall { token ->
+        videoApiService.getCourseSessionDetail(
+            token = token,
+            sessionId = sessionId
+        )
+    }
+
+    suspend fun getYanheUser() = safeApiCall { token ->
+        videoApiService.getYanheUser(token = token)
+    }
+
+    suspend fun getVideoToken(id: String) = safeApiCall { token ->
         videoApiService.getVideoToken(
-            token = token
+            token = token,
+            id = id
         )
     }
 }
