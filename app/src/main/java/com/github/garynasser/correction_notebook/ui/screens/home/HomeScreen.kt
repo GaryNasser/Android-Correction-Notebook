@@ -34,6 +34,8 @@ import com.github.garynasser.correction_notebook.data.model.home.ImportDecision
 import com.github.garynasser.correction_notebook.data.model.home.PlannerTab
 import com.github.garynasser.correction_notebook.data.model.home.TimerState
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.KnowledgeBaseFileSummary
+import com.github.garynasser.correction_notebook.data.model.studyset.DueReviewItem
+import com.github.garynasser.correction_notebook.data.model.studyset.KnowledgeCardType
 import com.github.garynasser.correction_notebook.data.model.yanhe.CourseProgress
 import com.github.garynasser.correction_notebook.ui.components.FreshCard
 import com.github.garynasser.correction_notebook.ui.components.FreshGradientCard
@@ -195,6 +197,14 @@ fun HomeScreen(
                     todayMinutes = uiState.todayStudyMinutes,
                     completedPomodoros = uiState.completedPomodoros,
                     onClick = { homeViewModel.showStatistics() }
+                )
+            }
+
+            item {
+                DueReviewCard(
+                    items = uiState.dueReviewItems,
+                    onReviewDone = { homeViewModel.markReviewDone(it) },
+                    onOpenKnowledgeBase = onNavigateToKnowledgeBase
                 )
             }
 
@@ -365,7 +375,155 @@ fun HomeScreen(
     }
 }
 
-private const val HOME_PLANNER_INDEX = 5
+private const val HOME_PLANNER_INDEX = 6
+
+@Composable
+private fun DueReviewCard(
+    items: List<DueReviewItem>,
+    onReviewDone: (String) -> Unit,
+    onOpenKnowledgeBase: () -> Unit
+) {
+    var selectedCard by remember { mutableStateOf<DueReviewItem?>(null) }
+
+    selectedCard?.let { card ->
+        FlashcardDetailDialog(
+            item = card,
+            onDismiss = { selectedCard = null },
+            onReviewDone = {
+                onReviewDone(card.flashcardId)
+                selectedCard = null
+            }
+        )
+    }
+
+    FreshCard(
+        modifier = Modifier.fillMaxWidth(),
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Style, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("今日待复习", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(
+                        if (items.isEmpty()) "暂无到期闪卡，可以从资料页生成学习集" else "${items.size} 张闪卡需要主动回忆",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                TextButton(onClick = onOpenKnowledgeBase) {
+                    Text(if (items.isEmpty()) "去生成" else "资料")
+                }
+            }
+
+            if (items.isEmpty()) {
+                Text(
+                    text = "从知识库文件菜单选择“AI 生成学习集”，BITStudy 会把资料变成闪卡和测验，并安排复习。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
+                )
+            } else {
+                items.take(3).forEach { item ->
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { selectedCard = item },
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.36f)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = item.front,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 2
+                                )
+                                Text(
+                                    text = listOfNotNull(item.courseName, item.studySetTitle, item.hint.takeIf { it.isNotBlank() })
+                                        .joinToString(" · "),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1
+                                )
+                            }
+                            TextButton(onClick = { onReviewDone(item.flashcardId) }) {
+                                Text("已复习")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FlashcardDetailDialog(
+    item: DueReviewItem,
+    onDismiss: () -> Unit,
+    onReviewDone: () -> Unit
+) {
+    var showAnswer by remember(item.flashcardId) { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(item.studySetTitle) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                item.courseName?.let {
+                    Text("课程：$it", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                }
+                if (item.type == KnowledgeCardType.QA_FLASHCARD) {
+                    Text("问题", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text(item.front, style = MaterialTheme.typography.bodyMedium)
+                    if (item.hint.isNotBlank()) {
+                        Text("提示：${item.hint}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (showAnswer) {
+                        Text("答案", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        Text(item.back, style = MaterialTheme.typography.bodyMedium)
+                    } else {
+                        OutlinedButton(onClick = { showAnswer = true }) {
+                            Text("显示答案")
+                        }
+                    }
+                } else {
+                    KnowledgeDetailBlock("解释", item.explanation.ifBlank { item.back })
+                    KnowledgeDetailBlock("例子", item.example)
+                    KnowledgeDetailBlock("易错点", item.pitfall)
+                    KnowledgeDetailBlock("公式/术语", item.formula)
+                }
+                KnowledgeDetailBlock("来源", listOf(item.sourceLocation, item.sourceQuote).filter { it.isNotBlank() }.joinToString("\n"))
+                if (item.reviewCount > 0) {
+                    Text("已复习 ${item.reviewCount} 次", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onReviewDone) { Text("标记已复习") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("关闭") }
+        }
+    )
+}
+
+@Composable
+private fun KnowledgeDetailBlock(label: String, content: String) {
+    if (content.isBlank()) return
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+        Text(content, style = MaterialTheme.typography.bodyMedium)
+    }
+}
 
 @Composable
 private fun AiStudyAdviceCard(
@@ -582,6 +740,11 @@ private fun AiActionRow(
                     AiActionType.SAVE_COURSE_NOTE -> Icons.Default.NoteAlt
                     AiActionType.OPEN_COURSE -> Icons.Default.School
                     AiActionType.OPEN_FILE -> Icons.Default.Description
+                    AiActionType.CREATE_STUDY_SET,
+                    AiActionType.CREATE_FLASHCARDS,
+                    AiActionType.CREATE_QUIZ,
+                    AiActionType.SCHEDULE_REVIEW -> Icons.Default.Style
+                    AiActionType.UPDATE_COURSE_GOAL -> Icons.Default.Flag
                 },
                 contentDescription = null
             )
