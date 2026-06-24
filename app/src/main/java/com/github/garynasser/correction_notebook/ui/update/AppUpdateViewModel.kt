@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.garynasser.correction_notebook.data.model.appupdate.AppVersionInfo
 import com.github.garynasser.correction_notebook.data.repository.AppUpdateRepository
+import com.github.garynasser.correction_notebook.utils.isRemoteVersionNewer
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -44,7 +45,10 @@ class AppUpdateViewModel @Inject constructor(
             runCatching {
                 appUpdateRepository.getLatestVersion()
             }.onSuccess { latest ->
-                val hasUpdate = latest.latestVersionCode > _uiState.value.currentVersionCode
+                val hasUpdate = isRemoteVersionNewer(
+                    remoteVersionName = latest.latestVersionName,
+                    currentVersionName = _uiState.value.currentVersionName
+                )
                 _uiState.value = _uiState.value.copy(
                     isChecking = false,
                     availableUpdate = latest.takeIf { hasUpdate },
