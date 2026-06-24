@@ -45,6 +45,7 @@ annotation class BitShareRetrofit
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
     private const val BASE_URL = "http://bit-study.sadatlab.asia/"
+    private const val GITHUB_API_BASE_URL = "https://api.github.com/"
     private const val BIT_SHARE_BASE_URL = "https://app.bitshare.com.cn/"
 
     // 辅助方法：创建一个日志拦截器
@@ -139,7 +140,7 @@ object NetworkModule {
     @Singleton
     fun provideUpdateApiService(@BasicRetrofit okHttpClient: OkHttpClient): UpdateApiService {
         return Retrofit.Builder()
-            .baseUrl(BASE_URL)
+            .baseUrl(GITHUB_API_BASE_URL)
             .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
