@@ -51,12 +51,10 @@ fun UsernameLoginScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 30.dp),
+            .padding(horizontal = 24.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer(modifier = Modifier.height(200.dp))
-
         AuthFormTemplate(
             title = "登录",
             buttonText = "登录",
@@ -119,6 +117,6 @@ fun UsernameLoginScreen(
         // TODO: 增加跳转功能
         Text(text = "用户协议")
 
-        Spacer(modifier.height(30.dp))
+        Spacer(modifier.height(18.dp))
     }
 }

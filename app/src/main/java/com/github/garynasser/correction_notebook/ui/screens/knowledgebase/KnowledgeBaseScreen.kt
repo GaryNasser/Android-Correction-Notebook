@@ -493,6 +493,7 @@ fun KnowledgeBaseScreen(
     val isImmersiveMode = isLearningMode || isQuizMode
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             if (!isImmersiveMode) {
                 TopAppBar(
@@ -717,7 +718,7 @@ private fun FileManagementPage(
 
     Column(modifier = Modifier.fillMaxSize()) {
         Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f)) {
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp)) {
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()

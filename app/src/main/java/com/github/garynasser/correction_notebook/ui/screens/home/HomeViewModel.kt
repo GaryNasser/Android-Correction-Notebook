@@ -21,6 +21,7 @@ import com.github.garynasser.correction_notebook.data.model.home.StudySession
 import com.github.garynasser.correction_notebook.data.model.home.TodoHistoryItem
 import com.github.garynasser.correction_notebook.data.model.home.TodoItem
 import com.github.garynasser.correction_notebook.data.model.home.TodoSource
+import com.github.garynasser.correction_notebook.data.model.school.SchoolTerm
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.KnowledgeBaseFileSummary
 import com.github.garynasser.correction_notebook.data.model.studyset.DueReviewItem
 import com.github.garynasser.correction_notebook.data.model.yanhe.CourseProgress
@@ -29,6 +30,7 @@ import com.github.garynasser.correction_notebook.data.repository.CourseLearningR
 import com.github.garynasser.correction_notebook.data.repository.IcsImportRepository
 import com.github.garynasser.correction_notebook.data.repository.KnowledgeBaseRepository
 import com.github.garynasser.correction_notebook.data.repository.ScheduleRepository
+import com.github.garynasser.correction_notebook.data.repository.SchoolScheduleRepository
 import com.github.garynasser.correction_notebook.data.repository.StudySessionRepository
 import com.github.garynasser.correction_notebook.data.repository.StudySetRepository
 import com.github.garynasser.correction_notebook.data.repository.TodoHistoryRepository
@@ -41,9 +43,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import java.time.temporal.TemporalAdjusters
 import javax.inject.Inject
 
 enum class StudyMode {
@@ -51,7 +55,7 @@ enum class StudyMode {
 }
 
 data class HomeUiState(
-    val selectedDate: LocalDate = LocalDate.now(),
+    val selectedDate: LocalDate = currentWeekStart(),
     val todoItems: List<TodoItem> = emptyList(),
     val articles: List<Article> = emptyList(),
     val isArticlesLoading: Boolean = false,
@@ -62,11 +66,16 @@ data class HomeUiState(
     val recentKnowledgeFiles: List<KnowledgeBaseFileSummary> = emptyList(),
     val dueReviewItems: List<DueReviewItem> = emptyList(),
     val plannerTab: PlannerTab = PlannerTab.SCHEDULE,
-    val scheduleRange: ScheduleRange = ScheduleRange.TODAY,
+    val scheduleRange: ScheduleRange = ScheduleRange.WEEK,
     val scheduleSections: List<ScheduleSection> = emptyList(),
     val selectedScheduleEvent: ScheduleOccurrence? = null,
     val isLoading: Boolean = false,
     val isImportingSchedule: Boolean = false,
+    val isSyncingSchoolSchedule: Boolean = false,
+    val schoolScheduleSyncMessage: String? = null,
+    val schoolScheduleSyncError: String? = null,
+    val availableSchoolTerms: List<SchoolTerm> = emptyList(),
+    val selectedSchoolTerm: SchoolTerm? = null,
     val showAddTodoDialog: Boolean = false,
     val showAddScheduleDialog: Boolean = false,
     val showModeSelector: Boolean = false,
@@ -94,6 +103,10 @@ enum class ActiveTimerMode {
     NONE, POMODORO, COUNTDOWN, STOPWATCH
 }
 
+private fun currentWeekStart(): LocalDate {
+    return LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+}
+
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val todoRepository: TodoRepository,
@@ -103,6 +116,7 @@ class HomeViewModel @Inject constructor(
     private val todoHistoryRepository: TodoHistoryRepository,
     private val scheduleRepository: ScheduleRepository,
     private val icsImportRepository: IcsImportRepository,
+    private val schoolScheduleRepository: SchoolScheduleRepository,
     private val courseLearningRepository: CourseLearningRepository,
     private val knowledgeBaseRepository: KnowledgeBaseRepository,
     private val studySetRepository: StudySetRepository,
@@ -263,6 +277,23 @@ class HomeViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(
             selectedDate = date,
             scheduleRange = ScheduleRange.TODAY,
+            plannerTab = PlannerTab.SCHEDULE,
+            aiAdvice = null,
+            aiActions = emptyList(),
+            aiReferencedMemories = emptyList(),
+            aiPlanBlocks = emptyList()
+        )
+        viewModelScope.launch {
+            refreshScheduleSections()
+            refreshLocalPlan()
+        }
+    }
+
+    fun setSelectedWeek(date: LocalDate) {
+        val weekStart = date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+        _uiState.value = _uiState.value.copy(
+            selectedDate = weekStart,
+            scheduleRange = ScheduleRange.WEEK,
             plannerTab = PlannerTab.SCHEDULE,
             aiAdvice = null,
             aiActions = emptyList(),
@@ -542,6 +573,46 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    fun syncSchoolSchedule() {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                isSyncingSchoolSchedule = true,
+                schoolScheduleSyncMessage = null,
+                schoolScheduleSyncError = null,
+                plannerTab = PlannerTab.SCHEDULE
+            )
+            runCatching {
+                schoolScheduleRepository.syncCurrentTerm()
+            }.onSuccess { result ->
+                _uiState.value = _uiState.value.copy(
+                    isSyncingSchoolSchedule = false,
+                    schoolScheduleSyncMessage = result.message,
+                    schoolScheduleSyncError = null,
+                    selectedSchoolTerm = SchoolTerm(
+                        id = result.termId,
+                        name = result.termName,
+                        isCurrent = true
+                    )
+                )
+                refreshScheduleSections()
+                refreshLocalPlan()
+            }.onFailure { throwable ->
+                _uiState.value = _uiState.value.copy(
+                    isSyncingSchoolSchedule = false,
+                    schoolScheduleSyncMessage = null,
+                    schoolScheduleSyncError = mapSchoolScheduleError(throwable)
+                )
+            }
+        }
+    }
+
+    fun dismissSchoolScheduleSyncMessage() {
+        _uiState.value = _uiState.value.copy(
+            schoolScheduleSyncMessage = null,
+            schoolScheduleSyncError = null
+        )
+    }
+
     fun dismissIcsPreview() {
         _uiState.value = _uiState.value.copy(pendingIcsPreview = null)
     }
@@ -552,6 +623,14 @@ class HomeViewModel @Inject constructor(
             scheduleRepository.applyImportPreview(preview, decision)
             _uiState.value = _uiState.value.copy(pendingIcsPreview = null)
             refreshScheduleSections()
+        }
+    }
+
+    private fun mapSchoolScheduleError(throwable: Throwable): String {
+        val message = throwable.message.orEmpty()
+        return when {
+            message.isNotBlank() -> message
+            else -> "暂时无法连接学校系统，请稍后重试"
         }
     }
 

@@ -16,7 +16,8 @@ enum class ScheduleRange {
 
 enum class ScheduleSourceType {
     MANUAL,
-    ICS_IMPORT
+    ICS_IMPORT,
+    SCHOOL_IMPORT
 }
 
 enum class ImportDecision {
