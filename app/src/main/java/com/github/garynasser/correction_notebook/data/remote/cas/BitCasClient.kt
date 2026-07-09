@@ -57,6 +57,11 @@ class BitCasClient @Inject constructor(
             }
     }
 
+    suspend fun getServiceTicketFor(studentId: String, password: String, serviceUrl: String): String = withContext(Dispatchers.IO) {
+        val tgtUrl = getTgtUrl(studentId, password)
+        getServiceTicket(tgtUrl, serviceUrl)
+    }
+
     private fun exchangeCodeForToken(code: String): String {
         val url = Uri.parse(YANHE_AUTH_TOKEN_URL)
             .buildUpon()

@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.ImportExport
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.NoteAlt
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -61,7 +62,9 @@ import com.github.garynasser.correction_notebook.data.model.home.ImportDecision
 import com.github.garynasser.correction_notebook.data.model.home.PlannerTab
 import com.github.garynasser.correction_notebook.data.model.home.ScheduleEvent
 import com.github.garynasser.correction_notebook.data.model.home.ScheduleOccurrence
+import com.github.garynasser.correction_notebook.data.model.home.ScheduleRange
 import com.github.garynasser.correction_notebook.data.model.home.ScheduleSection
+import com.github.garynasser.correction_notebook.data.model.home.ScheduleSourceType
 import com.github.garynasser.correction_notebook.data.model.home.TodoItem
 import com.github.garynasser.correction_notebook.ui.components.FreshCard
 import java.time.Instant
@@ -76,6 +79,8 @@ fun PlannerSection(
     uiState: HomeUiState,
     onPlannerTabChange: (PlannerTab) -> Unit,
     onDateChange: (LocalDate) -> Unit,
+    onScheduleRangeChange: (ScheduleRange) -> Unit,
+    onSyncSchoolSchedule: () -> Unit,
     onImportIcs: () -> Unit,
     onAddSchedule: () -> Unit,
     onAddTodo: () -> Unit,
@@ -98,6 +103,8 @@ fun PlannerSection(
             PlannerHeader(
                 selectedDate = uiState.selectedDate,
                 isImporting = uiState.isImportingSchedule,
+                isSyncing = uiState.isSyncingSchoolSchedule,
+                onSyncSchoolSchedule = onSyncSchoolSchedule,
                 onImportIcs = onImportIcs,
                 onAddSchedule = onAddSchedule
             )
@@ -131,7 +138,9 @@ fun PlannerSection(
             when (uiState.plannerTab) {
                 PlannerTab.SCHEDULE -> SchedulePlannerContent(
                     selectedDate = uiState.selectedDate,
+                    selectedRange = uiState.scheduleRange,
                     sections = uiState.scheduleSections,
+                    onRangeChange = onScheduleRangeChange,
                     onDeleteSchedule = onDeleteSchedule
                 )
                 PlannerTab.TODO -> TodoPlannerContent(
@@ -151,6 +160,8 @@ fun PlannerSection(
 private fun PlannerHeader(
     selectedDate: LocalDate,
     isImporting: Boolean,
+    isSyncing: Boolean,
+    onSyncSchoolSchedule: () -> Unit,
     onImportIcs: () -> Unit,
     onAddSchedule: () -> Unit
 ) {
@@ -173,6 +184,12 @@ private fun PlannerHeader(
             )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            IconButton(onClick = onSyncSchoolSchedule, enabled = !isSyncing) {
+                androidx.compose.material3.Icon(
+                    Icons.Default.Sync,
+                    contentDescription = if (isSyncing) "同步中" else "同步教务课表"
+                )
+            }
             IconButton(onClick = onImportIcs, enabled = !isImporting) {
                 androidx.compose.material3.Icon(
                     Icons.Default.ImportExport,
@@ -189,27 +206,33 @@ private fun PlannerHeader(
 @Composable
 private fun SchedulePlannerContent(
     selectedDate: LocalDate,
+    selectedRange: ScheduleRange,
     sections: List<ScheduleSection>,
+    onRangeChange: (ScheduleRange) -> Unit,
     onDeleteSchedule: (String) -> Unit
 ) {
     var selectedOccurrence by remember { mutableStateOf<ScheduleOccurrence?>(null) }
 
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = "显示 ${selectedDate.format(DateTimeFormatter.ofPattern("M月d日"))} 的课程和日程",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
-        )
-    }
+    ScheduleRangeSelector(
+        selectedRange = selectedRange,
+        onRangeChange = onRangeChange
+    )
+
+    Text(
+        text = scheduleRangeSummary(selectedDate, selectedRange),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+    )
 
     if (sections.all { it.items.isEmpty() }) {
         PlannerEmptyState(
             title = "近期还没有日程",
-            description = "你可以导入 ICS 文件，或者手动添加一个时间、地点、活动安排。"
+            description = "你可以同步教务课表、导入 ICS 文件，或者手动添加一个时间、地点、活动安排。"
+        )
+    } else if (selectedRange == ScheduleRange.WEEK) {
+        WeekScheduleContent(
+            sections = sections,
+            onItemClick = { selectedOccurrence = it }
         )
     } else {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -296,6 +319,127 @@ private fun TodoPlannerContent(
 }
 
 @Composable
+private fun ScheduleRangeSelector(
+    selectedRange: ScheduleRange,
+    onRangeChange: (ScheduleRange) -> Unit
+) {
+    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+        val ranges = listOf(ScheduleRange.TODAY, ScheduleRange.TOMORROW, ScheduleRange.WEEK)
+        ranges.forEachIndexed { index, range ->
+            SegmentedButton(
+                selected = selectedRange == range,
+                onClick = { onRangeChange(range) },
+                shape = androidx.compose.material3.SegmentedButtonDefaults.itemShape(
+                    index = index,
+                    count = ranges.size
+                ),
+                label = {
+                    Text(
+                        when (range) {
+                            ScheduleRange.TODAY -> "今天"
+                            ScheduleRange.TOMORROW -> "明天"
+                            ScheduleRange.WEEK -> "本周"
+                        }
+                    )
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun WeekScheduleContent(
+    sections: List<ScheduleSection>,
+    onItemClick: (ScheduleOccurrence) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        sections.forEach { section ->
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f)
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "${section.date.format(DateTimeFormatter.ofPattern("M月d日"))} ${section.date.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.CHINA)}",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = if (section.items.isEmpty()) "无课" else "${section.items.size} 项",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.58f)
+                        )
+                    }
+                    if (section.items.isEmpty()) {
+                        Text(
+                            text = "留给复习、自习或临时安排",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.58f)
+                        )
+                    } else {
+                        section.items.forEach { item ->
+                            CompactWeekScheduleItem(item = item, onClick = { onItemClick(item) })
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompactWeekScheduleItem(
+    item: ScheduleOccurrence,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(sourceContainerColor(item.sourceType))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = formatScheduleTimeCompact(item).replace("\n", "-"),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.width(86.dp)
+        )
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = item.title,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1
+            )
+            if (item.location.isNotBlank()) {
+                Text(
+                    text = item.location,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f),
+                    maxLines = 1
+                )
+            }
+        }
+        SourceBadge(sourceType = item.sourceType)
+    }
+}
+
+@Composable
 private fun PlannerEmptyState(
     title: String,
     description: String
@@ -331,7 +475,7 @@ private fun ScheduleOccurrenceCard(
             .fillMaxWidth()
             .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.42f)
+            containerColor = sourceContainerColor(item.sourceType)
         )
     ) {
         Row(
@@ -366,7 +510,39 @@ private fun ScheduleOccurrenceCard(
                     )
                 }
             }
+            SourceBadge(sourceType = item.sourceType)
         }
+    }
+}
+
+@Composable
+private fun SourceBadge(sourceType: ScheduleSourceType) {
+    val (label, color) = when (sourceType) {
+        ScheduleSourceType.MANUAL -> "手动" to MaterialTheme.colorScheme.tertiaryContainer
+        ScheduleSourceType.ICS_IMPORT -> "ICS" to MaterialTheme.colorScheme.secondaryContainer
+        ScheduleSourceType.SCHOOL_IMPORT -> "学校" to MaterialTheme.colorScheme.primaryContainer
+    }
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(color.copy(alpha = 0.7f))
+            .padding(horizontal = 7.dp, vertical = 3.dp)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
+            maxLines = 1
+        )
+    }
+}
+
+@Composable
+private fun sourceContainerColor(sourceType: ScheduleSourceType): Color {
+    return when (sourceType) {
+        ScheduleSourceType.MANUAL -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.34f)
+        ScheduleSourceType.ICS_IMPORT -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.42f)
+        ScheduleSourceType.SCHOOL_IMPORT -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.38f)
     }
 }
 
@@ -436,6 +612,14 @@ private fun formatScheduleTime(item: ScheduleOccurrence): String {
         "全天"
     } else {
         "${item.startAt.format(DateTimeFormatter.ofPattern("MM月dd日 HH:mm"))} - ${item.endAt.format(DateTimeFormatter.ofPattern("HH:mm"))}"
+    }
+}
+
+private fun scheduleRangeSummary(selectedDate: LocalDate, selectedRange: ScheduleRange): String {
+    return when (selectedRange) {
+        ScheduleRange.TODAY -> "显示 ${selectedDate.format(DateTimeFormatter.ofPattern("M月d日"))} 的课程和日程"
+        ScheduleRange.TOMORROW -> "显示 ${selectedDate.plusDays(1).format(DateTimeFormatter.ofPattern("M月d日"))} 的课程和日程"
+        ScheduleRange.WEEK -> "显示从 ${selectedDate.format(DateTimeFormatter.ofPattern("M月d日"))} 起 7 天的课程和日程"
     }
 }
 

@@ -43,6 +43,7 @@ fun ProfileScreen(
     var showAiSettingsDialog by remember { mutableStateOf(false) }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
                 title = { Text("个人中心") },
@@ -62,8 +63,8 @@ fun ProfileScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             // 用户信息卡片
             item {
@@ -81,11 +82,11 @@ fun ProfileScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp),
+                            .padding(14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Surface(
-                            modifier = Modifier.size(64.dp),
+                            modifier = Modifier.size(52.dp),
                             shape = MaterialTheme.shapes.large,
                             color = if (authState is AuthState.Authenticated)
                                 MaterialTheme.colorScheme.primaryContainer
@@ -99,7 +100,7 @@ fun ProfileScreen(
                                     else
                                         Icons.Default.Person,
                                     contentDescription = null,
-                                    modifier = Modifier.size(40.dp),
+                                    modifier = Modifier.size(32.dp),
                                     tint = if (authState is AuthState.Authenticated)
                                         MaterialTheme.colorScheme.onPrimaryContainer
                                     else
@@ -108,12 +109,12 @@ fun ProfileScreen(
                             }
                         }
 
-                        Spacer(modifier = Modifier.width(16.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
 
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = if (authState is AuthState.Authenticated) "延河课堂已登录" else "延河课堂未登录",
-                                style = MaterialTheme.typography.titleLarge,
+                                style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
@@ -135,7 +136,7 @@ fun ProfileScreen(
                 }
             }
 
-            item { Spacer(modifier = Modifier.height(8.dp)) }
+            item { Spacer(modifier = Modifier.height(2.dp)) }
 
             // AI 功能开关
             item {
@@ -176,7 +177,7 @@ fun ProfileScreen(
                 }
             }
 
-            item { Spacer(modifier = Modifier.height(8.dp)) }
+            item { Spacer(modifier = Modifier.height(2.dp)) }
 
             // 设置列表
             item {
@@ -208,7 +209,7 @@ fun ProfileScreen(
                 }
             }
 
-            item { Spacer(modifier = Modifier.height(80.dp)) }
+            item { Spacer(modifier = Modifier.height(24.dp)) }
         }
         }
     }
@@ -302,17 +303,33 @@ fun SettingsItem(
     onClick: () -> Unit
 ) {
     ListItem(
-        headlineContent = { Text(title) },
-        supportingContent = { Text(subtitle) },
+        headlineContent = {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+        },
+        supportingContent = {
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall
+            )
+        },
         leadingContent = {
             Icon(
                 icon,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(22.dp)
             )
         },
         trailingContent = {
-            Icon(Icons.Default.ChevronRight, contentDescription = null)
+            Icon(
+                Icons.Default.ChevronRight,
+                contentDescription = null,
+                modifier = Modifier.size(22.dp)
+            )
         },
         modifier = Modifier.clickable(onClick = onClick)
     )

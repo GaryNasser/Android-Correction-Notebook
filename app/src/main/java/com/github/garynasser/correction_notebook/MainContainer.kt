@@ -2,10 +2,10 @@ package com.github.garynasser.correction_notebook
 
 import android.content.Intent
 import android.net.Uri
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -77,19 +77,13 @@ fun MainContainer(
         bottomBar = {
             // 结合了配置和隐藏逻辑
             if (!hideBottomBar && shouldShowBottomBar) {
-                Surface(
+                NavigationBar(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    shape = RoundedCornerShape(28.dp),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                        .height(64.dp),
+                    containerColor = MaterialTheme.colorScheme.surface,
                     tonalElevation = 0.dp,
-                    shadowElevation = 0.dp,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
-                ) {
-                NavigationBar(
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
-                    tonalElevation = 0.dp
+                    windowInsets = WindowInsets(0, 0, 0, 0)
                 ) {
                     bottomNavList.forEach { item ->
                         // AI 路由过滤逻辑
@@ -98,13 +92,24 @@ fun MainContainer(
                         val isSelected = currentDestination?.hasRoute(item.route::class) ?: false
 
                         NavigationBarItem(
-                            icon = { Icon(item.icon, contentDescription = item.title) },
-                            label = { Text(item.title) },
+                            icon = {
+                                Icon(
+                                    item.icon,
+                                    contentDescription = item.title,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            },
+                            label = {
+                                Text(
+                                    text = item.title,
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            },
                             selected = isSelected,
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = MaterialTheme.colorScheme.primary,
                                 selectedTextColor = MaterialTheme.colorScheme.primary,
-                                indicatorColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.82f)
+                                indicatorColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.62f)
                             ),
                             onClick = {
                                 navController.navigate(item.route) {
@@ -117,7 +122,6 @@ fun MainContainer(
                             }
                         )
                     }
-                }
                 }
             }
         } // 这里是 bottomBar 结束

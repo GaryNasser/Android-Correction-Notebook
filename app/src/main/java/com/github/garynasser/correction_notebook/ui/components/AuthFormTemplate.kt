@@ -34,31 +34,31 @@ fun AuthFormTemplate(
     footer: @Composable (RowScope.() -> Unit) ? = null
 ) {
     Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp)
+        modifier = Modifier.fillMaxWidth().padding(8.dp)
     ) {
         Text(
             text = title,
-            fontSize = 24.sp,
+            fontSize = 22.sp,
             fontWeight = FontWeight.Bold
         )
 
-        Spacer(Modifier.height(32.dp))
+        Spacer(Modifier.height(24.dp))
 
-        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             inputFields()
         }
 
-        Spacer(Modifier.height(32.dp))
+        Spacer(Modifier.height(24.dp))
 
         Button(
             onClick = onButtonClick,
             enabled = isButtonEnabled,
-            modifier = Modifier.fillMaxWidth().height(50.dp)
+            modifier = Modifier.fillMaxWidth().height(46.dp)
         ) {
             Text(text = buttonText)
         }
 
-        Spacer(Modifier.height(32.dp))
+        Spacer(Modifier.height(20.dp))
 
         if (footer != null) {
             Row(

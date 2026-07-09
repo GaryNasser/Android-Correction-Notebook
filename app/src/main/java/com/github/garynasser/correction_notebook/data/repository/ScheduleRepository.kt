@@ -117,6 +117,27 @@ class ScheduleRepository(private val context: Context) {
         }
     }
 
+    suspend fun applySchoolSchedule(termId: String, events: List<ScheduleEvent>) {
+        val calendarId = schoolCalendarId(termId)
+        val importedAt = System.currentTimeMillis()
+        context.scheduleDataStore.edit { prefs ->
+            val current = prefs[scheduleEventsKey]?.let(::parseScheduleEvents) ?: emptyList()
+            val retained = current.filterNot {
+                it.sourceType == ScheduleSourceType.SCHOOL_IMPORT &&
+                    it.sourceCalendarId == calendarId
+            }
+            val normalizedEvents = events.map { event ->
+                event.copy(
+                    sourceType = ScheduleSourceType.SCHOOL_IMPORT,
+                    sourceCalendarId = calendarId,
+                    lastImportedAt = importedAt,
+                    updatedAt = importedAt
+                )
+            }
+            prefs[scheduleEventsKey] = serializeScheduleEvents(retained + normalizedEvents)
+        }
+    }
+
     suspend fun getImportedEventsForCalendar(calendarId: String): List<ScheduleEvent> {
         return scheduleEvents.first().filter {
             it.sourceType == ScheduleSourceType.ICS_IMPORT && it.sourceCalendarId == calendarId
@@ -369,6 +390,8 @@ class ScheduleRepository(private val context: Context) {
     }
 
     companion object {
+        fun schoolCalendarId(termId: String): String = "school_${termId.trim()}"
+
         fun parseIcsDateTime(raw: String, tzid: String?): Pair<LocalDateTime, Boolean> {
             val cleaned = raw.trim()
             return when {

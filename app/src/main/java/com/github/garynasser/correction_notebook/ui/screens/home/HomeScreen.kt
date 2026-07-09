@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -23,6 +24,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -32,6 +35,9 @@ import com.github.garynasser.correction_notebook.data.model.ai.AiActionType
 import com.github.garynasser.correction_notebook.data.model.ai.AiPlanBlock
 import com.github.garynasser.correction_notebook.data.model.home.ImportDecision
 import com.github.garynasser.correction_notebook.data.model.home.PlannerTab
+import com.github.garynasser.correction_notebook.data.model.home.ScheduleOccurrence
+import com.github.garynasser.correction_notebook.data.model.home.ScheduleSection
+import com.github.garynasser.correction_notebook.data.model.home.ScheduleSourceType
 import com.github.garynasser.correction_notebook.data.model.home.TimerState
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.KnowledgeBaseFileSummary
 import com.github.garynasser.correction_notebook.data.model.studyset.DueReviewItem
@@ -44,12 +50,14 @@ import com.github.garynasser.correction_notebook.ui.components.MetricTile
 import com.github.garynasser.correction_notebook.ui.components.SectionHeader
 import com.github.garynasser.correction_notebook.ui.screens.statistics.StatisticsScreen
 import com.github.garynasser.correction_notebook.ui.screens.statistics.StatisticsViewModel
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import java.time.format.TextStyle
 import java.time.format.DateTimeFormatter
+import java.time.temporal.WeekFields
 import java.io.File
 import java.util.Locale
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -68,15 +76,14 @@ fun HomeScreen(
     val timerState by homeViewModel.timerManager.timerState.collectAsState()
     var showCustomTimer by remember { mutableStateOf(false) }
     var startPomodoroAfterSettings by remember { mutableStateOf(false) }
+    var activeMainTab by remember { mutableStateOf(HomeMainTab.BIT) }
     val context = LocalContext.current
     val listState = rememberLazyListState()
-    val coroutineScope = rememberCoroutineScope()
 
     fun jumpToPlanner(tab: PlannerTab) {
         homeViewModel.setPlannerTab(tab)
-        coroutineScope.launch {
-            listState.animateScrollToItem(HOME_PLANNER_INDEX)
-        }
+        homeViewModel.setSelectedWeek(uiState.selectedDate)
+        activeMainTab = HomeMainTab.BIT
     }
 
     val imagePickerLauncher = rememberLauncherForActivityResult(
@@ -90,6 +97,12 @@ fun HomeScreen(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let { homeViewModel.importIcs(it) }
+    }
+
+    LaunchedEffect(activeMainTab) {
+        if (activeMainTab == HomeMainTab.BIT) {
+            homeViewModel.setSelectedWeek(uiState.selectedDate)
+        }
     }
 
     // Handle immersive mode
@@ -136,13 +149,13 @@ fun HomeScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        "BITStudy",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.SemiBold
+                    BitStudySwitcher(
+                        activeTab = activeMainTab,
+                        onTabSelected = { activeMainTab = it }
                     )
                 },
                 windowInsets = WindowInsets(0, 0, 0, 0),
@@ -151,11 +164,13 @@ fun HomeScreen(
                     scrolledContainerColor = MaterialTheme.colorScheme.surface
                 ),
                 actions = {
-                    IconButton(onClick = { homeViewModel.showStatistics() }) {
-                        Icon(Icons.Default.BarChart, contentDescription = "统计")
-                    }
-                    IconButton(onClick = { homeViewModel.showModeSelector() }) {
-                        Icon(Icons.Default.Timer, contentDescription = "学习模式")
+                    if (activeMainTab == HomeMainTab.STUDY) {
+                        IconButton(onClick = { homeViewModel.showStatistics() }) {
+                            Icon(Icons.Default.BarChart, contentDescription = "统计")
+                        }
+                        IconButton(onClick = { homeViewModel.showModeSelector() }) {
+                            Icon(Icons.Default.Timer, contentDescription = "学习模式")
+                        }
                     }
                 }
             )
@@ -166,64 +181,29 @@ fun HomeScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-        LazyColumn(
-            state = listState,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            item { Spacer(modifier = Modifier.height(10.dp)) }
-
-            item {
-                TodayStudyWorkbench(
+            when (activeMainTab) {
+                HomeMainTab.BIT -> BitSchedulePage(
+                    uiState = uiState,
+                    onSyncSchoolSchedule = { homeViewModel.syncSchoolSchedule() },
+                    onImportIcs = { icsPickerLauncher.launch("*/*") },
+                    onAddSchedule = { homeViewModel.showAddScheduleDialog() },
+                    onWeekChange = { homeViewModel.setSelectedWeek(it) },
+                    onToday = { homeViewModel.setSelectedWeek(LocalDate.now()) },
+                    onDeleteSchedule = { homeViewModel.deleteSchedule(it) }
+                )
+                HomeMainTab.STUDY -> StudyDashboardPage(
+                    listState = listState,
+                    uiState = uiState,
                     timerState = timerState,
-                    todayMinutes = uiState.todayStudyMinutes,
-                    completedPomodoros = uiState.completedPomodoros,
-                    scheduleCount = uiState.scheduleSections.firstOrNull()?.items?.size ?: 0,
-                    todoCount = uiState.todoItems.count { !it.isCompleted },
-                    recentCourses = uiState.recentCourseProgress,
-                    recentFiles = uiState.recentKnowledgeFiles,
                     onImmersiveModeClick = { homeViewModel.showModeSelector() },
                     onScheduleClick = { jumpToPlanner(PlannerTab.SCHEDULE) },
-                    onTodoClick = { jumpToPlanner(PlannerTab.TODO) },
+                    onTodoClick = { homeViewModel.showAddTodoDialog() },
                     onContinueLearningClick = { onNavigateToCourses(uiState.recentCourseProgress.firstOrNull()) },
-                    onRecentFilesClick = onNavigateToKnowledgeBase
-                )
-            }
-
-            item {
-                QuickStatsPreview(
-                    todayMinutes = uiState.todayStudyMinutes,
-                    completedPomodoros = uiState.completedPomodoros,
-                    onClick = { homeViewModel.showStatistics() }
-                )
-            }
-
-            item {
-                DueReviewCard(
-                    items = uiState.dueReviewItems,
+                    onRecentFilesClick = onNavigateToKnowledgeBase,
+                    onOpenStatistics = { homeViewModel.showStatistics() },
                     onReviewDone = { homeViewModel.markReviewDone(it) },
-                    onOpenKnowledgeBase = onNavigateToKnowledgeBase
-                )
-            }
-
-            item {
-                SectionHeader(
-                    title = "AI 学习建议",
-                    subtitle = "结合日程、待办和学习记录给你一个轻提醒"
-                )
-            }
-
-            item {
-                AiStudyAdviceCard(
-                    advice = uiState.aiAdvice,
-                    planBlocks = uiState.aiPlanBlocks,
-                    actions = uiState.aiActions,
-                    referencedMemories = uiState.aiReferencedMemories,
-                    selectedDate = uiState.selectedDate,
-                    isLoading = uiState.isAiAdviceLoading,
-                    onGenerate = { homeViewModel.generateTodayAdvice() },
+                    onOpenKnowledgeBase = onNavigateToKnowledgeBase,
+                    onGenerateAdvice = { homeViewModel.generateTodayAdvice() },
                     onSaveAdvice = { homeViewModel.saveAdviceAsTodo(it) },
                     onApplyAction = { action ->
                         when (action.type) {
@@ -246,30 +226,10 @@ fun HomeScreen(
                             else -> homeViewModel.applyAiAction(action)
                         }
                     },
-                    onStartFocus = { homeViewModel.showModeSelector() },
                     onOpenCourse = onOpenCourse,
                     onOpenFile = onOpenKnowledgeFile
                 )
             }
-
-            item {
-                PlannerSection(
-                    uiState = uiState,
-                    onPlannerTabChange = { homeViewModel.setPlannerTab(it) },
-                    onDateChange = { homeViewModel.setSelectedDate(it) },
-                    onImportIcs = { icsPickerLauncher.launch("*/*") },
-                    onAddSchedule = { homeViewModel.showAddScheduleDialog() },
-                    onAddTodo = { homeViewModel.showAddTodoDialog() },
-                    onShowTodoHistory = { homeViewModel.showTodoHistory() },
-                    onToggleTodo = { homeViewModel.toggleTodoComplete(it) },
-                    onBreakDownTodo = { homeViewModel.breakDownTodo(it) },
-                    onDeleteTodo = { homeViewModel.deleteTodo(it) },
-                    onDeleteSchedule = { homeViewModel.deleteSchedule(it) }
-                )
-            }
-
-            item { Spacer(modifier = Modifier.height(80.dp)) }
-        }
         }
     }
 
@@ -294,6 +254,21 @@ fun HomeScreen(
             onDismiss = { homeViewModel.dismissIcsPreview() },
             onApply = { decision: ImportDecision ->
                 homeViewModel.applyIcsPreview(decision)
+            }
+        )
+    }
+
+    if (uiState.schoolScheduleSyncMessage != null || uiState.schoolScheduleSyncError != null) {
+        AlertDialog(
+            onDismissRequest = { homeViewModel.dismissSchoolScheduleSyncMessage() },
+            title = { Text(if (uiState.schoolScheduleSyncError == null) "课表同步完成" else "课表同步失败") },
+            text = {
+                Text(uiState.schoolScheduleSyncMessage ?: uiState.schoolScheduleSyncError.orEmpty())
+            },
+            confirmButton = {
+                TextButton(onClick = { homeViewModel.dismissSchoolScheduleSyncMessage() }) {
+                    Text("知道了")
+                }
             }
         )
     }
@@ -375,7 +350,776 @@ fun HomeScreen(
     }
 }
 
-private const val HOME_PLANNER_INDEX = 6
+private enum class HomeMainTab {
+    BIT,
+    STUDY
+}
+
+@Composable
+private fun BitStudySwitcher(
+    activeTab: HomeMainTab,
+    onTabSelected: (HomeMainTab) -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.Bottom,
+        horizontalArrangement = Arrangement.spacedBy(18.dp)
+    ) {
+        BrandWord(
+            text = "BIT",
+            selected = activeTab == HomeMainTab.BIT,
+            onClick = { onTabSelected(HomeMainTab.BIT) }
+        )
+        BrandWord(
+            text = "Study",
+            selected = activeTab == HomeMainTab.STUDY,
+            onClick = { onTabSelected(HomeMainTab.STUDY) }
+        )
+    }
+}
+
+@Composable
+private fun BrandWord(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Text(
+        text = text,
+        modifier = Modifier.clickable(onClick = onClick),
+        style = if (selected) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleMedium,
+        fontWeight = if (selected) FontWeight.Black else FontWeight.Medium,
+        color = MaterialTheme.colorScheme.onBackground.copy(alpha = if (selected) 1f else 0.38f)
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun BitSchedulePage(
+    uiState: HomeUiState,
+    onSyncSchoolSchedule: () -> Unit,
+    onImportIcs: () -> Unit,
+    onAddSchedule: () -> Unit,
+    onWeekChange: (LocalDate) -> Unit,
+    onToday: () -> Unit,
+    onDeleteSchedule: (String) -> Unit
+) {
+    var selectedOccurrence by remember { mutableStateOf<ScheduleOccurrence?>(null) }
+    var showDatePicker by remember { mutableStateOf(false) }
+    val sections = uiState.scheduleSections
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surface)
+    ) {
+        WeeklyCourseGrid(
+            selectedDate = uiState.selectedDate,
+            sections = sections,
+            modifier = Modifier.fillMaxSize(),
+            onItemClick = { selectedOccurrence = it }
+        )
+
+        ScheduleSideControls(
+            isSyncing = uiState.isSyncingSchoolSchedule,
+            isImporting = uiState.isImportingSchedule,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 8.dp, bottom = 10.dp),
+            onNextWeek = { onWeekChange(uiState.selectedDate.plusWeeks(1)) },
+            onPreviousWeek = { onWeekChange(uiState.selectedDate.minusWeeks(1)) },
+            onAddSchedule = onAddSchedule,
+            onSyncSchoolSchedule = onSyncSchoolSchedule,
+            onImportIcs = onImportIcs,
+            onPickDate = { showDatePicker = true },
+            onToday = onToday
+        )
+    }
+
+    selectedOccurrence?.let { item ->
+        ScheduleOccurrenceDialog(
+            item = item,
+            onDismiss = { selectedOccurrence = null },
+            onDelete = {
+                selectedOccurrence = null
+                onDeleteSchedule(item.eventId)
+            }
+        )
+    }
+
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = uiState.selectedDate
+                .atStartOfDay(ZoneId.systemDefault())
+                .toInstant()
+                .toEpochMilli()
+        )
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        datePickerState.selectedDateMillis?.let { millis ->
+                            val pickedDate = Instant.ofEpochMilli(millis)
+                                .atZone(ZoneId.systemDefault())
+                                .toLocalDate()
+                            onWeekChange(pickedDate)
+                        }
+                        showDatePicker = false
+                    }
+                ) { Text("确定") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) { Text("取消") }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+}
+
+@Composable
+private fun WeeklyCourseGrid(
+    selectedDate: LocalDate,
+    sections: List<ScheduleSection>,
+    modifier: Modifier = Modifier,
+    onItemClick: (ScheduleOccurrence) -> Unit
+) {
+    val weekNumber = selectedDate.get(WeekFields.ISO.weekOfWeekBasedYear())
+    val days = (0..6).map { selectedDate.plusDays(it.toLong()) }
+    val weekdayLabels = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
+    val itemsByDate = sections.associate { it.date to it.items }
+    val headerHeight = 50.dp
+    val leftColumnWidth = 42.dp
+
+    BoxWithConstraints(
+        modifier = modifier.fillMaxSize()
+    ) {
+        val rowHeight = (maxHeight - headerHeight) / COURSE_SECTIONS.size.toFloat()
+        val dayColumnWidth = (maxWidth - leftColumnWidth) / 7f
+        val gridHeight = rowHeight * COURSE_SECTIONS.size.toFloat()
+
+        Column(modifier = Modifier.fillMaxSize()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(headerHeight)
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.34f)),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(leftColumnWidth)
+                        .height(headerHeight),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "${weekNumber}\n周",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
+                    )
+                }
+                days.forEachIndexed { index, date ->
+                    val isToday = date == LocalDate.now()
+                    Column(
+                        modifier = Modifier
+                            .width(dayColumnWidth)
+                            .height(headerHeight)
+                            .background(
+                                if (isToday) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.46f)
+                                else Color.Transparent
+                            ),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = weekdayLabels[index],
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.82f)
+                        )
+                        Text(
+                            text = date.format(DateTimeFormatter.ofPattern("MM/dd")),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.66f)
+                        )
+                    }
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(gridHeight)
+            ) {
+                COURSE_SECTIONS.forEachIndexed { index, section ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(rowHeight)
+                            .offset(y = rowHeight * index.toFloat()),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .width(leftColumnWidth)
+                                .height(rowHeight)
+                                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.72f)),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                text = section.index.toString(),
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f)
+                            )
+                            Text(
+                                text = section.start.format(DateTimeFormatter.ofPattern("HH:mm")),
+                                fontSize = 10.sp,
+                                lineHeight = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.58f)
+                            )
+                        }
+                        repeat(7) {
+                            Box(
+                                modifier = Modifier
+                                    .width(dayColumnWidth)
+                                    .height(rowHeight)
+                                    .background(
+                                        if (index % 2 == 0) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.13f)
+                                        else Color.Transparent
+                                    )
+                            )
+                        }
+                    }
+                }
+
+                COURSE_SECTIONS.drop(1).forEachIndexed { index, _ ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .offset(y = rowHeight * (index + 1).toFloat())
+                            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.32f))
+                    )
+                }
+
+                days.forEachIndexed { dayIndex, date ->
+                    itemsByDate[date].orEmpty().forEach { item ->
+                        val placement = item.toCourseGridPlacement() ?: return@forEach
+                        CourseGridBlock(
+                            item = item,
+                            span = placement.span,
+                            modifier = Modifier
+                                .width(dayColumnWidth - 3.dp)
+                                .height(rowHeight * placement.span.toFloat() - 3.dp)
+                                .offset(
+                                    x = leftColumnWidth + dayColumnWidth * dayIndex.toFloat() + 1.5.dp,
+                                    y = rowHeight * placement.startIndex.toFloat() + 1.5.dp
+                                ),
+                            onClick = { onItemClick(item) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScheduleSideControls(
+    isSyncing: Boolean,
+    isImporting: Boolean,
+    modifier: Modifier,
+    onNextWeek: () -> Unit,
+    onPreviousWeek: () -> Unit,
+    onAddSchedule: () -> Unit,
+    onSyncSchoolSchedule: () -> Unit,
+    onImportIcs: () -> Unit,
+    onPickDate: () -> Unit,
+    onToday: () -> Unit
+) {
+    var showActions by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalAlignment = Alignment.End
+    ) {
+        ScheduleFloatingButton(
+            icon = Icons.Default.ChevronRight,
+            contentDescription = "下一周",
+            onClick = onNextWeek
+        )
+        ScheduleFloatingButton(
+            icon = Icons.Default.ChevronLeft,
+            contentDescription = "上一周",
+            onClick = onPreviousWeek
+        )
+        ScheduleFloatingButton(
+            icon = Icons.Default.Add,
+            contentDescription = "添加日程",
+            onClick = onAddSchedule
+        )
+        Box {
+            ScheduleFloatingButton(
+                icon = Icons.Default.Settings,
+                contentDescription = "课表操作",
+                onClick = { showActions = true }
+            )
+            DropdownMenu(
+                expanded = showActions,
+                onDismissRequest = { showActions = false }
+            ) {
+                DropdownMenuItem(
+                    text = { Text("选择日期") },
+                    leadingIcon = { Icon(Icons.Default.CalendarMonth, contentDescription = null) },
+                    onClick = {
+                        showActions = false
+                        onPickDate()
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("回到本周") },
+                    leadingIcon = { Icon(Icons.Default.Today, contentDescription = null) },
+                    onClick = {
+                        showActions = false
+                        onToday()
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text(if (isSyncing) "同步中" else "同步教务") },
+                    leadingIcon = {
+                        if (isSyncing) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Default.Sync, contentDescription = null)
+                        }
+                    },
+                    enabled = !isSyncing,
+                    onClick = {
+                        showActions = false
+                        onSyncSchoolSchedule()
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text(if (isImporting) "导入中" else "导入 ICS") },
+                    leadingIcon = { Icon(Icons.Default.ImportExport, contentDescription = null) },
+                    enabled = !isImporting,
+                    onClick = {
+                        showActions = false
+                        onImportIcs()
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScheduleFloatingButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.size(44.dp),
+        shape = RoundedCornerShape(15.dp),
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.86f),
+        tonalElevation = 4.dp,
+        shadowElevation = 2.dp
+    ) {
+        IconButton(onClick = onClick) {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(23.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun CourseGridBlock(
+    item: ScheduleOccurrence,
+    span: Int,
+    modifier: Modifier,
+    onClick: () -> Unit
+) {
+    val displayLocation = item.location
+        .lineSequence()
+        .firstOrNull()
+        .orEmpty()
+        .trim()
+    val hasLocation = displayLocation.isNotBlank()
+    val compactBlock = span <= 1
+    val longTitle = item.title.length >= 14
+    val titleFontSize = when {
+        compactBlock -> if (longTitle) 8.sp else 9.sp
+        span == 2 -> if (longTitle) 9.sp else 10.sp
+        else -> if (longTitle) 10.sp else 11.sp
+    }
+    val locationFontSize = when {
+        compactBlock -> 8.sp
+        span == 2 -> 8.5.sp
+        else -> 10.sp
+    }
+    val titleLineHeight = when {
+        compactBlock -> if (longTitle) 9.sp else 10.sp
+        span == 2 -> if (longTitle) 10.sp else 11.sp
+        else -> if (longTitle) 11.sp else 12.sp
+    }
+    val locationLineHeight = when {
+        compactBlock -> 9.sp
+        span == 2 -> 9.5.sp
+        else -> 11.sp
+    }
+    val titleMaxLines = when {
+        compactBlock -> if (hasLocation) 2 else 3
+        span == 2 -> if (hasLocation) 6 else 7
+        else -> if (hasLocation) 8 else 10
+    }
+    val locationMaxLines = when {
+        compactBlock -> 2
+        span == 2 -> 3
+        else -> 4
+    }
+
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(scheduleSourceColor(item.sourceType))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 4.dp, vertical = if (compactBlock) 3.dp else 5.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = item.title,
+                fontSize = titleFontSize,
+                lineHeight = titleLineHeight,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.84f),
+                textAlign = TextAlign.Center,
+                maxLines = titleMaxLines,
+                overflow = TextOverflow.Ellipsis,
+                softWrap = true
+            )
+            if (hasLocation) {
+                Spacer(modifier = Modifier.height(if (compactBlock) 1.dp else 3.dp))
+                Text(
+                    text = displayLocation,
+                    fontSize = locationFontSize,
+                    lineHeight = locationLineHeight,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
+                    textAlign = TextAlign.Center,
+                    maxLines = locationMaxLines,
+                    overflow = TextOverflow.Clip,
+                    softWrap = true
+                )
+            }
+        }
+    }
+}
+
+private data class CourseSectionSlot(
+    val index: Int,
+    val start: java.time.LocalTime,
+    val end: java.time.LocalTime
+)
+
+private data class CourseGridPlacement(
+    val startIndex: Int,
+    val span: Int
+)
+
+private val COURSE_SECTIONS = listOf(
+    CourseSectionSlot(1, java.time.LocalTime.of(8, 0), java.time.LocalTime.of(8, 45)),
+    CourseSectionSlot(2, java.time.LocalTime.of(8, 50), java.time.LocalTime.of(9, 35)),
+    CourseSectionSlot(3, java.time.LocalTime.of(9, 55), java.time.LocalTime.of(10, 40)),
+    CourseSectionSlot(4, java.time.LocalTime.of(10, 45), java.time.LocalTime.of(11, 30)),
+    CourseSectionSlot(5, java.time.LocalTime.of(11, 35), java.time.LocalTime.of(12, 20)),
+    CourseSectionSlot(6, java.time.LocalTime.of(13, 20), java.time.LocalTime.of(14, 5)),
+    CourseSectionSlot(7, java.time.LocalTime.of(14, 10), java.time.LocalTime.of(14, 55)),
+    CourseSectionSlot(8, java.time.LocalTime.of(15, 15), java.time.LocalTime.of(16, 0)),
+    CourseSectionSlot(9, java.time.LocalTime.of(16, 5), java.time.LocalTime.of(16, 50)),
+    CourseSectionSlot(10, java.time.LocalTime.of(16, 55), java.time.LocalTime.of(17, 40)),
+    CourseSectionSlot(11, java.time.LocalTime.of(18, 30), java.time.LocalTime.of(19, 15)),
+    CourseSectionSlot(12, java.time.LocalTime.of(19, 20), java.time.LocalTime.of(20, 5)),
+    CourseSectionSlot(13, java.time.LocalTime.of(20, 10), java.time.LocalTime.of(20, 55))
+)
+
+private fun ScheduleOccurrence.toCourseGridPlacement(): CourseGridPlacement? {
+    if (allDay) return CourseGridPlacement(startIndex = 0, span = 1)
+    val startTime = startAt.toLocalTime()
+    val endTime = endAt.toLocalTime()
+    val startIndex = COURSE_SECTIONS.indexOfLast { !it.start.isAfter(startTime) }.coerceAtLeast(0)
+    val endIndex = COURSE_SECTIONS.indexOfFirst { !it.end.isBefore(endTime) }
+        .takeIf { it >= 0 }
+        ?: startIndex
+    return CourseGridPlacement(
+        startIndex = startIndex,
+        span = (endIndex - startIndex + 1).coerceAtLeast(1)
+    )
+}
+
+@Composable
+private fun BitScheduleDayCard(
+    section: ScheduleSection,
+    onItemClick: (ScheduleOccurrence) -> Unit
+) {
+    FreshCard(
+        modifier = Modifier.fillMaxWidth(),
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = section.date.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.CHINA),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = section.date.format(DateTimeFormatter.ofPattern("M月d日")),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.58f)
+                    )
+                }
+                Text(
+                    text = if (section.items.isEmpty()) "无课" else "${section.items.size} 项",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            if (section.items.isEmpty()) {
+                Text(
+                    text = "空出来的时间，可以安排复习或专注学习。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.56f)
+                )
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    section.items.forEach { item ->
+                        BitScheduleItemRow(
+                            item = item,
+                            onClick = { onItemClick(item) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BitScheduleItemRow(
+    item: ScheduleOccurrence,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(scheduleSourceColor(item.sourceType))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Text(
+            text = compactScheduleTime(item),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.width(82.dp)
+        )
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = item.title,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1
+            )
+            Text(
+                text = item.location.ifBlank { sourceLabel(item.sourceType) },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f),
+                maxLines = 1
+            )
+        }
+        Surface(
+            shape = RoundedCornerShape(6.dp),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.58f)
+        ) {
+            Text(
+                text = sourceLabel(item.sourceType),
+                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun ScheduleOccurrenceDialog(
+    item: ScheduleOccurrence,
+    onDismiss: () -> Unit,
+    onDelete: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(item.title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(fullScheduleTime(item), style = MaterialTheme.typography.bodyMedium)
+                if (item.location.isNotBlank()) {
+                    Text(item.location, style = MaterialTheme.typography.bodyMedium)
+                }
+                if (item.description.isNotBlank()) {
+                    Text(item.description, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("关闭") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDelete) { Text("删除") }
+        }
+    )
+}
+
+@Composable
+private fun StudyDashboardPage(
+    listState: LazyListState,
+    uiState: HomeUiState,
+    timerState: TimerState,
+    onImmersiveModeClick: () -> Unit,
+    onScheduleClick: () -> Unit,
+    onTodoClick: () -> Unit,
+    onContinueLearningClick: () -> Unit,
+    onRecentFilesClick: () -> Unit,
+    onOpenStatistics: () -> Unit,
+    onReviewDone: (String) -> Unit,
+    onOpenKnowledgeBase: () -> Unit,
+    onGenerateAdvice: () -> Unit,
+    onSaveAdvice: (String) -> Unit,
+    onApplyAction: (AiAction) -> Unit,
+    onOpenCourse: (Int, String) -> Unit,
+    onOpenFile: (String) -> Unit
+) {
+    LazyColumn(
+        state = listState,
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item { Spacer(modifier = Modifier.height(10.dp)) }
+        item {
+            TodayStudyWorkbench(
+                timerState = timerState,
+                todayMinutes = uiState.todayStudyMinutes,
+                completedPomodoros = uiState.completedPomodoros,
+                scheduleCount = uiState.scheduleSections.firstOrNull()?.items?.size ?: 0,
+                todoCount = uiState.todoItems.count { !it.isCompleted },
+                recentCourses = uiState.recentCourseProgress,
+                recentFiles = uiState.recentKnowledgeFiles,
+                onImmersiveModeClick = onImmersiveModeClick,
+                onScheduleClick = onScheduleClick,
+                onTodoClick = onTodoClick,
+                onContinueLearningClick = onContinueLearningClick,
+                onRecentFilesClick = onRecentFilesClick
+            )
+        }
+        item {
+            QuickStatsPreview(
+                todayMinutes = uiState.todayStudyMinutes,
+                completedPomodoros = uiState.completedPomodoros,
+                onClick = onOpenStatistics
+            )
+        }
+        item {
+            DueReviewCard(
+                items = uiState.dueReviewItems,
+                onReviewDone = onReviewDone,
+                onOpenKnowledgeBase = onOpenKnowledgeBase
+            )
+        }
+        item {
+            SectionHeader(
+                title = "AI 学习建议",
+                subtitle = "结合课表、待办和学习记录给你一个轻提醒"
+            )
+        }
+        item {
+            AiStudyAdviceCard(
+                advice = uiState.aiAdvice,
+                planBlocks = uiState.aiPlanBlocks,
+                actions = uiState.aiActions,
+                referencedMemories = uiState.aiReferencedMemories,
+                selectedDate = uiState.selectedDate,
+                isLoading = uiState.isAiAdviceLoading,
+                onGenerate = onGenerateAdvice,
+                onSaveAdvice = onSaveAdvice,
+                onApplyAction = onApplyAction,
+                onStartFocus = onImmersiveModeClick,
+                onOpenCourse = onOpenCourse,
+                onOpenFile = onOpenFile
+            )
+        }
+        item { Spacer(modifier = Modifier.height(80.dp)) }
+    }
+}
+
+@Composable
+private fun scheduleSourceColor(sourceType: ScheduleSourceType): Color {
+    return when (sourceType) {
+        ScheduleSourceType.MANUAL -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.34f)
+        ScheduleSourceType.ICS_IMPORT -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.42f)
+        ScheduleSourceType.SCHOOL_IMPORT -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.42f)
+    }
+}
+
+private fun sourceLabel(sourceType: ScheduleSourceType): String {
+    return when (sourceType) {
+        ScheduleSourceType.MANUAL -> "手动"
+        ScheduleSourceType.ICS_IMPORT -> "ICS"
+        ScheduleSourceType.SCHOOL_IMPORT -> "学校"
+    }
+}
+
+private fun compactScheduleTime(item: ScheduleOccurrence): String {
+    return if (item.allDay) {
+        "全天"
+    } else {
+        "${item.startAt.format(DateTimeFormatter.ofPattern("HH:mm"))}-${item.endAt.format(DateTimeFormatter.ofPattern("HH:mm"))}"
+    }
+}
+
+private fun fullScheduleTime(item: ScheduleOccurrence): String {
+    return if (item.allDay) {
+        "全天"
+    } else {
+        "${item.startAt.format(DateTimeFormatter.ofPattern("MM月dd日 HH:mm"))} - ${item.endAt.format(DateTimeFormatter.ofPattern("HH:mm"))}"
+    }
+}
 
 @Composable
 private fun DueReviewCard(
