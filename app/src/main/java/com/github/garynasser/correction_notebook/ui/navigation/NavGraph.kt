@@ -8,6 +8,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -56,9 +57,12 @@ fun NavGraph(
         authStateManager.authEvents.collect { event ->
             when (event) {
                 AuthEvent.NEEDS_LOGIN -> {
-                    navController.navigate(CasAuth) {
-                        popUpTo(navController.graph.startDestinationId) {
-                            saveState = true
+                    if (navController.currentDestination?.hasRoute(CasAuth::class) != true) {
+                        navController.navigate(CasAuth) {
+                            launchSingleTop = true
+                            popUpTo(navController.graph.startDestinationId) {
+                                saveState = true
+                            }
                         }
                     }
                 }

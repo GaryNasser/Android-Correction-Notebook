@@ -7,7 +7,6 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.School
 import androidx.compose.ui.graphics.vector.ImageVector
-import com.github.garynasser.correction_notebook.ui.screens.yanhe.CourseListScreen
 
 data class BottomNavItem <T : Any> (
     val route: T,

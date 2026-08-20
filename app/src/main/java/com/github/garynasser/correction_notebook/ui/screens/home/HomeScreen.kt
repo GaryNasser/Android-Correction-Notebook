@@ -421,6 +421,7 @@ private fun BitSchedulePage(
     onDeleteSchedule: (String) -> Unit
 ) {
     var selectedOccurrence by remember { mutableStateOf<ScheduleOccurrence?>(null) }
+    var occurrenceToDelete by remember { mutableStateOf<ScheduleOccurrence?>(null) }
     var showDatePicker by remember { mutableStateOf(false) }
     val sections = uiState.scheduleSections
 
@@ -458,7 +459,26 @@ private fun BitSchedulePage(
             onDismiss = { selectedOccurrence = null },
             onDelete = {
                 selectedOccurrence = null
-                onDeleteSchedule(item.eventId)
+                occurrenceToDelete = item
+            }
+        )
+    }
+
+    occurrenceToDelete?.let { item ->
+        AlertDialog(
+            onDismissRequest = { occurrenceToDelete = null },
+            title = { Text("删除日程") },
+            text = { Text("确定删除“${item.title}”吗？") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDeleteSchedule(item.eventId)
+                        occurrenceToDelete = null
+                    }
+                ) { Text("删除") }
+            },
+            dismissButton = {
+                TextButton(onClick = { occurrenceToDelete = null }) { Text("取消") }
             }
         )
     }
@@ -764,19 +784,20 @@ private fun CourseGridBlock(
     modifier: Modifier,
     onClick: () -> Unit
 ) {
-    val displayLocation = item.location.firstDisplayLine()
+    val displayLocation = item.location.firstDisplayLine().asGridLocationText()
     val hasLocation = displayLocation.isNotBlank()
     val compactBlock = span <= 1
     val longTitle = item.title.length >= 14
+    val longLocation = displayLocation.length >= 12
     val titleFontSize = when {
         compactBlock -> if (longTitle) 8.sp else 9.sp
         span == 2 -> if (longTitle) 9.sp else 10.sp
         else -> if (longTitle) 10.sp else 11.sp
     }
     val locationFontSize = when {
-        compactBlock -> 8.sp
-        span == 2 -> 8.5.sp
-        else -> 10.sp
+        compactBlock -> if (longLocation) 7.sp else 8.sp
+        span == 2 -> if (longLocation) 8.sp else 8.5.sp
+        else -> if (longLocation) 9.sp else 10.sp
     }
     val titleLineHeight = when {
         compactBlock -> if (longTitle) 9.sp else 10.sp
@@ -784,19 +805,14 @@ private fun CourseGridBlock(
         else -> if (longTitle) 11.sp else 12.sp
     }
     val locationLineHeight = when {
-        compactBlock -> 9.sp
-        span == 2 -> 9.5.sp
-        else -> 11.sp
+        compactBlock -> if (longLocation) 8.sp else 9.sp
+        span == 2 -> if (longLocation) 9.sp else 9.5.sp
+        else -> if (longLocation) 10.sp else 11.sp
     }
     val titleMaxLines = when {
-        compactBlock -> if (hasLocation) 2 else 3
-        span == 2 -> if (hasLocation) 4 else 7
-        else -> if (hasLocation) 6 else 10
-    }
-    val locationMaxLines = when {
-        compactBlock -> 2
-        span == 2 -> 3
-        else -> 4
+        compactBlock -> if (hasLocation) 1 else 3
+        span == 2 -> if (hasLocation) 3 else 7
+        else -> if (hasLocation) 5 else 10
     }
 
     Box(
@@ -832,8 +848,6 @@ private fun CourseGridBlock(
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
                     textAlign = TextAlign.Center,
-                    maxLines = locationMaxLines,
-                    overflow = TextOverflow.Clip,
                     softWrap = true
                 )
             }
@@ -846,6 +860,13 @@ private fun String.firstDisplayLine(): String {
         .firstOrNull()
         .orEmpty()
         .trim()
+}
+
+private fun String.asGridLocationText(): String {
+    return split(Regex("\\s+"))
+        .filter { it.isNotBlank() }
+        .joinToString("\n")
+        .ifBlank { this }
 }
 
 private data class CourseSectionSlot(

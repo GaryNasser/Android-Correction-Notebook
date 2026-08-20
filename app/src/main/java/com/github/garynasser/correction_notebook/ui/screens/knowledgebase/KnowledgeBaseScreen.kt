@@ -85,6 +85,8 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -1726,7 +1728,7 @@ private fun StudySetQuizPage(
     val initialIndex = remember(initialQuestionId, questions) {
         questions.indexOfFirst { it.id == initialQuestionId }.takeIf { it >= 0 } ?: 0
     }
-    var index by rememberSaveable(studySet.id, questions.size, initialQuestionId) { mutableStateOf(initialIndex) }
+    var index by rememberSaveable(studySet.id, questions.size, initialQuestionId) { mutableIntStateOf(initialIndex) }
     var selectedOption by rememberSaveable(studySet.id, index) { mutableStateOf<String?>(null) }
     var showAnswer by rememberSaveable(studySet.id, index) { mutableStateOf(false) }
     val safeIndex = index.coerceIn(0, (questions.size - 1).coerceAtLeast(0))
@@ -1872,10 +1874,10 @@ private fun StudySetLearningPage(
     onEditCard: (DueReviewItem) -> Unit,
     onReview: (DueReviewItem, Boolean) -> Unit
 ) {
-    var index by rememberSaveable(studySet.id, cards.size) { mutableStateOf(0) }
+    var index by rememberSaveable(studySet.id, cards.size) { mutableIntStateOf(0) }
     var showAnswer by rememberSaveable(studySet.id, index) { mutableStateOf(false) }
-    var dragX by remember { mutableStateOf(0f) }
-    var dragY by remember { mutableStateOf(0f) }
+    var dragX by remember { mutableFloatStateOf(0f) }
+    var dragY by remember { mutableFloatStateOf(0f) }
     val safeIndex = index.coerceIn(0, (cards.size - 1).coerceAtLeast(0))
     val current = cards.getOrNull(safeIndex)
 
