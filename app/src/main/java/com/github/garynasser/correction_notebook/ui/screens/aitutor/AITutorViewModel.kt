@@ -87,19 +87,18 @@ class AITutorViewModel @Inject constructor(
         knowledgeMode,
         error
     ) { values ->
-        @Suppress("UNCHECKED_CAST")
-        val activeProvider = values[0] as ProviderRecord?
-        val providers = values[1] as List<ProviderRecord>
-        val sessions = values[2] as List<ChatSessionEntity>
-        val selectedId = values[3] as Long?
-        val messages = values[4] as List<ChatMessageEntity>
-        val memories = values[5] as List<UserMemoryEntity>
-        val currentFetchedModels = values[6] as List<AiModelOption>
-        val isProviderBusy = values[7] as Boolean
-        val currentProviderStatus = values[8] as String?
-        val isLoading = values[9] as Boolean
-        val isKnowledgeMode = values[10] as Boolean
-        val currentError = values[11] as String?
+        val activeProvider = values.typed<ProviderRecord?>(0)
+        val providers = values.typed<List<ProviderRecord>>(1)
+        val sessions = values.typed<List<ChatSessionEntity>>(2)
+        val selectedId = values.typed<Long?>(3)
+        val messages = values.typed<List<ChatMessageEntity>>(4)
+        val memories = values.typed<List<UserMemoryEntity>>(5)
+        val currentFetchedModels = values.typed<List<AiModelOption>>(6)
+        val isProviderBusy = values.typed<Boolean>(7)
+        val currentProviderStatus = values.typed<String?>(8)
+        val isLoading = values.typed<Boolean>(9)
+        val isKnowledgeMode = values.typed<Boolean>(10)
+        val currentError = values.typed<String?>(11)
 
         AITutorUiState(
             activeProvider = activeProvider,
@@ -123,6 +122,9 @@ class AITutorViewModel @Inject constructor(
             error = currentError
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AITutorUiState())
+
+    @Suppress("UNCHECKED_CAST")
+    private fun <T> Array<Any?>.typed(index: Int): T = this[index] as T
 
     val aiEnabled = aiSettingsManager.aiEnabled.stateIn(
         viewModelScope,

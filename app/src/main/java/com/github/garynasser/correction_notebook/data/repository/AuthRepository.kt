@@ -1,6 +1,5 @@
 package com.github.garynasser.correction_notebook.data.repository
 
-import android.util.Log
 import com.github.garynasser.correction_notebook.data.local.TokenManager
 import com.github.garynasser.correction_notebook.data.model.auth.AuthState
 import com.github.garynasser.correction_notebook.data.model.auth.CredentialAuthRequest
@@ -19,15 +18,12 @@ class AuthRepository @Inject constructor(
     private val apiService: AuthApiService
 ) {
     suspend fun validateSession(): AuthState {
-        Log.d("AppLifecycle", "validate session called")
         val refreshToken = tokenManager.getRefreshToken()
-        Log.d("AppLifecycle", "refreshToken: $refreshToken")
         if (refreshToken == null) return AuthState.Unauthenticated
         if (refreshToken == TEST_REFRESH_TOKEN) return AuthState.Authenticated
 
         return try {
             val response = apiService.refreshToken(RefreshRequest(refreshToken))
-            Log.d("AppLifecycle", response.toString())
 
             if (response.code == 200 && response.data != null) {
                 val responseBody = response.data
@@ -39,15 +35,12 @@ class AuthRepository @Inject constructor(
                     tokenManager.updateAccessToken(accessToken)
                 } else {
                     tokenManager.saveLoginTokens(accessToken, refreshToken)
-                    Log.d("AppLifecycle", "refresh success")
                 }
                 AuthState.Authenticated
             } else {
-                Log.d("AppLifecycle", "refresh failed")
                 AuthState.Unauthenticated
             }
         } catch (e: Exception) {
-            Log.e("AppLifecycle", "error happened while refresh", e)
             AuthState.Unauthenticated
         }
     }

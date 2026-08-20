@@ -2,7 +2,6 @@ package com.github.garynasser.correction_notebook.ui.screens.home
 
 import android.content.Context
 import android.media.MediaPlayer
-import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
@@ -13,6 +12,8 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Forest
 import androidx.compose.material.icons.filled.LocalCafe
@@ -25,8 +26,6 @@ import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Vibration
-import androidx.compose.material.icons.filled.VolumeOff
-import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.Water
 import androidx.compose.material.icons.filled.Waves
 import androidx.compose.material3.*
@@ -45,7 +44,10 @@ import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.core.net.toUri
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.rememberAsyncImagePainter
+import com.github.garynasser.correction_notebook.R
 import com.github.garynasser.correction_notebook.data.model.home.PomodoroPhase
 import com.github.garynasser.correction_notebook.data.model.home.PomodoroSettings
 import com.github.garynasser.correction_notebook.data.model.home.TimerState
@@ -75,7 +77,7 @@ fun ImmersiveStudyScreen(
     isPomodoroMode: Boolean = true
 ) {
     val context = LocalContext.current
-    val timerState by timerManager.timerState.collectAsState()
+    val timerState by timerManager.timerState.collectAsStateWithLifecycle()
     val navigationBottomPadding = androidx.compose.foundation.layout.WindowInsets.navigationBars
         .asPaddingValues()
         .calculateBottomPadding()
@@ -179,7 +181,7 @@ fun ImmersiveStudyScreen(
         // Background image if set
         if (backgroundImageUri != null) {
             Image(
-                painter = rememberAsyncImagePainter(Uri.parse(backgroundImageUri)),
+                painter = rememberAsyncImagePainter(backgroundImageUri.toUri()),
                 contentDescription = "背景图片",
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
@@ -362,7 +364,7 @@ private fun StopAlertButton(
         ),
         shape = CircleShape
     ) {
-        Icon(Icons.Default.VolumeUp, contentDescription = null)
+        Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = null)
         Spacer(modifier = Modifier.width(8.dp))
         Text("停止提醒", fontWeight = FontWeight.SemiBold)
     }
@@ -465,7 +467,7 @@ private fun WhiteNoiseSelector(
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                Icons.Default.VolumeOff,
+                Icons.AutoMirrored.Filled.VolumeOff,
                 "无白噪音",
                 tint = iconTint,
                 modifier = Modifier.size(iconSize)
@@ -708,14 +710,12 @@ private fun formatTime(seconds: Int): String {
 
 private fun createMediaPlayer(context: Context, noise: WhiteNoise): MediaPlayer? {
     return try {
-        val resName = when (noise) {
-            WhiteNoise.RAIN -> "rain"
-            WhiteNoise.OCEAN -> "ocean"
-            WhiteNoise.FOREST -> "forest"
-            WhiteNoise.CAFE -> "cafe"
+        val resId = when (noise) {
+            WhiteNoise.RAIN -> R.raw.rain
+            WhiteNoise.OCEAN -> R.raw.ocean
+            WhiteNoise.FOREST -> R.raw.forest
+            WhiteNoise.CAFE -> R.raw.cafe
         }
-        val resId = context.resources.getIdentifier(resName, "raw", context.packageName)
-        if (resId == 0) return null
         MediaPlayer.create(context, resId)?.apply {
             isLooping = true
             setVolume(0.5f, 0.5f)

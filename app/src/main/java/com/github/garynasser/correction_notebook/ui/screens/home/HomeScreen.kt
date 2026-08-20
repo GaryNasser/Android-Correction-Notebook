@@ -28,7 +28,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.garynasser.correction_notebook.data.model.home.Article
 import com.github.garynasser.correction_notebook.data.model.ai.AiAction
 import com.github.garynasser.correction_notebook.data.model.ai.AiActionType
@@ -72,8 +74,8 @@ fun HomeScreen(
     onImmersiveModeChanged: (Boolean) -> Unit = {},
     onOpenArticle: (Article) -> Unit = {}
 ) {
-    val uiState by homeViewModel.uiState.collectAsState()
-    val timerState by homeViewModel.timerManager.timerState.collectAsState()
+    val uiState by homeViewModel.uiState.collectAsStateWithLifecycle()
+    val timerState by homeViewModel.timerManager.timerState.collectAsStateWithLifecycle()
     var showCustomTimer by remember { mutableStateOf(false) }
     var startPomodoroAfterSettings by remember { mutableStateOf(false) }
     var activeMainTab by remember { mutableStateOf(HomeMainTab.BIT) }
@@ -1935,7 +1937,7 @@ fun ModeSelectorDialog(
                             .height(120.dp)
                     ) {
                         coil.compose.AsyncImage(
-                            model = Uri.parse(currentBackgroundUri),
+                            model = currentBackgroundUri.toUri(),
                             contentDescription = "当前背景",
                             modifier = Modifier.fillMaxSize(),
                             contentScale = androidx.compose.ui.layout.ContentScale.Crop
@@ -2145,7 +2147,7 @@ fun SettingsDialog(
                             .height(120.dp)
                     ) {
                         coil.compose.AsyncImage(
-                            model = Uri.parse(currentBackgroundUri),
+                            model = currentBackgroundUri.toUri(),
                             contentDescription = "当前背景",
                             modifier = Modifier.fillMaxSize(),
                             contentScale = androidx.compose.ui.layout.ContentScale.Crop

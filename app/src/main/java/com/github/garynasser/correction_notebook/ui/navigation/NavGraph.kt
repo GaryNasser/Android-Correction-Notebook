@@ -1,6 +1,5 @@
 package com.github.garynasser.correction_notebook.ui.navigation
 
-import android.util.Log
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
@@ -57,7 +56,6 @@ fun NavGraph(
         authStateManager.authEvents.collect { event ->
             when (event) {
                 AuthEvent.NEEDS_LOGIN -> {
-                    Log.d("NEEDS_LOGIN", "接收到信号")
                     navController.navigate(CasAuth) {
                         popUpTo(navController.graph.startDestinationId) {
                             saveState = true

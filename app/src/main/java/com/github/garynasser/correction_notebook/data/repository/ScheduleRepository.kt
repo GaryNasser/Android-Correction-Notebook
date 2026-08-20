@@ -151,7 +151,12 @@ class ScheduleRepository(private val context: Context) {
     ): List<ScheduleOccurrence> {
         val overrides = events
             .filter { it.recurrenceId != null && !it.sourceEventUid.isNullOrBlank() }
-            .associateBy { overrideKey(it.sourceEventUid!!, it.recurrenceId!!) }
+            .mapNotNull { event ->
+                val sourceEventUid = event.sourceEventUid ?: return@mapNotNull null
+                val recurrenceId = event.recurrenceId ?: return@mapNotNull null
+                overrideKey(sourceEventUid, recurrenceId) to event
+            }
+            .toMap()
 
         return events
             .filter { it.recurrenceId == null }

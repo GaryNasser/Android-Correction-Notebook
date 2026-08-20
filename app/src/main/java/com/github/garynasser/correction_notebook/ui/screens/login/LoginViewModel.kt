@@ -29,17 +29,19 @@ class LoginViewModel @Inject constructor (
 
 
     val isLoginEnable: Boolean
-        get() = password.length >= 6 && !isLoading && !username.isEmpty()
+        get() = password.length >= 6 && !isLoading && username.isNotBlank()
 
     fun onLoginClick() {
         if (isLoading) return
 
         errorMessage = null
+        val trimmedUsername = username.trim()
+        if (trimmedUsername.isBlank() || password.length < 6) return
 
         viewModelScope.launch {
             isLoading = true
 
-            val result = authRepository.login(username, password)
+            val result = authRepository.login(trimmedUsername, password)
 
             result.onSuccess {
                 isLoading = false

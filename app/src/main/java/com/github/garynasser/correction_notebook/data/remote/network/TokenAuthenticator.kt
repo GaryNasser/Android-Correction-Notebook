@@ -1,6 +1,5 @@
 package com.github.garynasser.correction_notebook.data.remote.network
 
-import android.util.Log
 import com.github.garynasser.correction_notebook.data.local.TokenManager
 import com.github.garynasser.correction_notebook.data.model.auth.RefreshRequest
 import com.github.garynasser.correction_notebook.data.remote.api.AuthApiService
@@ -16,7 +15,6 @@ class TokenAuthenticator(
     private val authApi: AuthApiService,
 ) : Authenticator {
     override fun authenticate(route: Route?, response: Response): Request? {
-        Log.d("AppLifecycle", "Authenticator act")
         val currentRefreshToken = runBlocking {
             tokenManager.refreshToken.first()
         }

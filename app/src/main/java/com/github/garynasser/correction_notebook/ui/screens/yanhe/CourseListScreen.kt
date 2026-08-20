@@ -104,9 +104,9 @@ fun CourseListScreen(
                         LazyVerticalGrid(
                             state = gridState,
                             columns = GridCells.Fixed(2),
-                            contentPadding = PaddingValues(12.dp),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
                             modifier = Modifier.fillMaxSize()
                         ) {
                             if (viewModel.recentProgress.isNotEmpty()) {
@@ -297,12 +297,44 @@ fun SearchAndFilterSection(viewModel: CourseListViewModel) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .padding(horizontal = 10.dp, vertical = 8.dp),
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
         tonalElevation = 1.dp
     ) {
-    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FilterChip(
+                selected = viewModel.isPersonalCoursesMode,
+                onClick = {
+                    if (!viewModel.isPersonalCoursesMode) {
+                        viewModel.toggleCourseMode()
+                    }
+                },
+                label = { Text("我的课程") },
+                leadingIcon = {
+                    Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(16.dp))
+                },
+                modifier = Modifier.weight(1f)
+            )
+            FilterChip(
+                selected = !viewModel.isPersonalCoursesMode,
+                onClick = {
+                    if (viewModel.isPersonalCoursesMode) {
+                        viewModel.toggleCourseMode()
+                    }
+                },
+                label = { Text("全校课程") },
+                leadingIcon = {
+                    Icon(Icons.Default.Public, contentDescription = null, modifier = Modifier.size(16.dp))
+                },
+                modifier = Modifier.weight(1f)
+            )
+        }
+
         OutlinedTextField(
             value = viewModel.searchQuery,
             onValueChange = { viewModel.updateSearchQuery(it) },
@@ -325,7 +357,9 @@ fun SearchAndFilterSection(viewModel: CourseListViewModel) {
                 readOnly = true,
                 label = { Text("选择学期") },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = viewModel.expanded) },
-                modifier = Modifier.menuAnchor().fillMaxWidth(),
+                modifier = Modifier
+                    .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, enabled = true)
+                    .fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp)
             )
             ExposedDropdownMenu(
@@ -369,7 +403,7 @@ fun CourseCard(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(92.dp)
+                    .height(84.dp)
                     .background(
                         Brush.linearGradient(
                             listOf(
@@ -410,7 +444,7 @@ fun CourseCard(
                 )
             }
 
-            Column(modifier = Modifier.padding(10.dp)) {
+            Column(modifier = Modifier.padding(9.dp)) {
                 Text(
                     text = course.nameZh,
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),

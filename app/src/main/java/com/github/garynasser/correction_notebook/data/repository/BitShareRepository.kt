@@ -10,6 +10,7 @@ import com.github.garynasser.correction_notebook.utils.BitShareNetworkDetector
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.ResponseBody
+import okhttp3.ResponseBody.Companion.toResponseBody
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -160,7 +161,7 @@ class BitShareRepository @Inject constructor(
 
             if (attempt.isSuccess) {
                 return Result.success(
-                    ResponseBody.create(null, attempt.getOrThrow())
+                    attempt.getOrThrow().toResponseBody(null)
                 )
             }
 

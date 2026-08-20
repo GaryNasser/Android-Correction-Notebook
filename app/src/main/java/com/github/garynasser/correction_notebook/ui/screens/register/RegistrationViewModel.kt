@@ -1,6 +1,5 @@
 package com.github.garynasser.correction_notebook.ui.screens.register
 
-import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -37,15 +36,17 @@ class RegistrationViewModel @Inject constructor(
     var errorMessage by mutableStateOf<String?>(null)
 
     val isOnNextEnabled: Boolean
-        get() = !isOnNextLoading && !username.isEmpty() && password.length >= 6
+        get() = !isOnNextLoading && username.isNotBlank() && password.length >= 6
 
     val isCasEnabled: Boolean
-        get() = !isCasLoading && !casPassword.isEmpty() && !studentId.isEmpty()
+        get() = !isCasLoading && casPassword.isNotBlank() && studentId.isNotBlank()
 
     fun proceedToCasAuth(onSuccess: () -> Unit) {
+        if (!isOnNextEnabled) return
         isOnNextLoading = true
+        errorMessage = null
         try {
-            // TODO: 添加检查用户名是否被占用
+            username = username.trim()
             onSuccess()
         } finally {
             isOnNextLoading = false
@@ -53,7 +54,6 @@ class RegistrationViewModel @Inject constructor(
     }
 
     fun submitReauthentication(onConfirmClick: () -> Unit) {
-        Log.d("AUTH", "Student credential saved")
         submitYanheLogin(onConfirmClick)
     }
 
@@ -65,11 +65,15 @@ class RegistrationViewModel @Inject constructor(
         if (isCasLoading) return
 
         errorMessage = null
+        val trimmedStudentId = studentId.trim()
+        if (trimmedStudentId.isBlank() || casPassword.isBlank()) return
 
         viewModelScope.launch {
             isCasLoading = true
-            yanheRepository.saveStudentCredential(UserCredential(studentId, casPassword))
-            val result = yanheRepository.getYanheLoginToken()
+            val result = runCatching {
+                yanheRepository.saveStudentCredential(UserCredential(trimmedStudentId, casPassword))
+                yanheRepository.getYanheLoginToken().getOrThrow()
+            }
 
             result.onSuccess {
                 isCasLoading = false

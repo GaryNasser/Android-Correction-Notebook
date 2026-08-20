@@ -1,9 +1,10 @@
 package com.github.garynasser.correction_notebook.data.remote.cas
 
-import android.net.Uri
+import android.annotation.SuppressLint
 import com.github.garynasser.correction_notebook.di.BasicRetrofit
 import com.github.garynasser.correction_notebook.utils.SignatureUtils
 import com.google.gson.JsonParser
+import androidx.core.net.toUri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.FormBody
@@ -26,7 +27,7 @@ class BitCasClient @Inject constructor(
     suspend fun getYanheToken(studentId: String, password: String): String = withContext(Dispatchers.IO) {
         val tgtUrl = getTgtUrl(studentId, password)
         val st = getServiceTicket(tgtUrl, YANHE_CALLBACK_URL)
-        val callbackUrl = Uri.parse(YANHE_CALLBACK_URL)
+        val callbackUrl = YANHE_CALLBACK_URL.toUri()
             .buildUpon()
             .appendQueryParameter("ticket", st)
             .build()
@@ -63,7 +64,7 @@ class BitCasClient @Inject constructor(
     }
 
     private fun exchangeCodeForToken(code: String): String {
-        val url = Uri.parse(YANHE_AUTH_TOKEN_URL)
+        val url = YANHE_AUTH_TOKEN_URL.toUri()
             .buildUpon()
             .appendQueryParameter("code", code)
             .appendQueryParameter("type", "1")
@@ -202,11 +203,13 @@ class BitCasClient @Inject constructor(
         ).toString()
     }
 
+    @SuppressLint("GetInstance")
     private fun encodeVpnHost(host: String): String {
         val vpnKey = VPN_KEY.toByteArray(StandardCharsets.UTF_8)
         val vpnIv = VPN_KEY.toByteArray(StandardCharsets.UTF_8)
         val padLen = (16 - host.length % 16) % 16
         val plaintext = (host + "0".repeat(padLen)).toByteArray(StandardCharsets.UTF_8)
+        // WebVPN host encoding uses AES as a block primitive with manual feedback.
         val cipher = Cipher.getInstance("AES/ECB/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(vpnKey, "AES"))
 

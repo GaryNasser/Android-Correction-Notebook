@@ -1,7 +1,6 @@
 package com.github.garynasser.correction_notebook
 
 import android.content.Intent
-import android.net.Uri
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -12,7 +11,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -48,9 +49,9 @@ fun MainContainer(
     val context = LocalContext.current
     val navController = rememberNavController()
     val appUpdateViewModel: AppUpdateViewModel = hiltViewModel()
-    val appUpdateUiState by appUpdateViewModel.uiState.collectAsState()
+    val appUpdateUiState by appUpdateViewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
-    val aiEnabled by aiSettingsManager.aiEnabled.collectAsState(initial = false)
+    val aiEnabled by aiSettingsManager.aiEnabled.collectAsStateWithLifecycle(initialValue = false)
     var hideBottomBar by remember { mutableStateOf(false) }
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -250,7 +251,7 @@ fun MainContainer(
                 confirmButton = {
                     TextButton(
                         onClick = {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(update.downloadUrl))
+                            val intent = Intent(Intent.ACTION_VIEW, update.downloadUrl.toUri())
                             context.startActivity(intent)
                             if (!update.forceUpdate) {
                                 appUpdateViewModel.dismissUpdateDialog()

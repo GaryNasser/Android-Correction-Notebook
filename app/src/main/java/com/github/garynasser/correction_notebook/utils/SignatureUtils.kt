@@ -1,8 +1,5 @@
 package com.github.garynasser.correction_notebook.utils
 
-import androidx.annotation.OptIn
-import androidx.media3.common.util.Log
-import androidx.media3.common.util.UnstableApi
 import java.security.MessageDigest
 
 object SignatureUtils {
@@ -15,7 +12,6 @@ object SignatureUtils {
         return bytes.joinToString("") { "%02x".format(it) }
     }
 
-    @OptIn(UnstableApi::class)
     fun encryptURL(url: String): String {
         val queryStart = url.indexOf('?')
         val baseUrl = if (queryStart >= 0) url.substring(0, queryStart) else url
@@ -35,15 +31,12 @@ object SignatureUtils {
         if (urlList.isNotEmpty()) {
             val lastIndex = urlList.size - 1
             if (lastIndex >= 1 && urlList[lastIndex - 1] == hash) {
-                Log.d("VIDEO", "检测到路径已加密，跳过: $url")
                 return normalizedBaseUrl + suffix
             }
             urlList.add(lastIndex, hash)
         }
 
-        val finalUrl = urlList.joinToString("/") + suffix
-        Log.d("VIDEO", "加密后的 URL: $finalUrl")
-        return finalUrl
+        return urlList.joinToString("/") + suffix
     }
 
     private fun removeExistingHashSegment(url: String): String {

@@ -25,11 +25,13 @@ class VideoRemoteManager @Inject constructor(
                 return null
             }
 
-            yanheRepository.getYanheLoginToken()
+            val loginResult = yanheRepository.getYanheLoginToken()
             token = tokenManager.getYanheLoginToken()
 
             if (token == null) {
-                throw RuntimeException()
+                throw IllegalStateException(
+                    loginResult.exceptionOrNull()?.message ?: "延河课堂登录已失效，请重新登录"
+                )
             }
         }
 

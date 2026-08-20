@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.util.Log
 import androidx.core.content.ContextCompat
 
 class AlertManager(private val context: Context) {
@@ -43,7 +44,7 @@ class AlertManager(private val context: Context) {
                 }
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.w(TAG, "Unable to play notification sound", e)
         }
     }
 
@@ -77,7 +78,7 @@ class AlertManager(private val context: Context) {
                 }
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.w(TAG, "Unable to play alarm sound", e)
             playNotificationSound()
         }
     }
@@ -119,7 +120,7 @@ class AlertManager(private val context: Context) {
                 }
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.w(TAG, "Unable to vibrate", e)
         }
     }
 
@@ -139,5 +140,9 @@ class AlertManager(private val context: Context) {
         LONG,       // 1000ms
         DOUBLE,     // 300ms-200ms-300ms
         POMODORO    // 500ms-300ms-500ms-300ms-500ms
+    }
+
+    private companion object {
+        private const val TAG = "AlertManager"
     }
 }

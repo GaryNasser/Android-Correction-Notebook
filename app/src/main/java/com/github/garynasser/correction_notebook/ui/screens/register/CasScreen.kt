@@ -27,6 +27,7 @@ fun CasScreen(
     onConfirm: () -> Unit = { viewModel.submit() },
 ) {
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
                 title = { },
@@ -54,17 +55,20 @@ fun CasScreen(
             Column(
                 modifier = modifier
                     .fillMaxSize()
-                    .padding(horizontal = 30.dp),
+                    .padding(horizontal = 24.dp)
+                    .padding(
+                        top = innerPadding.calculateTopPadding() + 32.dp,
+                        bottom = 24.dp
+                    ),
                 verticalArrangement = Arrangement.Top,
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Spacer(modifier = Modifier.height(200.dp))
-
                 AuthFormTemplate(
                     title = "延河课堂登录",
                     buttonText = if (viewModel.isCasLoading) "正在验证" else "登录延河课堂",
                     onButtonClick = { onConfirm() },
                     isButtonEnabled = viewModel.isCasEnabled,
+                    isLoading = viewModel.isCasLoading,
                     inputFields = {
                         OutlinedTextField(
                             value = viewModel.studentId,
@@ -75,8 +79,6 @@ fun CasScreen(
                             shape = RoundedCornerShape(12.dp),
                             singleLine = true,
                         )
-
-                        Spacer(modifier = Modifier.height(16.dp))
 
                         OutlinedTextField(
                             value = viewModel.casPassword,
