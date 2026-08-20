@@ -1,5 +1,6 @@
 package com.github.garynasser.correction_notebook.ui.screens.aitutor
 
+import android.annotation.SuppressLint
 import androidx.compose.foundation.BorderStroke
 import android.util.Base64
 import android.webkit.WebView
@@ -29,12 +30,12 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.LibraryBooks
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Error
-import androidx.compose.material.icons.filled.LibraryBooks
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
@@ -49,6 +50,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilledIconButton
@@ -66,7 +68,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -86,6 +87,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.garynasser.correction_notebook.data.model.ai.AIProviderType
 import com.github.garynasser.correction_notebook.data.model.ai.AiProviderForm
 import com.github.garynasser.correction_notebook.data.model.ai.MemoryCategory
@@ -99,7 +101,7 @@ fun AITutorScreen(
     viewModel: AITutorViewModel = hiltViewModel(),
     onNavigateToProfile: () -> Unit = {}
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var inputText by remember { mutableStateOf("") }
     var showProviderDialog by remember { mutableStateOf(false) }
     var showMemoryDialog by remember { mutableStateOf(false) }
@@ -385,7 +387,7 @@ private fun AiTutorHeader(
             }
             AssistChip(
                 onClick = { onKnowledgeModeChange(!uiState.isKnowledgeMode) },
-                leadingIcon = { Icon(Icons.Default.LibraryBooks, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                leadingIcon = { Icon(Icons.AutoMirrored.Filled.LibraryBooks, contentDescription = null, modifier = Modifier.size(18.dp)) },
                 label = { Text(if (uiState.isKnowledgeMode) "资料" else "普通") }
             )
         }
@@ -456,7 +458,7 @@ private fun EmptyChatState(
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(
-                if (isKnowledgeMode) Icons.Default.LibraryBooks else Icons.Default.SmartToy,
+                if (isKnowledgeMode) Icons.AutoMirrored.Filled.LibraryBooks else Icons.Default.SmartToy,
                 contentDescription = null,
                 modifier = Modifier.size(60.dp),
                 tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
@@ -932,6 +934,7 @@ private fun AnnotatedString.Builder.appendInlineMath(
     }
 }
 
+@SuppressLint("SetJavaScriptEnabled")
 @Composable
 private fun MathFormulaView(
     formula: String,
@@ -953,6 +956,10 @@ private fun MathFormulaView(
                     webViewClient = WebViewClient()
                     settings.javaScriptEnabled = true
                     settings.domStorageEnabled = false
+                    settings.allowFileAccess = false
+                    settings.allowContentAccess = false
+                    settings.javaScriptCanOpenWindowsAutomatically = false
+                    settings.setSupportMultipleWindows(false)
                     setBackgroundColor(android.graphics.Color.TRANSPARENT)
                 }
             },
@@ -1117,7 +1124,7 @@ fun ProviderDialog(
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(presetExpanded) },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .menuAnchor()
+                                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, enabled = true)
                         )
                         ExposedDropdownMenu(presetExpanded, { presetExpanded = false }) {
                             providerPresets.forEach { preset ->
@@ -1163,7 +1170,7 @@ fun ProviderDialog(
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(typeExpanded) },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .menuAnchor()
+                                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, enabled = true)
                         )
                         ExposedDropdownMenu(typeExpanded, { typeExpanded = false }) {
                             AIProviderType.values().forEach { type ->

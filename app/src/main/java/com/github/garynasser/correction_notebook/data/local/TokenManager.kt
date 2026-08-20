@@ -1,7 +1,6 @@
 package com.github.garynasser.correction_notebook.data.local
 
 import android.content.Context
-import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.IOException
 import androidx.datastore.preferences.core.Preferences
@@ -64,10 +63,9 @@ class TokenManager@Inject constructor(
         }
         .map { preferences ->
             preferences[YANHE_LOGIN_TOKEN_KEY]
-        }
+    }
 
     suspend fun saveLoginTokens(access: String, refresh: String) {
-        Log.d("AppLifecycle", "Refresh saved: $refresh")
         context.dataStore.edit { preferences ->
             preferences[ACCESS_TOKEN_KEY] = access
             preferences[REFRESH_TOKEN_KEY] = refresh
@@ -87,7 +85,6 @@ class TokenManager@Inject constructor(
     }
 
     suspend fun removeLoginToken() {
-        Log.d("AppLifecycle", "Token Cleared")
         context.dataStore.edit { preferences ->
             preferences.remove(ACCESS_TOKEN_KEY)
             preferences.remove(REFRESH_TOKEN_KEY)

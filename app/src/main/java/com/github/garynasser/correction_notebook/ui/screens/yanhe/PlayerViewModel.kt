@@ -11,7 +11,6 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
-import androidx.media3.common.Player
 import androidx.media3.session.MediaController // 必须是这个
 import androidx.media3.session.SessionToken
 import androidx.navigation.toRoute
@@ -22,9 +21,6 @@ import com.google.common.util.concurrent.MoreExecutors // 修正包名
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import androidx.core.net.toUri
-import androidx.media3.common.C
-import androidx.media3.common.Tracks
-import androidx.media3.common.util.Log
 import androidx.media3.common.util.UnstableApi
 
 @HiltViewModel
@@ -69,18 +65,6 @@ class PlayerViewModel @Inject constructor(
     }
 
     private fun startPlay(mediaController: MediaController?) {
-        mediaController?.addListener(object : Player.Listener {
-            @OptIn(UnstableApi::class)
-            override fun onTracksChanged(tracks: Tracks) {
-                // 检查是否有视频轨道被选中
-                val hasVideo = tracks.groups.any { it.type == C.TRACK_TYPE_VIDEO && it.isSelected }
-                Log.d("PLAYER_DEBUG", "是否有视频轨道: $hasVideo")
-                if (!hasVideo) {
-                    Log.e("PLAYER_DEBUG", "警告：未检测到视频轨道或视频轨道无法播放")
-                }
-            }
-        })
-
         mediaController?.let {
             val mediaItem = MediaItem.Builder()
                 .setUri(videoUrl.toUri()) // 确保 Uri 转换正确

@@ -40,8 +40,7 @@ object RSAUtils {
 
             Base64.encodeToString(encryptedBytes, Base64.NO_WRAP)
         } catch (e: Exception) {
-            e.printStackTrace()
-            throw RuntimeException("RSA加密失败: ${e.message}")
+            throw IllegalStateException("RSA 加密失败：${e.message ?: "公钥格式异常"}", e)
         }
     }
 }

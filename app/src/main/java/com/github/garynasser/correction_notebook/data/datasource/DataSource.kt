@@ -11,7 +11,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import java.io.IOException
 import androidx.core.net.toUri
-import androidx.media3.common.util.Log
 
 @OptIn(UnstableApi::class)
 class YanheDataSource(
@@ -39,8 +38,6 @@ class YanheDataSource(
             .setUri(authData.authenticatedUrl.toUri())
             .setHttpRequestHeaders(authData.headers)
             .build()
-
-        Log.d("VIDEO", newDataSpec.toString())
 
         return baseDataSource.open(newDataSpec)
     }

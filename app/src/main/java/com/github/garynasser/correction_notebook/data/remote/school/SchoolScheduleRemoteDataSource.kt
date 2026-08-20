@@ -1,6 +1,6 @@
 package com.github.garynasser.correction_notebook.data.remote.school
 
-import android.net.Uri
+import androidx.core.net.toUri
 import com.github.garynasser.correction_notebook.data.model.school.SchoolCourseRaw
 import com.github.garynasser.correction_notebook.data.model.school.SchoolScheduleException
 import com.github.garynasser.correction_notebook.data.model.school.SchoolTerm
@@ -64,7 +64,7 @@ class SchoolScheduleRemoteDataSource @Inject constructor(
 
     private suspend fun establishSession(studentId: String, password: String) {
         val st = bitCasClient.getServiceTicketFor(studentId, password, SCHOOL_INDEX_URL)
-        val callback = Uri.parse(SCHOOL_INDEX_URL)
+        val callback = SCHOOL_INDEX_URL.toUri()
             .buildUpon()
             .appendQueryParameter("ticket", st)
             .build()

@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.garynasser.correction_notebook.data.model.home.Priority
 import com.github.garynasser.correction_notebook.data.model.home.TodoHistoryItem
 import java.time.LocalDate
@@ -31,7 +32,8 @@ fun TodoHistoryScreen(
     viewModel: TodoHistoryViewModel = hiltViewModel(),
     onBack: () -> Unit
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    var showClearHistoryDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -46,7 +48,7 @@ fun TodoHistoryScreen(
                 },
                 actions = {
                     if (uiState.historyItems.isNotEmpty()) {
-                        IconButton(onClick = { viewModel.clearAllHistory() }) {
+                        IconButton(onClick = { showClearHistoryDialog = true }) {
                             Icon(Icons.Default.Delete, contentDescription = "清除历史")
                         }
                     }
@@ -76,10 +78,10 @@ fun TodoHistoryScreen(
                     Icon(
                         Icons.Default.Check,
                         contentDescription = null,
-                        modifier = Modifier.size(64.dp),
+                        modifier = Modifier.size(48.dp),
                         tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
                     Text(
                         text = "暂无完成记录",
                         style = MaterialTheme.typography.bodyLarge,
@@ -92,8 +94,8 @@ fun TodoHistoryScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
-                    .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                    .padding(horizontal = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 item { Spacer(modifier = Modifier.height(8.dp)) }
 
@@ -112,6 +114,29 @@ fun TodoHistoryScreen(
                 item { Spacer(modifier = Modifier.height(24.dp)) }
             }
         }
+    }
+
+    if (showClearHistoryDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearHistoryDialog = false },
+            title = { Text("清除完成历史") },
+            text = { Text("确定要清空所有完成记录吗？此操作无法撤销。") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.clearAllHistory()
+                        showClearHistoryDialog = false
+                    }
+                ) {
+                    Text("清除")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearHistoryDialog = false }) {
+                    Text("取消")
+                }
+            }
+        )
     }
 }
 

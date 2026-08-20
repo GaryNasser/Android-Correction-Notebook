@@ -72,19 +72,18 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -99,6 +98,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitShareFileDetail
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitShareSearchResult
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitShareSortOption
@@ -127,7 +127,7 @@ fun KnowledgeBaseScreen(
     onOpenFile: (String) -> Unit,
     viewModel: KnowledgeBaseViewModel = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
     var fileToExport by remember { mutableStateOf<KnowledgeBaseFileSummary?>(null) }
@@ -548,7 +548,7 @@ fun KnowledgeBaseScreen(
                     }
                 )
             } else {
-                TabRow(selectedTabIndex = uiState.selectedTabIndex) {
+                PrimaryTabRow(selectedTabIndex = uiState.selectedTabIndex) {
                     listOf("文件管理", "知识空间", "BITShare 下载").forEachIndexed { index, title ->
                         Tab(
                             selected = uiState.selectedTabIndex == index,

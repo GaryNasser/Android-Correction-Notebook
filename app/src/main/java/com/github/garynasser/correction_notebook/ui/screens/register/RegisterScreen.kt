@@ -2,7 +2,6 @@ package com.github.garynasser.correction_notebook.ui.screens.register
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -26,10 +25,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.github.garynasser.correction_notebook.ui.components.AuthFormTemplate
-import com.github.garynasser.correction_notebook.ui.screens.register.RegistrationViewModel
 
 @Composable
 fun RegisterScreen(
@@ -41,17 +40,17 @@ fun RegisterScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 30.dp),
-        verticalArrangement = Arrangement.Center,
+            .padding(horizontal = 24.dp)
+            .padding(top = 96.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.Top,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer(modifier = Modifier.height(200.dp))
-
         AuthFormTemplate(
             title = "注册",
-            buttonText = "下一步",
+            buttonText = if (viewModel.isOnNextLoading) "正在继续" else "下一步",
             onButtonClick = { viewModel.proceedToCasAuth { onNext() } },
             isButtonEnabled = viewModel.isOnNextEnabled,
+            isLoading = viewModel.isOnNextLoading,
             inputFields = {
                 OutlinedTextField(
                     value = viewModel.username,
@@ -99,8 +98,13 @@ fun RegisterScreen(
             }
         )
 
-        Text(text = "用户协议")
+        Text(
+            text = "注册即表示同意 BITStudy 用户协议",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
 
-        Spacer(modifier.height(30.dp))
+        Spacer(modifier.height(18.dp))
     }
 }

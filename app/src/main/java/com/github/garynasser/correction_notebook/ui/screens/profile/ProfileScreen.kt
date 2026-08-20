@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.garynasser.correction_notebook.data.model.auth.AuthState
 import com.github.garynasser.correction_notebook.ui.screens.aitutor.AITutorUiState
 import com.github.garynasser.correction_notebook.ui.screens.aitutor.ProviderDialog
@@ -29,14 +30,14 @@ fun ProfileScreen(
     onCheckForUpdates: () -> Unit = {},
     currentVersionName: String = ""
 ) {
-    val authState by viewModel.authState.collectAsState()
-    val aiEnabled by viewModel.aiEnabled.collectAsState()
-    val activeProvider by viewModel.activeProvider.collectAsState()
-    val providers by viewModel.providers.collectAsState()
-    val fetchedModels by viewModel.fetchedModels.collectAsState()
-    val isProviderBusy by viewModel.isProviderBusy.collectAsState()
-    val providerStatusMessage by viewModel.providerStatusMessage.collectAsState()
-    val isLoading by viewModel.isLoading.collectAsState()
+    val authState by viewModel.authState.collectAsStateWithLifecycle()
+    val aiEnabled by viewModel.aiEnabled.collectAsStateWithLifecycle()
+    val activeProvider by viewModel.activeProvider.collectAsStateWithLifecycle()
+    val providers by viewModel.providers.collectAsStateWithLifecycle()
+    val fetchedModels by viewModel.fetchedModels.collectAsStateWithLifecycle()
+    val isProviderBusy by viewModel.isProviderBusy.collectAsStateWithLifecycle()
+    val providerStatusMessage by viewModel.providerStatusMessage.collectAsStateWithLifecycle()
+    val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
 
     var showLogoutDialog by remember { mutableStateOf(false) }
     var showFeedbackDialog by remember { mutableStateOf(false) }

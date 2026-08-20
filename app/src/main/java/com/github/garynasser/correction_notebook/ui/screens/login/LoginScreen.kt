@@ -57,9 +57,10 @@ fun UsernameLoginScreen(
     ) {
         AuthFormTemplate(
             title = "登录",
-            buttonText = "登录",
+            buttonText = if (viewModel.isLoading) "正在登录" else "登录",
             onButtonClick = { viewModel.onLoginClick() },
             isButtonEnabled = viewModel.isLoginEnable,
+            isLoading = viewModel.isLoading,
             inputFields = {
                 OutlinedTextField(
                     value = viewModel.username,
@@ -92,7 +93,17 @@ fun UsernameLoginScreen(
                 )
             },
             footer = {
-                Column {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    viewModel.errorMessage?.let { message ->
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
                     Text(
                         text = "测试账号：${AuthRepository.TEST_USERNAME} / ${AuthRepository.TEST_PASSWORD}",
                         fontSize = 12.sp,

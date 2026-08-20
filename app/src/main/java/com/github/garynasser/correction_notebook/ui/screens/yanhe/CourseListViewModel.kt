@@ -166,7 +166,7 @@ class CourseListViewModel @Inject constructor(
                     selectedSemester = pickLatestSemester(semesters)
                     if (loadedCourses.isEmpty()) {
                         courses.clear()
-                        uiState = CourseUiState.Error("已登录延河课堂，但“我的课程”接口返回 0 门课程。请重新登录延河课堂后再刷新；如果仍为空，请把日志里的 VIDEO_REPO 课程响应摘要发给我继续定位。")
+                        uiState = CourseUiState.Error("已登录延河课堂，但暂时没有获取到我的课程。请重新登录后刷新，或切换到全校课程搜索。")
                     } else {
                         applyPersonalCourseFilters()
                     }

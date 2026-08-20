@@ -1,7 +1,6 @@
 package com.github.garynasser.correction_notebook.di
 
 import android.content.Context
-import android.util.Log
 import com.github.garynasser.correction_notebook.data.local.AISettingsManager
 import com.github.garynasser.correction_notebook.data.local.TokenManager
 import com.github.garynasser.correction_notebook.data.remote.api.AIApiService
@@ -48,12 +47,9 @@ object NetworkModule {
     private const val GITHUB_API_BASE_URL = "https://api.github.com/"
     private const val BIT_SHARE_BASE_URL = "https://app.bitshare.com.cn/"
 
-    // 辅助方法：创建一个日志拦截器
     private fun createLoggingInterceptor(): HttpLoggingInterceptor {
-        return HttpLoggingInterceptor { message ->
-            Log.d("OkHttp", message)
-        }.apply {
-            level = HttpLoggingInterceptor.Level.BODY
+        return HttpLoggingInterceptor().apply {
+            level = HttpLoggingInterceptor.Level.NONE
         }
     }
 
@@ -155,8 +151,6 @@ object NetworkModule {
     ): BitShareApiService {
         // 根据网络环境自动选择 URL
         val baseUrl = networkDetector.getBitShareBaseUrl()
-        Log.d("NetworkModule", "BITShare using URL: $baseUrl")
-
         return Retrofit.Builder()
             .baseUrl(baseUrl)
             .client(okHttpClient)

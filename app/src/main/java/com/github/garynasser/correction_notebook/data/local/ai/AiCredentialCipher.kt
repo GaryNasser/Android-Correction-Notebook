@@ -2,6 +2,7 @@ package com.github.garynasser.correction_notebook.data.local.ai
 
 import android.content.Context
 import android.util.Base64
+import androidx.core.content.edit
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -33,9 +34,9 @@ class AiCredentialCipher @Inject constructor(
             val generated = javax.crypto.KeyGenerator.getInstance(ALGORITHM).apply {
                 init(KEY_SIZE_BITS)
             }.generateKey()
-            sharedPreferences.edit()
-                .putString(KEY_ALIAS, Base64.encodeToString(generated.encoded, Base64.NO_WRAP))
-                .apply()
+            sharedPreferences.edit {
+                putString(KEY_ALIAS, Base64.encodeToString(generated.encoded, Base64.NO_WRAP))
+            }
             generated
         }
     }
