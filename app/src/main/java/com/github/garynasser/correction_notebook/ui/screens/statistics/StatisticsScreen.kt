@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -168,13 +170,14 @@ fun StatisticsScreen(
     val uiState by viewModel.uiState.collectAsState()
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
                 title = { Text("学习统计") },
                 windowInsets = WindowInsets(0, 0, 0, 0),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
                 },
                 actions = {
@@ -243,7 +246,7 @@ fun StatisticsScreen(
                         modifier = Modifier.weight(1f),
                         title = "日均学习",
                         value = formatMinutesToHours(uiState.averageDailyMinutes),
-                        icon = Icons.Default.TrendingUp
+                        icon = Icons.AutoMirrored.Filled.TrendingUp
                     )
                 }
             }
@@ -362,7 +365,7 @@ fun StatisticsScreen(
                 }
             }
 
-            item { Spacer(modifier = Modifier.height(80.dp)) }
+            item { Spacer(modifier = Modifier.height(24.dp)) }
         }
     }
 }

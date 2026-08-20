@@ -114,8 +114,12 @@ fun UsernameLoginScreen(
             },
         )
 
-        // TODO: 增加跳转功能
-        Text(text = "用户协议")
+        Text(
+            text = "登录即表示同意 BITStudy 用户协议",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
 
         Spacer(modifier.height(18.dp))
     }

@@ -7,7 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
@@ -34,13 +34,14 @@ fun TodoHistoryScreen(
     val uiState by viewModel.uiState.collectAsState()
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
                 title = { Text("完成历史") },
                 windowInsets = WindowInsets(0, 0, 0, 0),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
                 },
                 actions = {
@@ -108,7 +109,7 @@ fun TodoHistoryScreen(
                     }
                 }
 
-                item { Spacer(modifier = Modifier.height(80.dp)) }
+                item { Spacer(modifier = Modifier.height(24.dp)) }
             }
         }
     }

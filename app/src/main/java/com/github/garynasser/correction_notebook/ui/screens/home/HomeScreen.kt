@@ -258,6 +258,21 @@ fun HomeScreen(
         )
     }
 
+    if (uiState.scheduleImportMessage != null || uiState.scheduleImportError != null) {
+        AlertDialog(
+            onDismissRequest = { homeViewModel.dismissScheduleImportMessage() },
+            title = { Text(if (uiState.scheduleImportError == null) "课表导入完成" else "课表导入失败") },
+            text = {
+                Text(uiState.scheduleImportMessage ?: uiState.scheduleImportError.orEmpty())
+            },
+            confirmButton = {
+                TextButton(onClick = { homeViewModel.dismissScheduleImportMessage() }) {
+                    Text("知道了")
+                }
+            }
+        )
+    }
+
     if (uiState.schoolScheduleSyncMessage != null || uiState.schoolScheduleSyncError != null) {
         AlertDialog(
             onDismissRequest = { homeViewModel.dismissSchoolScheduleSyncMessage() },
@@ -747,11 +762,7 @@ private fun CourseGridBlock(
     modifier: Modifier,
     onClick: () -> Unit
 ) {
-    val displayLocation = item.location
-        .lineSequence()
-        .firstOrNull()
-        .orEmpty()
-        .trim()
+    val displayLocation = item.location.firstDisplayLine()
     val hasLocation = displayLocation.isNotBlank()
     val compactBlock = span <= 1
     val longTitle = item.title.length >= 14
@@ -777,8 +788,8 @@ private fun CourseGridBlock(
     }
     val titleMaxLines = when {
         compactBlock -> if (hasLocation) 2 else 3
-        span == 2 -> if (hasLocation) 6 else 7
-        else -> if (hasLocation) 8 else 10
+        span == 2 -> if (hasLocation) 4 else 7
+        else -> if (hasLocation) 6 else 10
     }
     val locationMaxLines = when {
         compactBlock -> 2
@@ -826,6 +837,13 @@ private fun CourseGridBlock(
             }
         }
     }
+}
+
+private fun String.firstDisplayLine(): String {
+    return lineSequence()
+        .firstOrNull()
+        .orEmpty()
+        .trim()
 }
 
 private data class CourseSectionSlot(
@@ -1084,7 +1102,7 @@ private fun StudyDashboardPage(
                 onOpenFile = onOpenFile
             )
         }
-        item { Spacer(modifier = Modifier.height(80.dp)) }
+        item { Spacer(modifier = Modifier.height(24.dp)) }
     }
 }
 

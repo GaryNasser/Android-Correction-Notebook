@@ -71,6 +71,8 @@ data class HomeUiState(
     val selectedScheduleEvent: ScheduleOccurrence? = null,
     val isLoading: Boolean = false,
     val isImportingSchedule: Boolean = false,
+    val scheduleImportMessage: String? = null,
+    val scheduleImportError: String? = null,
     val isSyncingSchoolSchedule: Boolean = false,
     val schoolScheduleSyncMessage: String? = null,
     val schoolScheduleSyncError: String? = null,
@@ -558,7 +560,11 @@ class HomeViewModel @Inject constructor(
 
     fun importIcs(uri: android.net.Uri) {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isImportingSchedule = true)
+            _uiState.value = _uiState.value.copy(
+                isImportingSchedule = true,
+                scheduleImportMessage = null,
+                scheduleImportError = null
+            )
             runCatching {
                 icsImportRepository.buildPreview(uri)
             }.onSuccess { preview ->
@@ -567,8 +573,11 @@ class HomeViewModel @Inject constructor(
                     pendingIcsPreview = preview,
                     plannerTab = PlannerTab.SCHEDULE
                 )
-            }.onFailure {
-                _uiState.value = _uiState.value.copy(isImportingSchedule = false)
+            }.onFailure { throwable ->
+                _uiState.value = _uiState.value.copy(
+                    isImportingSchedule = false,
+                    scheduleImportError = throwable.message?.takeIf { it.isNotBlank() } ?: "ICS 文件解析失败，请检查文件格式"
+                )
             }
         }
     }
@@ -617,12 +626,33 @@ class HomeViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(pendingIcsPreview = null)
     }
 
+    fun dismissScheduleImportMessage() {
+        _uiState.value = _uiState.value.copy(
+            scheduleImportMessage = null,
+            scheduleImportError = null
+        )
+    }
+
     fun applyIcsPreview(decision: ImportDecision) {
         viewModelScope.launch {
             val preview = _uiState.value.pendingIcsPreview ?: return@launch
-            scheduleRepository.applyImportPreview(preview, decision)
-            _uiState.value = _uiState.value.copy(pendingIcsPreview = null)
-            refreshScheduleSections()
+            runCatching {
+                scheduleRepository.applyImportPreview(preview, decision)
+            }.onSuccess {
+                _uiState.value = _uiState.value.copy(
+                    pendingIcsPreview = null,
+                    scheduleImportMessage = "已导入 ${preview.incomingEvents.size} 个日程",
+                    scheduleImportError = null
+                )
+                refreshScheduleSections()
+                refreshLocalPlan()
+            }.onFailure { throwable ->
+                _uiState.value = _uiState.value.copy(
+                    pendingIcsPreview = null,
+                    scheduleImportMessage = null,
+                    scheduleImportError = throwable.message?.takeIf { it.isNotBlank() } ?: "课表导入失败，请稍后重试"
+                )
+            }
         }
     }
 
