@@ -19,9 +19,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Card
@@ -84,6 +84,7 @@ fun ArticleDetailScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
                 title = {
@@ -114,7 +115,7 @@ fun ArticleDetailScreen(
                             DropdownMenuItem(
                                 text = { Text("打开原文") },
                                 leadingIcon = {
-                                    Icon(Icons.Default.OpenInNew, contentDescription = null)
+                                    Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null)
                                 },
                                 onClick = {
                                     menuExpanded = false
@@ -231,7 +232,7 @@ fun ArticleDetailScreen(
                                         verticalAlignment = Alignment.Top
                                     ) {
                                         Icon(
-                                            Icons.Default.OpenInNew,
+                                            Icons.AutoMirrored.Filled.OpenInNew,
                                             contentDescription = null,
                                             tint = MaterialTheme.colorScheme.primary
                                         )

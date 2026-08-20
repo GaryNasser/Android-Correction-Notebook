@@ -86,6 +86,7 @@ fun CourseVideoListScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
                 title = { Text(text = "视频列表", fontWeight = FontWeight.Bold) },
