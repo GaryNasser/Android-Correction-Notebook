@@ -129,9 +129,14 @@ class SchoolScheduleRemoteDataSource @Inject constructor(
             val courseName = item.firstString("KCM", "KCMC", "courseName", "kcmc", "kcm").orEmpty()
             if (courseName.isBlank()) return@mapNotNull null
             val weekdayText = item.firstString("XQ", "SKXQ", "weekday", "xq", "XQJ", "SKXQJ", "weekdayName")
-            val weekday = item.firstInt("XQ", "SKXQ", "weekday", "xq") ?: parseWeekday(weekdayText)
-            val sectionRange = parseSectionRange(item.firstString("JC", "SKJC", "JCDM", "sections", "jc"))
-            val weeks = parseWeeks(item.firstString("ZC", "SKZC", "ZCMC", "weeks", "zc", "zcmc"))
+            val weekday = item.firstInt("XQ", "SKXQ", "weekday", "xq")
+                ?: SchoolScheduleParsers.parseWeekday(weekdayText)
+            val sectionRange = SchoolScheduleParsers.parseSectionRange(
+                item.firstString("JC", "SKJC", "JCDM", "sections", "jc")
+            )
+            val weeks = SchoolScheduleParsers.parseWeeks(
+                item.firstString("ZC", "SKZC", "ZCMC", "weeks", "zc", "zcmc")
+            )
             if (weekday == null || sectionRange == null || weeks.isEmpty()) return@mapNotNull null
 
             SchoolCourseRaw(
@@ -193,46 +198,6 @@ class SchoolScheduleRemoteDataSource @Inject constructor(
             }
         }
         return emptyList()
-    }
-
-    private fun parseWeekday(raw: String?): Int? {
-        val text = raw?.trim().orEmpty()
-        return when {
-            text.contains("一") -> 1
-            text.contains("二") -> 2
-            text.contains("三") -> 3
-            text.contains("四") -> 4
-            text.contains("五") -> 5
-            text.contains("六") -> 6
-            text.contains("日") || text.contains("天") -> 7
-            else -> text.filter(Char::isDigit).toIntOrNull()
-        }
-    }
-
-    private fun parseSectionRange(raw: String?): Pair<Int, Int>? {
-        val numbers = raw.orEmpty().split(Regex("[^0-9]+")).mapNotNull { it.toIntOrNull() }
-        return when {
-            numbers.size >= 2 -> numbers.first() to numbers.last()
-            numbers.size == 1 -> numbers.first() to numbers.first()
-            else -> null
-        }
-    }
-
-    private fun parseWeeks(raw: String?): List<Int> {
-        val text = raw.orEmpty()
-        if (text.isBlank()) return emptyList()
-        val results = mutableSetOf<Int>()
-        val rangeRegex = Regex("(\\d+)\\s*-\\s*(\\d+)")
-        rangeRegex.findAll(text).forEach { match ->
-            val start = match.groupValues[1].toInt()
-            val end = match.groupValues[2].toInt()
-            val oddOnly = text.contains("单")
-            val evenOnly = text.contains("双")
-            (start..end).filter { (!oddOnly || it % 2 == 1) && (!evenOnly || it % 2 == 0) }.forEach(results::add)
-        }
-        val withoutRanges = rangeRegex.replace(text, " ")
-        Regex("\\d+").findAll(withoutRanges).map { it.value.toInt() }.forEach(results::add)
-        return results.sorted()
     }
 
     private fun JsonElement.asJsonObjectOrNull(): JsonObject? = takeIf { it.isJsonObject }?.asJsonObject

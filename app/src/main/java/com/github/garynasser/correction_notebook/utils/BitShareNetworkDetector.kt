@@ -45,7 +45,6 @@ class BitShareNetworkDetector @Inject constructor(
         return try {
             // 首先检查是否是 WiFi 网络
             if (!isWifiConnected()) {
-                Log.d(TAG, "Not connected to WiFi, assuming internet")
                 return NetworkEnvironment.INTERNET
             }
 
@@ -55,10 +54,8 @@ class BitShareNetworkDetector @Inject constructor(
             }.getOrDefault(false)
 
             if (canResolveIntranet) {
-                Log.d(TAG, "Intranet detected - can reach 10.170.35.57")
                 NetworkEnvironment.INTRANET
             } else {
-                Log.d(TAG, "Internet mode - cannot reach intranet")
                 NetworkEnvironment.INTERNET
             }
         } catch (e: Exception) {
@@ -76,7 +73,6 @@ class BitShareNetworkDetector @Inject constructor(
             if (env != NetworkEnvironment.UNKNOWN) {
                 return@withContext env
             }
-            Log.d(TAG, "Attempt ${attempt + 1} failed, retrying...")
         }
         // 如果多次检测都失败，尝试连接外网
         NetworkEnvironment.INTERNET

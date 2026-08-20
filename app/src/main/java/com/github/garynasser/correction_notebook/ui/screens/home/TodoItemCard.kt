@@ -30,6 +30,7 @@ fun TodoItemCard(
     onDelete: () -> Unit,
     onAiBreakdown: (() -> Unit)? = null
 ) {
+    var showDeleteConfirm by remember { mutableStateOf(false) }
     val checkboxModifier = if (todo.isCompleted) {
         Modifier.background(Color(0xFF43A047), CircleShape)
     } else {
@@ -157,7 +158,7 @@ fun TodoItemCard(
             }
 
             IconButton(
-                onClick = onDelete,
+                onClick = { showDeleteConfirm = true },
                 modifier = Modifier.size(32.dp)
             ) {
                 Icon(
@@ -168,5 +169,24 @@ fun TodoItemCard(
                 )
             }
         }
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("删除待办") },
+            text = { Text("确定删除“${todo.title}”吗？") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDelete()
+                        showDeleteConfirm = false
+                    }
+                ) { Text("删除") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) { Text("取消") }
+            }
+        )
     }
 }

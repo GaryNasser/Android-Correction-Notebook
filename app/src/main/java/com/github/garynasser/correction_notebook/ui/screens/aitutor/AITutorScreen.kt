@@ -107,6 +107,8 @@ fun AITutorScreen(
     var showMemoryDialog by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf(false) }
     var showSessionDialog by remember { mutableStateOf(false) }
+    var showClearChatConfirm by remember { mutableStateOf(false) }
+    var showDeleteChatConfirm by remember { mutableStateOf(false) }
     var menuExpanded by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -145,14 +147,14 @@ fun AITutorScreen(
                                 text = { Text("清空当前对话") },
                                 onClick = {
                                     menuExpanded = false
-                                    viewModel.clearMessages()
+                                    showClearChatConfirm = true
                                 }
                             )
                             DropdownMenuItem(
                                 text = { Text("删除当前对话") },
                                 onClick = {
                                     menuExpanded = false
-                                    viewModel.deleteCurrentSession()
+                                    showDeleteChatConfirm = true
                                 }
                             )
                         }
@@ -292,6 +294,44 @@ fun AITutorScreen(
         )
     }
 
+    if (showClearChatConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearChatConfirm = false },
+            title = { Text("清空当前对话") },
+            text = { Text("当前对话里的消息会被清空，保留对话入口。") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.clearMessages()
+                        showClearChatConfirm = false
+                    }
+                ) { Text("清空") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearChatConfirm = false }) { Text("取消") }
+            }
+        )
+    }
+
+    if (showDeleteChatConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteChatConfirm = false },
+            title = { Text("删除当前对话") },
+            text = { Text("当前对话和其中的消息都会删除，之后会切换到其他对话或新建对话。") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteCurrentSession()
+                        showDeleteChatConfirm = false
+                    }
+                ) { Text("删除") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteChatConfirm = false }) { Text("取消") }
+            }
+        )
+    }
+
     if (showRenameDialog) {
         var title by remember(uiState.selectedSessionId) {
             mutableStateOf(uiState.sessions.firstOrNull { it.id == uiState.selectedSessionId }?.title.orEmpty())
@@ -323,17 +363,19 @@ fun AITutorScreen(
 @Composable
 private fun EmptyAiState(onConfigure: () -> Unit) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
             Icon(
                 Icons.Default.SmartToy,
                 contentDescription = null,
-                modifier = Modifier.size(64.dp),
+                modifier = Modifier.size(48.dp),
                 tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
             )
-            Spacer(modifier = Modifier.height(16.dp))
             Text("AI Provider 未配置", style = MaterialTheme.typography.titleMedium)
             Text("添加 OpenAI 兼容或 Anthropic 兼容接口后即可使用")
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(4.dp))
             Button(onClick = onConfigure) { Text("配置 AI") }
         }
     }
@@ -460,12 +502,12 @@ private fun EmptyChatState(
             Icon(
                 if (isKnowledgeMode) Icons.AutoMirrored.Filled.LibraryBooks else Icons.Default.SmartToy,
                 contentDescription = null,
-                modifier = Modifier.size(60.dp),
+                modifier = Modifier.size(48.dp),
                 tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
             )
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(10.dp))
             Text(if (isKnowledgeMode) "问你的知识库" else "AI 学习导师已就绪")
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             SuggestionChip(
                 onClick = {
                     onSuggestion(
