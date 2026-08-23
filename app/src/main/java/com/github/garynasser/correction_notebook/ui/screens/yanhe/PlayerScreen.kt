@@ -1,9 +1,14 @@
 package com.github.garynasser.correction_notebook.ui.screens.yanhe
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -11,7 +16,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -27,7 +32,6 @@ fun PlayerScreen(
 ) {
     val playState = viewModel.playState
     val controller by viewModel.controller // 监听 MediaController 的变化
-    val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
     // 生命周期管理：当用户切离界面时自动暂停，回来时尝试播放
@@ -45,18 +49,17 @@ fun PlayerScreen(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-
-        // 1. 播放器容器
-        // 当 controller 还没准备好时，先显示一个黑屏占位
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+    ) {
         if (controller != null) {
             AndroidView(
                 factory = { ctx ->
                     PlayerView(ctx).apply {
-                        // 将 Service 提供的 controller 绑定到 UI
                         player = controller
                         useController = true
-                        // 设置背景颜色为黑色
                         setBackgroundColor(android.graphics.Color.BLACK)
                     }
                 },
@@ -69,65 +72,113 @@ fun PlayerScreen(
                 }
             )
         } else {
-            // Controller 加载中的占位图
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(16f / 9f)
-                    .background(Color.DarkGray)
-                    .align(Alignment.Center),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator(color = Color.White)
-            }
+            PlayerPlaceholder(modifier = Modifier.align(Alignment.Center))
         }
 
-        // 2. 加载状态层
         if (playState is PlayState.Loading) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.5f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CircularProgressIndicator(color = Color.White)
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text("流媒体缓冲中...", color = Color.White)
-                }
-            }
+            PlayerLoadingOverlay(modifier = Modifier.fillMaxSize())
         }
 
-        // 3. 错误显示层
         if (playState is PlayState.Error) {
-            Box(
-                modifier = Modifier.fillMaxSize().background(Color.Black),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(text = "播放失败", color = Color.Red, style = MaterialTheme.typography.titleMedium)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(text = playState.message, color = Color.Gray, modifier = Modifier.padding(16.dp))
-                    Button(onClick = { /* 可以在这里触发重新加载逻辑 */ }) {
-                        Text("重试")
-                    }
-                }
-            }
+            PlayerErrorOverlay(
+                message = playState.message,
+                onRetry = viewModel::retryPlayback,
+                modifier = Modifier.fillMaxSize()
+            )
         }
 
-        // 4. 返回按钮
-        IconButton(
-            onClick = onBack,
+        Surface(
             modifier = Modifier
                 .statusBarsPadding()
                 .padding(top = 8.dp, start = 8.dp)
-                .align(Alignment.TopStart)
+                .align(Alignment.TopStart),
+            shape = CircleShape,
+            color = Color.Black.copy(alpha = 0.44f)
         ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "返回",
-                tint = Color.White
-            )
+            IconButton(onClick = onBack) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "返回",
+                    tint = Color.White
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlayerPlaceholder(modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .aspectRatio(16f / 9f),
+        color = Color(0xFF151515)
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp)
+        }
+    }
+}
+
+@Composable
+private fun PlayerLoadingOverlay(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier.background(Color.Black.copy(alpha = 0.56f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            color = Color.Black.copy(alpha = 0.62f),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(22.dp))
+                Text("流媒体缓冲中...", color = Color.White)
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlayerErrorOverlay(
+    message: String,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier.background(Color.Black.copy(alpha = 0.88f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 28.dp),
+            color = Color(0xFF181818),
+            shape = RoundedCornerShape(8.dp),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.16f))
+        ) {
+            Column(
+                modifier = Modifier.padding(18.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Icon(Icons.Default.Error, contentDescription = null, tint = Color(0xFFFFD2D2), modifier = Modifier.size(30.dp))
+                Text("播放失败", color = Color.White, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = message,
+                    color = Color(0xFFC9C9C9),
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center
+                )
+                Button(onClick = onRetry, shape = RoundedCornerShape(8.dp)) {
+                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("重试")
+                }
+            }
         }
     }
 }
