@@ -165,22 +165,29 @@ class AITutorViewModel @Inject constructor(
 
             loading.value = true
             error.value = null
-            chatSessionRepository.saveMessage(sessionId, "user", text)
+            try {
+                chatSessionRepository.saveMessage(sessionId, "user", text)
 
-            val recent = chatSessionRepository.getRecentMessages(sessionId, provider.contextMessageLimit)
-                .asReversed()
-                .map { NormalizedChatMessage(role = it.role, content = it.content) }
-            val result = if (knowledgeMode.value) {
-                aiStudyUseCase.askKnowledgeBase(text)
-            } else {
-                aiStudyUseCase.chat(recent)
+                val recent = chatSessionRepository.getRecentMessages(sessionId, provider.contextMessageLimit)
+                    .asReversed()
+                    .map { NormalizedChatMessage(role = it.role, content = it.content) }
+                val result = if (knowledgeMode.value) {
+                    aiStudyUseCase.askKnowledgeBase(text)
+                } else {
+                    aiStudyUseCase.chat(recent)
+                }
+                result.onSuccess { answer ->
+                    chatSessionRepository.saveMessage(sessionId, "assistant", answer)
+                }.onFailure { throwable ->
+                    error.value = throwable.message ?: "AI 请求失败"
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                error.value = e.message ?: "AI 请求失败"
+            } finally {
+                loading.value = false
             }
-            result.onSuccess { answer ->
-                chatSessionRepository.saveMessage(sessionId, "assistant", answer)
-            }.onFailure { throwable ->
-                error.value = throwable.message ?: "AI 请求失败"
-            }
-            loading.value = false
         }
     }
 
@@ -220,8 +227,10 @@ class AITutorViewModel @Inject constructor(
     }
 
     fun renameCurrentSession(title: String) {
+        val trimmedTitle = title.trim()
+        if (trimmedTitle.isBlank()) return
         selectedSessionId.value?.let { sessionId ->
-            viewModelScope.launch { chatSessionRepository.renameSession(sessionId, title) }
+            viewModelScope.launch { chatSessionRepository.renameSession(sessionId, trimmedTitle) }
         }
     }
 

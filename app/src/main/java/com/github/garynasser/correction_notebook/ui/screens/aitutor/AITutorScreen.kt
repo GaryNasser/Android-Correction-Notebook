@@ -233,7 +233,8 @@ fun AITutorScreen(
                                 }
                             ),
                             maxLines = 4,
-                            enabled = !uiState.isLoading
+                            enabled = !uiState.isLoading,
+                            shape = RoundedCornerShape(8.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         FilledIconButton(
@@ -241,7 +242,8 @@ fun AITutorScreen(
                                 viewModel.sendMessage(inputText)
                                 inputText = ""
                             },
-                            enabled = inputText.isNotBlank() && !uiState.isLoading
+                            enabled = inputText.isNotBlank() && !uiState.isLoading,
+                            shape = RoundedCornerShape(8.dp)
                         ) {
                             if (uiState.isLoading) {
                                 CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
@@ -298,18 +300,20 @@ fun AITutorScreen(
     if (showClearChatConfirm) {
         AlertDialog(
             onDismissRequest = { showClearChatConfirm = false },
-            title = { Text("清空当前对话") },
+            shape = RoundedCornerShape(8.dp),
+            title = { Text("清空当前对话", style = MaterialTheme.typography.titleMedium) },
             text = { Text("当前对话里的消息会被清空，保留对话入口。") },
             confirmButton = {
                 TextButton(
                     onClick = {
                         viewModel.clearMessages()
                         showClearChatConfirm = false
-                    }
+                    },
+                    shape = RoundedCornerShape(8.dp)
                 ) { Text("清空") }
             },
             dismissButton = {
-                TextButton(onClick = { showClearChatConfirm = false }) { Text("取消") }
+                TextButton(onClick = { showClearChatConfirm = false }, shape = RoundedCornerShape(8.dp)) { Text("取消") }
             }
         )
     }
@@ -317,18 +321,20 @@ fun AITutorScreen(
     if (showDeleteChatConfirm) {
         AlertDialog(
             onDismissRequest = { showDeleteChatConfirm = false },
-            title = { Text("删除当前对话") },
+            shape = RoundedCornerShape(8.dp),
+            title = { Text("删除当前对话", style = MaterialTheme.typography.titleMedium) },
             text = { Text("当前对话和其中的消息都会删除，之后会切换到其他对话或新建对话。") },
             confirmButton = {
                 TextButton(
                     onClick = {
                         viewModel.deleteCurrentSession()
                         showDeleteChatConfirm = false
-                    }
+                    },
+                    shape = RoundedCornerShape(8.dp)
                 ) { Text("删除") }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteChatConfirm = false }) { Text("取消") }
+                TextButton(onClick = { showDeleteChatConfirm = false }, shape = RoundedCornerShape(8.dp)) { Text("取消") }
             }
         )
     }
@@ -339,23 +345,30 @@ fun AITutorScreen(
         }
         AlertDialog(
             onDismissRequest = { showRenameDialog = false },
-            title = { Text("重命名对话") },
+            shape = RoundedCornerShape(8.dp),
+            title = { Text("重命名对话", style = MaterialTheme.typography.titleMedium) },
             text = {
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
                     label = { Text("标题") },
-                    singleLine = true
+                    singleLine = true,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
                 )
             },
             confirmButton = {
-                TextButton(onClick = {
-                    viewModel.renameCurrentSession(title)
-                    showRenameDialog = false
-                }) { Text("保存") }
+                TextButton(
+                    onClick = {
+                        viewModel.renameCurrentSession(title)
+                        showRenameDialog = false
+                    },
+                    enabled = title.isNotBlank(),
+                    shape = RoundedCornerShape(8.dp)
+                ) { Text("保存") }
             },
             dismissButton = {
-                TextButton(onClick = { showRenameDialog = false }) { Text("取消") }
+                TextButton(onClick = { showRenameDialog = false }, shape = RoundedCornerShape(8.dp)) { Text("取消") }
             }
         )
     }
@@ -364,20 +377,33 @@ fun AITutorScreen(
 @Composable
 private fun EmptyAiState(onConfigure: () -> Unit) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+            shape = RoundedCornerShape(8.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
         ) {
-            Icon(
-                Icons.Default.SmartToy,
-                contentDescription = null,
-                modifier = Modifier.size(48.dp),
-                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
-            )
-            Text("AI Provider 未配置", style = MaterialTheme.typography.titleMedium)
-            Text("添加 OpenAI 兼容或 Anthropic 兼容接口后即可使用")
-            Spacer(modifier = Modifier.height(4.dp))
-            Button(onClick = onConfigure) { Text("配置 AI") }
+            Column(
+                modifier = Modifier.padding(18.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    Icons.Default.SmartToy,
+                    contentDescription = null,
+                    modifier = Modifier.size(40.dp),
+                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.68f)
+                )
+                Text("AI Provider 未配置", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "添加 OpenAI 兼容或 Anthropic 兼容接口后即可使用",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Button(onClick = onConfigure, shape = RoundedCornerShape(8.dp)) { Text("配置 AI") }
+            }
         }
     }
 }
@@ -396,7 +422,7 @@ private fun AiTutorHeader(
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 6.dp),
         color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.66f),
-        shape = MaterialTheme.shapes.large,
+        shape = RoundedCornerShape(8.dp),
         tonalElevation = 1.dp
     ) {
         Row(
@@ -425,13 +451,14 @@ private fun AiTutorHeader(
                     )
                 }
             }
-            TextButton(onClick = onOpenSessions) {
+            TextButton(onClick = onOpenSessions, shape = RoundedCornerShape(8.dp)) {
                 Text("对话")
             }
             AssistChip(
                 onClick = { onKnowledgeModeChange(!uiState.isKnowledgeMode) },
                 leadingIcon = { Icon(Icons.AutoMirrored.Filled.LibraryBooks, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                label = { Text(if (uiState.isKnowledgeMode) "资料" else "普通") }
+                label = { Text(if (uiState.isKnowledgeMode) "资料" else "普通") },
+                shape = RoundedCornerShape(8.dp)
             )
         }
     }
@@ -446,9 +473,15 @@ private fun SessionPickerDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("选择对话") },
+        shape = RoundedCornerShape(8.dp),
+        title = { Text("选择对话", style = MaterialTheme.typography.titleMedium) },
         text = {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
                 items(uiState.sessions, key = { it.id }) { session ->
                     Surface(
                         modifier = Modifier
@@ -459,7 +492,8 @@ private fun SessionPickerDialog(
                         } else {
                             MaterialTheme.colorScheme.surface
                         },
-                        shape = MaterialTheme.shapes.small
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.32f))
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Text(
@@ -479,10 +513,10 @@ private fun SessionPickerDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onNewSession) { Text("新建对话") }
+            TextButton(onClick = onNewSession, shape = RoundedCornerShape(8.dp)) { Text("新建对话") }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("关闭") }
+            TextButton(onClick = onDismiss, shape = RoundedCornerShape(8.dp)) { Text("关闭") }
         }
     )
 }
