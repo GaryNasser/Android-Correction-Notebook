@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.github.garynasser.correction_notebook.data.model.home.TodoHistoryItem
 import com.github.garynasser.correction_notebook.data.repository.TodoHistoryRepository
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -18,12 +19,14 @@ data class TodoHistoryUiState(
     val groupedByDate: Map<LocalDate, List<TodoHistoryItem>> = emptyMap(),
     val isLoading: Boolean = false,
     val isMutating: Boolean = false,
+    val errorMessage: String? = null,
     val message: String? = null
 )
 
 class TodoHistoryViewModel(application: Application) : AndroidViewModel(application) {
 
     private val todoHistoryRepository = TodoHistoryRepository(application)
+    private var historyJob: Job? = null
 
     private val _uiState = MutableStateFlow(TodoHistoryUiState())
     val uiState: StateFlow<TodoHistoryUiState> = _uiState.asStateFlow()
@@ -32,9 +35,20 @@ class TodoHistoryViewModel(application: Application) : AndroidViewModel(applicat
         loadHistory()
     }
 
+    fun refreshHistory() {
+        loadHistory()
+    }
+
     private fun loadHistory() {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, message = null) }
+        historyJob?.cancel()
+        historyJob = viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isLoading = it.historyItems.isEmpty(),
+                    errorMessage = null,
+                    message = null
+                )
+            }
             try {
                 todoHistoryRepository.repairDuplicateIds()
                 todoHistoryRepository.historyItems.collect { items ->
@@ -45,7 +59,8 @@ class TodoHistoryViewModel(application: Application) : AndroidViewModel(applicat
                         it.copy(
                             historyItems = items,
                             groupedByDate = grouped,
-                            isLoading = false
+                            isLoading = false,
+                            errorMessage = null
                         )
                     }
                 }
@@ -55,6 +70,7 @@ class TodoHistoryViewModel(application: Application) : AndroidViewModel(applicat
                 _uiState.update {
                     it.copy(
                         isLoading = false,
+                        errorMessage = "完成历史加载失败",
                         message = "完成历史加载失败"
                     )
                 }
