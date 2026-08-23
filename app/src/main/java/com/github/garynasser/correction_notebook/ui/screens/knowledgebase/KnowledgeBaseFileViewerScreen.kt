@@ -53,6 +53,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -65,6 +66,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
@@ -283,7 +285,9 @@ fun KnowledgeBaseFileViewerScreen(
             uiState.file == null -> ViewerError(
                 modifier = Modifier.padding(innerPadding),
                 title = "文件不可用",
-                message = uiState.errorMessage ?: "无法读取文件"
+                message = uiState.errorMessage ?: "无法读取文件",
+                actionText = "重试",
+                onAction = viewModel::refresh
             )
             else -> {
                 Column(
@@ -291,83 +295,60 @@ fun KnowledgeBaseFileViewerScreen(
                         .fillMaxSize()
                         .padding(innerPadding)
                 ) {
-                    uiState.errorMessage?.let { message ->
-                        ElevatedCard(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 6.dp),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text(
-                                text = message,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error
-                            )
-                        }
-                    }
-
-                    if (uiState.isAiLoading) {
-                        ElevatedCard(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 6.dp),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Text("AI 正在阅读这份资料...", style = MaterialTheme.typography.bodySmall)
-                            }
-                        }
-                    }
-
-                    ElevatedCard(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
-                        shape = RoundedCornerShape(8.dp)
+                    Column(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Icons.Default.Psychology, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = when {
-                                    uiState.isIndexing -> "AI 索引正在重建..."
-                                    uiState.indexChunkCount == null -> "AI 索引状态未知，可从菜单重建索引"
-                                    uiState.indexChunkCount == 0 -> "当前资料尚未建立可用文本索引"
-                                    else -> "AI 索引可用：${uiState.indexChunkCount} 个片段"
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.weight(1f)
+                        uiState.errorMessage?.let { message ->
+                            ViewerStatusBar(
+                                icon = Icons.Default.Info,
+                                text = message,
+                                isError = true
                             )
-                            TextButton(onClick = viewModel::rebuildIndex, enabled = !uiState.isIndexing) {
-                                Text("重建")
-                            }
                         }
+
+                        if (uiState.isAiLoading) {
+                            ViewerStatusBar(
+                                icon = Icons.Default.Psychology,
+                                text = "AI 正在阅读这份资料..."
+                            )
+                        }
+
+                        ViewerStatusBar(
+                            icon = Icons.Default.Psychology,
+                            text = when {
+                                uiState.isIndexing -> "AI 索引正在重建..."
+                                uiState.indexChunkCount == null -> "AI 索引状态未知，可从菜单重建索引"
+                                uiState.indexChunkCount == 0 -> "当前资料尚未建立可用文本索引"
+                                else -> "AI 索引可用：${uiState.indexChunkCount} 个片段"
+                            },
+                            actionText = "重建",
+                            onAction = viewModel::rebuildIndex,
+                            actionEnabled = !uiState.isIndexing
+                        )
                     }
 
-                    when (uiState.previewType) {
-                        KnowledgeBasePreviewType.IMAGE -> ImagePreview(uiState.file.localPath)
-                        KnowledgeBasePreviewType.TEXT -> TextPreview(
-                            content = uiState.textPreview.orEmpty(),
-                            truncated = uiState.isTextTruncated
-                        )
-                        KnowledgeBasePreviewType.PDF -> PdfPreview(uiState.pdfPages)
-                        KnowledgeBasePreviewType.HTML -> HtmlPreview(uiState.htmlPreviewPath)
-                        KnowledgeBasePreviewType.AUDIO,
-                        KnowledgeBasePreviewType.VIDEO -> MediaPreview(
-                            file = uiState.file,
-                            isVideo = uiState.previewType == KnowledgeBasePreviewType.VIDEO
-                        )
-                        KnowledgeBasePreviewType.FALLBACK,
-                        null -> FallbackPreview(uiState.file)
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                    ) {
+                        when (uiState.previewType) {
+                            KnowledgeBasePreviewType.IMAGE -> ImagePreview(uiState.file.localPath)
+                            KnowledgeBasePreviewType.TEXT -> TextPreview(
+                                content = uiState.textPreview.orEmpty(),
+                                truncated = uiState.isTextTruncated
+                            )
+                            KnowledgeBasePreviewType.PDF -> PdfPreview(uiState.pdfPages)
+                            KnowledgeBasePreviewType.HTML -> HtmlPreview(uiState.htmlPreviewPath)
+                            KnowledgeBasePreviewType.AUDIO,
+                            KnowledgeBasePreviewType.VIDEO -> MediaPreview(
+                                file = uiState.file,
+                                isVideo = uiState.previewType == KnowledgeBasePreviewType.VIDEO
+                            )
+                            KnowledgeBasePreviewType.FALLBACK,
+                            null -> FallbackPreview(uiState.file)
+                        }
                     }
                 }
             }
@@ -396,6 +377,53 @@ fun KnowledgeBaseFileViewerScreen(
             onDismiss = viewModel::clearAiResult,
             onSave = viewModel::saveStudySetDraft
         )
+    }
+}
+
+@Composable
+private fun ViewerStatusBar(
+    icon: ImageVector,
+    text: String,
+    modifier: Modifier = Modifier,
+    isError: Boolean = false,
+    actionText: String? = null,
+    actionEnabled: Boolean = true,
+    onAction: (() -> Unit)? = null
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        color = if (isError) {
+            MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.58f)
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f)
+        }
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 10.dp, top = 7.dp, end = 6.dp, bottom = 7.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = text,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodySmall,
+                color = if (isError) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (actionText != null && onAction != null) {
+                TextButton(onClick = onAction, enabled = actionEnabled) {
+                    Text(actionText)
+                }
+            }
+        }
     }
 }
 
@@ -573,7 +601,9 @@ private fun ViewerLoading(modifier: Modifier = Modifier) {
 private fun ViewerError(
     modifier: Modifier = Modifier,
     title: String,
-    message: String
+    message: String,
+    actionText: String? = null,
+    onAction: (() -> Unit)? = null
 ) {
     Box(
         modifier = modifier.fillMaxSize(),
@@ -587,6 +617,12 @@ private fun ViewerError(
                 Text(title, style = MaterialTheme.typography.titleMedium)
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(message, style = MaterialTheme.typography.bodySmall)
+                if (actionText != null && onAction != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextButton(onClick = onAction) {
+                        Text(actionText)
+                    }
+                }
             }
         }
     }
