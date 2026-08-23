@@ -8,7 +8,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
+import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.MimeTypes
 import androidx.media3.session.MediaController // 必须是这个
 import androidx.media3.session.SessionToken
@@ -16,7 +18,6 @@ import androidx.navigation.toRoute
 import com.github.garynasser.correction_notebook.service.VideoPlaybackService
 import com.github.garynasser.correction_notebook.ui.navigation.VideoPlayer
 import com.google.common.util.concurrent.ListenableFuture
-import com.google.common.util.concurrent.MoreExecutors
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import androidx.core.net.toUri
@@ -32,6 +33,8 @@ class PlayerViewModel @Inject constructor(
 
     private val args = savedStateHandle.toRoute<VideoPlayer>()
     private val videoUrl = args.url
+    val videoTitle = args.videoTitle
+    val courseName = args.courseName
 
     // 状态管理
     private var browserFuture: ListenableFuture<MediaController>? = null
@@ -59,22 +62,25 @@ class PlayerViewModel @Inject constructor(
         val future = MediaController.Builder(application, sessionToken).buildAsync()
         browserFuture = future
 
-        future.addListener({
-            try {
-                val mediaController = future.get()
-                controller.value = mediaController
-                startPlay(mediaController)
-            } catch (e: InterruptedException) {
-                Thread.currentThread().interrupt()
-                playState = PlayState.Error("播放器连接被中断，请返回后重试")
-            } catch (e: CancellationException) {
-                playState = PlayState.Error("播放器连接已取消，请重试")
-            } catch (e: ExecutionException) {
-                playState = PlayState.Error("控制器连接失败: ${e.cause?.message ?: e.message}")
-            } catch (e: Exception) {
-                playState = PlayState.Error("控制器连接失败: ${e.message}")
-            }
-        }, MoreExecutors.directExecutor())
+        future.addListener(
+            {
+                try {
+                    val mediaController = future.get()
+                    controller.value = mediaController
+                    startPlay(mediaController)
+                } catch (e: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    playState = PlayState.Error("播放器连接被中断，请返回后重试")
+                } catch (e: CancellationException) {
+                    playState = PlayState.Error("播放器连接已取消，请重试")
+                } catch (e: ExecutionException) {
+                    playState = PlayState.Error("控制器连接失败: ${e.cause?.message ?: e.message}")
+                } catch (e: Exception) {
+                    playState = PlayState.Error("控制器连接失败: ${e.message}")
+                }
+            },
+            ContextCompat.getMainExecutor(application)
+        )
     }
 
     private fun startPlay(mediaController: MediaController?) {
@@ -82,6 +88,12 @@ class PlayerViewModel @Inject constructor(
             val mediaItem = MediaItem.Builder()
                 .setUri(videoUrl.toUri())
                 .setMimeType(MimeTypes.APPLICATION_M3U8)
+                .setMediaMetadata(
+                    MediaMetadata.Builder()
+                        .setTitle(videoTitle.ifBlank { "延河课堂视频" })
+                        .setAlbumTitle(courseName.ifBlank { "BITStudy" })
+                        .build()
+                )
                 .build()
 
             it.setMediaItem(mediaItem)

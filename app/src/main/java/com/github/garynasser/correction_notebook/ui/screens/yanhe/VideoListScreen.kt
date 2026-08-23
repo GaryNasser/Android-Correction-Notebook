@@ -65,7 +65,6 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.garynasser.correction_notebook.data.model.yanhe.CourseSection
-import com.github.garynasser.correction_notebook.data.model.yanhe.Video
 import com.github.garynasser.correction_notebook.data.model.ai.AiActionType
 import com.github.garynasser.correction_notebook.ui.components.FreshScreen
 
@@ -76,7 +75,7 @@ import com.github.garynasser.correction_notebook.ui.components.FreshScreen
 fun CourseVideoListScreen(
     viewModel: VideoListViewModel = hiltViewModel(),
     assistantViewModel: CourseAssistantViewModel = hiltViewModel(),
-    onNavigateToPlayer: (String) -> Unit,
+    onNavigateToPlayer: (String, String, String) -> Unit,
     onBackButtonClick: () -> Unit
 ) {
     val assistantState by assistantViewModel.uiState.collectAsStateWithLifecycle()
@@ -86,7 +85,7 @@ fun CourseVideoListScreen(
     LaunchedEffect(viewModel.playState) {
         val state = viewModel.playState
         if (state is PlayState.Success) {
-            onNavigateToPlayer(state.url)
+            onNavigateToPlayer(state.url, state.videoTitle, state.courseName)
             viewModel.resetPlayState()
         }
     }
@@ -95,7 +94,24 @@ fun CourseVideoListScreen(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
-                title = { Text(text = "视频列表", fontWeight = FontWeight.Bold) },
+                title = {
+                    Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                        Text(
+                            text = viewModel.courseName.ifBlank { "视频列表" },
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        if (viewModel.courseName.isNotBlank()) {
+                            Text(
+                                text = "延河课堂视频",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                },
                 windowInsets = WindowInsets(0, 0, 0, 0),
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0.92f),
@@ -227,7 +243,7 @@ fun CourseVideoListScreen(
                                 onCompletedChange = { checked ->
                                     viewModel.setSectionCompleted(video, checked)
                                 },
-                                onAiAssistantClick = { sectionTitle ->
+                                onAiAssistantClick = {
                                     selectedSection = video
                                     noteInput = ""
                                 },
@@ -473,7 +489,7 @@ fun VideoCard(
     isCompleted: Boolean,
     isResolvingVideo: Boolean,
     onCompletedChange: (Boolean) -> Unit,
-    onAiAssistantClick: (String) -> Unit,
+    onAiAssistantClick: () -> Unit,
     onCameraPlayClick: () -> Unit,
     onScreenPlayClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -541,7 +557,7 @@ fun VideoCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 FilledIconButton(
-                    onClick = { onAiAssistantClick(timeInfo) },
+                    onClick = onAiAssistantClick,
                     modifier = Modifier.size(36.dp),
                     shape = RoundedCornerShape(8.dp)
                 ) {
