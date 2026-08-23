@@ -6,6 +6,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -261,47 +263,29 @@ fun HomeScreen(
     }
 
     if (uiState.scheduleImportMessage != null || uiState.scheduleImportError != null) {
-        AlertDialog(
-            onDismissRequest = { homeViewModel.dismissScheduleImportMessage() },
-            title = { Text(if (uiState.scheduleImportError == null) "课表导入完成" else "课表导入失败") },
-            text = {
-                Text(uiState.scheduleImportMessage ?: uiState.scheduleImportError.orEmpty())
-            },
-            confirmButton = {
-                TextButton(onClick = { homeViewModel.dismissScheduleImportMessage() }) {
-                    Text("知道了")
-                }
-            }
+        CompactMessageDialog(
+            title = if (uiState.scheduleImportError == null) "课表导入完成" else "课表导入失败",
+            message = uiState.scheduleImportMessage ?: uiState.scheduleImportError.orEmpty(),
+            isError = uiState.scheduleImportError != null,
+            onDismiss = { homeViewModel.dismissScheduleImportMessage() }
         )
     }
 
     if (uiState.schoolScheduleSyncMessage != null || uiState.schoolScheduleSyncError != null) {
-        AlertDialog(
-            onDismissRequest = { homeViewModel.dismissSchoolScheduleSyncMessage() },
-            title = { Text(if (uiState.schoolScheduleSyncError == null) "课表同步完成" else "课表同步失败") },
-            text = {
-                Text(uiState.schoolScheduleSyncMessage ?: uiState.schoolScheduleSyncError.orEmpty())
-            },
-            confirmButton = {
-                TextButton(onClick = { homeViewModel.dismissSchoolScheduleSyncMessage() }) {
-                    Text("知道了")
-                }
-            }
+        CompactMessageDialog(
+            title = if (uiState.schoolScheduleSyncError == null) "课表同步完成" else "课表同步失败",
+            message = uiState.schoolScheduleSyncMessage ?: uiState.schoolScheduleSyncError.orEmpty(),
+            isError = uiState.schoolScheduleSyncError != null,
+            onDismiss = { homeViewModel.dismissSchoolScheduleSyncMessage() }
         )
     }
 
     if (uiState.aiTodoBreakdown != null || uiState.aiErrorMessage != null) {
-        AlertDialog(
-            onDismissRequest = { homeViewModel.dismissAiResult() },
-            title = { Text(if (uiState.aiTodoBreakdown != null) "AI 待办拆解" else "AI 提示") },
-            text = {
-                Text(uiState.aiTodoBreakdown ?: uiState.aiErrorMessage.orEmpty())
-            },
-            confirmButton = {
-                TextButton(onClick = { homeViewModel.dismissAiResult() }) {
-                    Text("知道了")
-                }
-            }
+        CompactMessageDialog(
+            title = if (uiState.aiTodoBreakdown != null) "AI 待办拆解" else "AI 提示",
+            message = uiState.aiTodoBreakdown ?: uiState.aiErrorMessage.orEmpty(),
+            isError = uiState.aiErrorMessage != null,
+            onDismiss = { homeViewModel.dismissAiResult() }
         )
     }
 
@@ -1018,6 +1002,57 @@ private fun BitScheduleItemRow(
 }
 
 @Composable
+private fun CompactMessageDialog(
+    title: String,
+    message: String,
+    isError: Boolean,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(8.dp),
+        title = {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+            )
+        },
+        text = {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(8.dp),
+                color = if (isError) {
+                    MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.7f)
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+                }
+            ) {
+                Text(
+                    text = message,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 300.dp)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (isError) {
+                        MaterialTheme.colorScheme.onErrorContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("知道了")
+            }
+        }
+    )
+}
+
+@Composable
 private fun ScheduleOccurrenceDialog(
     item: ScheduleOccurrence,
     onDismiss: () -> Unit,
@@ -1025,15 +1060,37 @@ private fun ScheduleOccurrenceDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(item.title) },
+        shape = RoundedCornerShape(8.dp),
+        title = {
+            Text(
+                text = item.title,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 300.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 Text(fullScheduleTime(item), style = MaterialTheme.typography.bodyMedium)
                 if (item.location.isNotBlank()) {
-                    Text(item.location, style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        text = item.location,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
                 if (item.description.isNotBlank()) {
-                    Text(item.description, style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        text = item.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         },

@@ -38,6 +38,7 @@ import com.github.garynasser.correction_notebook.data.repository.TodoRepository
 import com.github.garynasser.correction_notebook.domain.usecase.AiStudyUseCase
 import com.github.garynasser.correction_notebook.domain.usecase.StudyTimerManager
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -253,20 +254,22 @@ class HomeViewModel @Inject constructor(
     }
 
     fun refreshArticles(forceRefresh: Boolean = true) {
+        if (_uiState.value.isArticlesLoading) return
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
                 isArticlesLoading = true,
                 articleErrorMessage = null
             )
-            runCatching {
-                articleRepository.getRecommendedArticles(forceRefresh = forceRefresh)
-            }.onSuccess { articles ->
+            try {
+                val articles = articleRepository.getRecommendedArticles(forceRefresh = forceRefresh)
                 _uiState.value = _uiState.value.copy(
                     articles = articles,
                     isArticlesLoading = false,
                     articleErrorMessage = null
                 )
-            }.onFailure { throwable ->
+            } catch (throwable: CancellationException) {
+                throw throwable
+            } catch (throwable: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isArticlesLoading = false,
                     articleErrorMessage = throwable.message?.takeIf { it.isNotBlank() } ?: "推荐内容加载失败"
@@ -559,21 +562,23 @@ class HomeViewModel @Inject constructor(
     }
 
     fun importIcs(uri: android.net.Uri) {
+        if (_uiState.value.isImportingSchedule) return
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
                 isImportingSchedule = true,
                 scheduleImportMessage = null,
                 scheduleImportError = null
             )
-            runCatching {
-                icsImportRepository.buildPreview(uri)
-            }.onSuccess { preview ->
+            try {
+                val preview = icsImportRepository.buildPreview(uri)
                 _uiState.value = _uiState.value.copy(
                     isImportingSchedule = false,
                     pendingIcsPreview = preview,
                     plannerTab = PlannerTab.SCHEDULE
                 )
-            }.onFailure { throwable ->
+            } catch (throwable: CancellationException) {
+                throw throwable
+            } catch (throwable: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isImportingSchedule = false,
                     scheduleImportError = throwable.message?.takeIf { it.isNotBlank() } ?: "ICS 文件解析失败，请检查文件格式"
@@ -583,6 +588,7 @@ class HomeViewModel @Inject constructor(
     }
 
     fun syncSchoolSchedule() {
+        if (_uiState.value.isSyncingSchoolSchedule) return
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
                 isSyncingSchoolSchedule = true,
@@ -590,9 +596,8 @@ class HomeViewModel @Inject constructor(
                 schoolScheduleSyncError = null,
                 plannerTab = PlannerTab.SCHEDULE
             )
-            runCatching {
-                schoolScheduleRepository.syncCurrentTerm()
-            }.onSuccess { result ->
+            try {
+                val result = schoolScheduleRepository.syncCurrentTerm()
                 _uiState.value = _uiState.value.copy(
                     isSyncingSchoolSchedule = false,
                     schoolScheduleSyncMessage = result.message,
@@ -605,7 +610,9 @@ class HomeViewModel @Inject constructor(
                 )
                 refreshScheduleSections()
                 refreshLocalPlan()
-            }.onFailure { throwable ->
+            } catch (throwable: CancellationException) {
+                throw throwable
+            } catch (throwable: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isSyncingSchoolSchedule = false,
                     schoolScheduleSyncMessage = null,
@@ -634,20 +641,25 @@ class HomeViewModel @Inject constructor(
     }
 
     fun applyIcsPreview(decision: ImportDecision) {
+        if (_uiState.value.isImportingSchedule) return
         viewModelScope.launch {
             val preview = _uiState.value.pendingIcsPreview ?: return@launch
-            runCatching {
+            _uiState.value = _uiState.value.copy(isImportingSchedule = true)
+            try {
                 scheduleRepository.applyImportPreview(preview, decision)
-            }.onSuccess {
                 _uiState.value = _uiState.value.copy(
+                    isImportingSchedule = false,
                     pendingIcsPreview = null,
                     scheduleImportMessage = "已导入 ${preview.incomingEvents.size} 个日程",
                     scheduleImportError = null
                 )
                 refreshScheduleSections()
                 refreshLocalPlan()
-            }.onFailure { throwable ->
+            } catch (throwable: CancellationException) {
+                throw throwable
+            } catch (throwable: Exception) {
                 _uiState.value = _uiState.value.copy(
+                    isImportingSchedule = false,
                     pendingIcsPreview = null,
                     scheduleImportMessage = null,
                     scheduleImportError = throwable.message?.takeIf { it.isNotBlank() } ?: "课表导入失败，请稍后重试"
