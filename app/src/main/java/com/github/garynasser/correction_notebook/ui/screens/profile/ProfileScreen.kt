@@ -33,7 +33,8 @@ fun ProfileScreen(
     viewModel: ProfileViewModel = hiltViewModel(),
     onNavigateToLogin: () -> Unit = {},
     onCheckForUpdates: () -> Unit = {},
-    currentVersionName: String = ""
+    currentVersionName: String = "",
+    isCheckingForUpdates: Boolean = false,
 ) {
     val authState by viewModel.authState.collectAsStateWithLifecycle()
     val aiEnabled by viewModel.aiEnabled.collectAsStateWithLifecycle()
@@ -78,8 +79,8 @@ fun ProfileScreen(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 item {
                     AccountStatusCard(
@@ -129,9 +130,23 @@ fun ProfileScreen(
                             SettingsItem(
                                 icon = Icons.Default.SystemUpdate,
                                 title = "检查更新",
-                                subtitle = "当前版本 $currentVersionName",
-                                enabled = !isLoading,
-                                onClick = onCheckForUpdates
+                                subtitle = if (isCheckingForUpdates) {
+                                    "正在检查更新..."
+                                } else {
+                                    "当前版本 ${currentVersionName.ifBlank { "未知" }}"
+                                },
+                                enabled = !isLoading && !isCheckingForUpdates,
+                                onClick = onCheckForUpdates,
+                                trailingContent = if (isCheckingForUpdates) {
+                                    {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(18.dp),
+                                            strokeWidth = 2.dp
+                                        )
+                                    }
+                                } else {
+                                    null
+                                }
                             )
                             HorizontalDivider()
                             SettingsItem(
@@ -145,7 +160,7 @@ fun ProfileScreen(
                     }
                 }
 
-                item { Spacer(modifier = Modifier.height(12.dp)) }
+                item { Spacer(modifier = Modifier.height(8.dp)) }
             }
         }
     }
@@ -248,12 +263,12 @@ private fun AccountStatusCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 12.dp),
+                .padding(horizontal = 10.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Surface(
-                modifier = Modifier.size(42.dp),
+                modifier = Modifier.size(38.dp),
                 shape = RoundedCornerShape(8.dp),
                 color = if (isAuthenticated) {
                     MaterialTheme.colorScheme.primaryContainer
@@ -266,7 +281,7 @@ private fun AccountStatusCard(
                     Icon(
                         imageVector = if (isAuthenticated) Icons.Default.AccountCircle else Icons.Default.Person,
                         contentDescription = null,
-                        modifier = Modifier.size(24.dp),
+                        modifier = Modifier.size(22.dp),
                         tint = if (isAuthenticated) {
                             MaterialTheme.colorScheme.primary
                         } else {
@@ -310,7 +325,7 @@ private fun AccountStatusCard(
             Icon(
                 imageVector = if (isAuthenticated) Icons.AutoMirrored.Filled.Logout else Icons.Default.ChevronRight,
                 contentDescription = if (isAuthenticated) "退出延河课堂" else null,
-                modifier = Modifier.size(21.dp),
+                modifier = Modifier.size(20.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
@@ -331,7 +346,7 @@ private fun AiStatusCard(
 
     FreshCard(modifier = Modifier.fillMaxWidth()) {
         Column(
-            modifier = Modifier.padding(vertical = 2.dp)
+            modifier = Modifier.padding(vertical = 1.dp)
         ) {
             SettingsSwitchItem(
                 icon = Icons.Default.SmartToy,
@@ -431,12 +446,12 @@ private fun SettingsSwitchItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Surface(
-            modifier = Modifier.size(34.dp),
+            modifier = Modifier.size(32.dp),
             shape = MaterialTheme.shapes.medium,
             color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.62f),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.32f))
@@ -446,7 +461,7 @@ private fun SettingsSwitchItem(
                     icon,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(19.dp)
+                    modifier = Modifier.size(18.dp)
                 )
             }
         }
@@ -481,18 +496,19 @@ fun SettingsItem(
     title: String,
     subtitle: String,
     enabled: Boolean = true,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    trailingContent: (@Composable () -> Unit)? = null
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 11.dp),
+            .padding(horizontal = 10.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Surface(
-            modifier = Modifier.size(34.dp),
+            modifier = Modifier.size(32.dp),
             shape = MaterialTheme.shapes.medium,
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.62f),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.32f))
@@ -502,7 +518,7 @@ fun SettingsItem(
                     icon,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (enabled) 1f else 0.48f),
-                    modifier = Modifier.size(19.dp)
+                    modifier = Modifier.size(18.dp)
                 )
             }
         }
@@ -523,11 +539,20 @@ fun SettingsItem(
                 overflow = TextOverflow.Ellipsis
             )
         }
-        Icon(
-            Icons.Default.ChevronRight,
-            contentDescription = null,
-            modifier = Modifier.size(20.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (enabled) 1f else 0.48f)
-        )
+        if (trailingContent != null) {
+            Box(
+                modifier = Modifier.size(22.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                trailingContent()
+            }
+        } else {
+            Icon(
+                Icons.Default.ChevronRight,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (enabled) 1f else 0.48f)
+            )
+        }
     }
 }
