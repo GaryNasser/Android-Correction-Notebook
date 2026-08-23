@@ -14,6 +14,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -28,6 +30,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.DriveFileMove
@@ -1379,6 +1382,7 @@ private fun StudySetRow(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun KnowledgeCardDetailDialog(
     item: DueReviewItem,
@@ -1390,9 +1394,23 @@ private fun KnowledgeCardDetailDialog(
     var showAnswer by remember(item.flashcardId) { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(item.title.ifBlank { item.studySetTitle }) },
+        shape = RoundedCornerShape(8.dp),
+        title = {
+            Text(
+                text = item.title.ifBlank { item.studySetTitle },
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 460.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 item.courseName?.let {
                     Text("课程：$it", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                 }
@@ -1402,7 +1420,10 @@ private fun KnowledgeCardDetailDialog(
                     if (showAnswer) {
                         DetailBlock("答案", item.back)
                     } else {
-                        OutlinedButton(onClick = { showAnswer = true }) { Text("显示答案") }
+                        OutlinedButton(
+                            onClick = { showAnswer = true },
+                            shape = RoundedCornerShape(8.dp)
+                        ) { Text("显示答案") }
                     }
                 } else {
                     DetailBlock("解释", item.explanation.ifBlank { item.back })
@@ -1418,15 +1439,15 @@ private fun KnowledgeCardDetailDialog(
             }
         },
         confirmButton = {
-            Row {
-                TextButton(onClick = onEdit) { Text("编辑") }
-                TextButton(onClick = onReviewDone) { Text("已复习") }
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onEdit, shape = RoundedCornerShape(8.dp)) { Text("编辑") }
+                TextButton(onClick = onReviewDone, shape = RoundedCornerShape(8.dp)) { Text("已复习") }
             }
         },
         dismissButton = {
-            Row {
-                TextButton(onClick = onDelete) { Text("删除") }
-                TextButton(onClick = onDismiss) { Text("关闭") }
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onDelete, shape = RoundedCornerShape(8.dp)) { Text("删除") }
+                TextButton(onClick = onDismiss, shape = RoundedCornerShape(8.dp)) { Text("关闭") }
             }
         }
     )
@@ -1441,6 +1462,7 @@ private fun DetailBlock(label: String, content: String) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ManualKnowledgeCardDialog(
     targetStudySetTitle: String?,
@@ -1470,14 +1492,27 @@ private fun ManualKnowledgeCardDialog(
     var pitfall by rememberSaveable { mutableStateOf("") }
     var formula by rememberSaveable { mutableStateOf("") }
     var tags by rememberSaveable { mutableStateOf("") }
+    val canSave = if (type == KnowledgeCardType.QA_FLASHCARD) {
+        front.isNotBlank() && back.isNotBlank()
+    } else {
+        title.isNotBlank() && explanation.isNotBlank()
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (targetStudySetTitle == null) "新建学习集卡片" else "添加知识卡片") },
+        shape = RoundedCornerShape(8.dp),
+        title = {
+            Text(
+                text = if (targetStudySetTitle == null) "新建学习集卡片" else "添加知识卡片",
+                style = MaterialTheme.typography.titleMedium
+            )
+        },
         text = {
             LazyColumn(
-                modifier = Modifier.heightIn(max = 520.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 480.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 item {
                     Text(
@@ -1487,41 +1522,43 @@ private fun ManualKnowledgeCardDialog(
                     )
                 }
                 item {
-                    Row(
+                    FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.horizontalScroll(rememberScrollState())
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         FilterChip(
                             selected = type == KnowledgeCardType.QA_FLASHCARD,
                             onClick = { type = KnowledgeCardType.QA_FLASHCARD },
-                            label = { Text("问答闪卡") }
+                            label = { Text("问答闪卡") },
+                            shape = RoundedCornerShape(8.dp)
                         )
                         FilterChip(
                             selected = type == KnowledgeCardType.KNOWLEDGE_CARD,
                             onClick = { type = KnowledgeCardType.KNOWLEDGE_CARD },
-                            label = { Text("知识点卡") }
+                            label = { Text("知识点卡") },
+                            shape = RoundedCornerShape(8.dp)
                         )
                     }
                 }
                 if (type == KnowledgeCardType.QA_FLASHCARD) {
-                    item { OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("标题，可留空") }, singleLine = true, modifier = Modifier.fillMaxWidth()) }
+                    item { KnowledgeDialogTextField(value = title, onValueChange = { title = it }, label = "标题，可留空", singleLine = true) }
                     if (targetStudySetTitle == null) {
-                        item { OutlinedTextField(value = courseName, onValueChange = { courseName = it }, label = { Text("课程，可留空") }, singleLine = true, modifier = Modifier.fillMaxWidth()) }
+                        item { KnowledgeDialogTextField(value = courseName, onValueChange = { courseName = it }, label = "课程，可留空", singleLine = true) }
                     }
-                    item { OutlinedTextField(value = front, onValueChange = { front = it }, label = { Text("问题") }, modifier = Modifier.fillMaxWidth(), minLines = 2) }
-                    item { OutlinedTextField(value = back, onValueChange = { back = it }, label = { Text("答案") }, modifier = Modifier.fillMaxWidth(), minLines = 3) }
-                    item { OutlinedTextField(value = hint, onValueChange = { hint = it }, label = { Text("提示关键词，可留空") }, singleLine = true, modifier = Modifier.fillMaxWidth()) }
+                    item { KnowledgeDialogTextField(value = front, onValueChange = { front = it }, label = "问题", minLines = 2) }
+                    item { KnowledgeDialogTextField(value = back, onValueChange = { back = it }, label = "答案", minLines = 3) }
+                    item { KnowledgeDialogTextField(value = hint, onValueChange = { hint = it }, label = "提示关键词，可留空", singleLine = true) }
                 } else {
-                    item { OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("知识点标题") }, singleLine = true, modifier = Modifier.fillMaxWidth()) }
+                    item { KnowledgeDialogTextField(value = title, onValueChange = { title = it }, label = "知识点标题", singleLine = true) }
                     if (targetStudySetTitle == null) {
-                        item { OutlinedTextField(value = courseName, onValueChange = { courseName = it }, label = { Text("课程，可留空") }, singleLine = true, modifier = Modifier.fillMaxWidth()) }
+                        item { KnowledgeDialogTextField(value = courseName, onValueChange = { courseName = it }, label = "课程，可留空", singleLine = true) }
                     }
-                    item { OutlinedTextField(value = explanation, onValueChange = { explanation = it }, label = { Text("核心解释") }, modifier = Modifier.fillMaxWidth(), minLines = 3) }
-                    item { OutlinedTextField(value = example, onValueChange = { example = it }, label = { Text("例子，可留空") }, modifier = Modifier.fillMaxWidth(), minLines = 2) }
-                    item { OutlinedTextField(value = pitfall, onValueChange = { pitfall = it }, label = { Text("易错点，可留空") }, modifier = Modifier.fillMaxWidth(), minLines = 2) }
-                    item { OutlinedTextField(value = formula, onValueChange = { formula = it }, label = { Text("公式/术语，可留空") }, modifier = Modifier.fillMaxWidth()) }
+                    item { KnowledgeDialogTextField(value = explanation, onValueChange = { explanation = it }, label = "核心解释", minLines = 3) }
+                    item { KnowledgeDialogTextField(value = example, onValueChange = { example = it }, label = "例子，可留空", minLines = 2) }
+                    item { KnowledgeDialogTextField(value = pitfall, onValueChange = { pitfall = it }, label = "易错点，可留空", minLines = 2) }
+                    item { KnowledgeDialogTextField(value = formula, onValueChange = { formula = it }, label = "公式/术语，可留空") }
                 }
-                item { OutlinedTextField(value = tags, onValueChange = { tags = it }, label = { Text("标签，用逗号分隔") }, singleLine = true, modifier = Modifier.fillMaxWidth()) }
+                item { KnowledgeDialogTextField(value = tags, onValueChange = { tags = it }, label = "标签，用逗号分隔", singleLine = true) }
             }
         },
         confirmButton = {
@@ -1541,14 +1578,31 @@ private fun ManualKnowledgeCardDialog(
                         tags.split(",").map { it.trim() }.filter { it.isNotBlank() }
                     )
                 },
-                enabled = if (type == KnowledgeCardType.QA_FLASHCARD) {
-                    front.isNotBlank() && back.isNotBlank()
-                } else {
-                    title.isNotBlank() && explanation.isNotBlank()
-                }
+                enabled = canSave,
+                shape = RoundedCornerShape(8.dp)
             ) { Text("保存") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
+        dismissButton = { TextButton(onClick = onDismiss, shape = RoundedCornerShape(8.dp)) { Text("取消") } }
+    )
+}
+
+@Composable
+private fun KnowledgeDialogTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    modifier: Modifier = Modifier,
+    singleLine: Boolean = false,
+    minLines: Int = 1
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label) },
+        modifier = modifier.fillMaxWidth(),
+        singleLine = singleLine,
+        minLines = minLines,
+        shape = RoundedCornerShape(8.dp)
     )
 }
 
@@ -1567,26 +1621,42 @@ private fun EditKnowledgeCardDialog(
     var pitfall by rememberSaveable(item.flashcardId) { mutableStateOf(item.pitfall) }
     var formula by rememberSaveable(item.flashcardId) { mutableStateOf(item.formula) }
     var tags by rememberSaveable(item.flashcardId) { mutableStateOf(item.tags.joinToString(", ")) }
+    val canSave = if (item.type == KnowledgeCardType.QA_FLASHCARD) {
+        front.isNotBlank() && back.isNotBlank()
+    } else {
+        title.isNotBlank() && explanation.isNotBlank()
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("编辑知识卡片") },
+        shape = RoundedCornerShape(8.dp),
+        title = {
+            Text(
+                text = "编辑知识卡片",
+                style = MaterialTheme.typography.titleMedium
+            )
+        },
         text = {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.heightIn(max = 520.dp)) {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 480.dp)
+            ) {
                 item {
-                    OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("标题") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    KnowledgeDialogTextField(value = title, onValueChange = { title = it }, label = "标题", singleLine = true)
                 }
                 if (item.type == KnowledgeCardType.QA_FLASHCARD) {
-                    item { OutlinedTextField(value = front, onValueChange = { front = it }, label = { Text("问题") }, modifier = Modifier.fillMaxWidth()) }
-                    item { OutlinedTextField(value = back, onValueChange = { back = it }, label = { Text("答案") }, modifier = Modifier.fillMaxWidth()) }
-                    item { OutlinedTextField(value = hint, onValueChange = { hint = it }, label = { Text("提示") }, singleLine = true, modifier = Modifier.fillMaxWidth()) }
+                    item { KnowledgeDialogTextField(value = front, onValueChange = { front = it }, label = "问题", minLines = 2) }
+                    item { KnowledgeDialogTextField(value = back, onValueChange = { back = it }, label = "答案", minLines = 3) }
+                    item { KnowledgeDialogTextField(value = hint, onValueChange = { hint = it }, label = "提示", singleLine = true) }
                 } else {
-                    item { OutlinedTextField(value = explanation, onValueChange = { explanation = it }, label = { Text("解释") }, modifier = Modifier.fillMaxWidth()) }
-                    item { OutlinedTextField(value = example, onValueChange = { example = it }, label = { Text("例子") }, modifier = Modifier.fillMaxWidth()) }
-                    item { OutlinedTextField(value = pitfall, onValueChange = { pitfall = it }, label = { Text("易错点") }, modifier = Modifier.fillMaxWidth()) }
-                    item { OutlinedTextField(value = formula, onValueChange = { formula = it }, label = { Text("公式/术语") }, modifier = Modifier.fillMaxWidth()) }
+                    item { KnowledgeDialogTextField(value = explanation, onValueChange = { explanation = it }, label = "解释", minLines = 3) }
+                    item { KnowledgeDialogTextField(value = example, onValueChange = { example = it }, label = "例子", minLines = 2) }
+                    item { KnowledgeDialogTextField(value = pitfall, onValueChange = { pitfall = it }, label = "易错点", minLines = 2) }
+                    item { KnowledgeDialogTextField(value = formula, onValueChange = { formula = it }, label = "公式/术语") }
                 }
-                item { OutlinedTextField(value = tags, onValueChange = { tags = it }, label = { Text("标签，用逗号分隔") }, singleLine = true, modifier = Modifier.fillMaxWidth()) }
+                item { KnowledgeDialogTextField(value = tags, onValueChange = { tags = it }, label = "标签，用逗号分隔", singleLine = true) }
             }
         },
         confirmButton = {
@@ -1607,10 +1677,12 @@ private fun EditKnowledgeCardDialog(
                             updatedAt = System.currentTimeMillis()
                         )
                     )
-                }
+                },
+                enabled = canSave,
+                shape = RoundedCornerShape(8.dp)
             ) { Text("保存") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
+        dismissButton = { TextButton(onClick = onDismiss, shape = RoundedCornerShape(8.dp)) { Text("取消") } }
     )
 }
 
