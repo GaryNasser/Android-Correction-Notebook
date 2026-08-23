@@ -64,6 +64,11 @@ class ProfileViewModel @Inject constructor(
     fun setAiEnabled(enabled: Boolean) {
         viewModelScope.launch {
             aiSettingsManager.setAiEnabled(enabled)
+            _profileMessage.value = if (enabled) {
+                "AI 导师已开启"
+            } else {
+                "AI 导师已关闭"
+            }
         }
     }
 
@@ -85,6 +90,7 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch {
             providerRepository.activateProvider(providerId)
             aiSettingsManager.setAiEnabled(true)
+            _providerStatusMessage.value = "已切换默认 Provider"
         }
     }
 
@@ -93,6 +99,9 @@ class ProfileViewModel @Inject constructor(
             providerRepository.deleteProvider(providerId)
             if (providerRepository.countProviders() == 0) {
                 aiSettingsManager.setAiEnabled(false)
+                _providerStatusMessage.value = "Provider 已删除，AI 导师已关闭"
+            } else {
+                _providerStatusMessage.value = "Provider 已删除"
             }
         }
     }
