@@ -1,10 +1,17 @@
 package com.github.garynasser.correction_notebook
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -235,26 +242,62 @@ fun MainContainer(
                         appUpdateViewModel.dismissUpdateDialog()
                     }
                 },
-                title = { Text(update.updateTitle) },
-                text = {
+                shape = RoundedCornerShape(8.dp),
+                title = {
                     Text(
-                        buildString {
-                            append("最新版本 ${update.latestVersionName}\n\n")
-                            append(
-                                update.updateContent.ifBlank {
-                                    "检测到新版本，建议尽快更新以获得更稳定的使用体验。"
-                                }
+                        text = update.updateTitle,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                },
+                text = {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 320.dp)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "最新版本 ${update.latestVersionName}",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = update.updateContent.ifBlank {
+                                "检测到新版本，建议尽快更新以获得更稳定的使用体验。"
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (update.forceUpdate) {
+                            Text(
+                                text = "当前版本需要更新后继续使用。",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.error
                             )
                         }
-                    )
+                    }
                 },
                 confirmButton = {
                     TextButton(
                         onClick = {
-                            val intent = Intent(Intent.ACTION_VIEW, update.downloadUrl.toUri())
-                            context.startActivity(intent)
-                            if (!update.forceUpdate) {
-                                appUpdateViewModel.dismissUpdateDialog()
+                            val downloadUrl = update.downloadUrl.trim()
+                            if (downloadUrl.isBlank()) {
+                                appUpdateViewModel.reportDownloadFailure("没有可用的下载地址")
+                                return@TextButton
+                            }
+                            try {
+                                val intent = Intent(Intent.ACTION_VIEW, downloadUrl.toUri())
+                                context.startActivity(intent)
+                                if (!update.forceUpdate) {
+                                    appUpdateViewModel.dismissUpdateDialog()
+                                }
+                            } catch (_: ActivityNotFoundException) {
+                                appUpdateViewModel.reportDownloadFailure("没有可打开下载链接的应用")
+                            } catch (_: IllegalArgumentException) {
+                                appUpdateViewModel.reportDownloadFailure("下载链接格式不正确")
+                            } catch (_: SecurityException) {
+                                appUpdateViewModel.reportDownloadFailure("无法打开下载链接")
                             }
                         }
                     ) {
