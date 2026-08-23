@@ -4,9 +4,11 @@ import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -28,6 +30,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
@@ -62,6 +65,7 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.WeekFields
 import java.io.File
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -83,6 +87,14 @@ fun HomeScreen(
     var activeMainTab by remember { mutableStateOf(HomeMainTab.BIT) }
     val context = LocalContext.current
     val listState = rememberLazyListState()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val snackbarScope = rememberCoroutineScope()
+
+    fun showHomeMessage(message: String) {
+        snackbarScope.launch {
+            snackbarHostState.showSnackbar(message)
+        }
+    }
 
     fun jumpToPlanner(tab: PlannerTab) {
         homeViewModel.setPlannerTab(tab)
@@ -94,7 +106,13 @@ fun HomeScreen(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let {
-            saveBackgroundImageToAppStorage(context, it)?.let(homeViewModel::setBackgroundImage)
+            val savedUri = saveBackgroundImageToAppStorage(context, it)
+            if (savedUri != null) {
+                homeViewModel.setBackgroundImage(savedUri)
+                showHomeMessage("背景图已更新")
+            } else {
+                showHomeMessage("背景图保存失败，请换一张图片试试")
+            }
         }
     }
     val icsPickerLauncher = rememberLauncherForActivityResult(
@@ -154,6 +172,7 @@ fun HomeScreen(
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
@@ -315,6 +334,7 @@ fun HomeScreen(
             },
             onClearBackground = {
                 homeViewModel.setBackgroundImage(null)
+                showHomeMessage("背景图已清除")
             }
         )
     }
@@ -1979,9 +1999,21 @@ fun ModeSelectorDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("选择学习模式") },
+        shape = RoundedCornerShape(8.dp),
+        title = {
+            Text(
+                text = "选择学习模式",
+                style = MaterialTheme.typography.titleMedium
+            )
+        },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 480.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 ModeOption(
                     icon = Icons.Default.Timer,
                     title = "番茄钟",
@@ -2012,7 +2044,11 @@ fun ModeSelectorDialog(
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(120.dp)
+                            .height(104.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                        )
                     ) {
                         coil.compose.AsyncImage(
                             model = currentBackgroundUri.toUri(),
@@ -2029,7 +2065,8 @@ fun ModeSelectorDialog(
                 ) {
                     OutlinedButton(
                         onClick = onSelectBackground,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(8.dp)
                     ) {
                         Icon(Icons.Default.Image, contentDescription = null)
                         Spacer(modifier = Modifier.width(4.dp))
@@ -2040,6 +2077,7 @@ fun ModeSelectorDialog(
                         OutlinedButton(
                             onClick = onClearBackground,
                             modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp),
                             colors = ButtonDefaults.outlinedButtonColors(
                                 contentColor = MaterialTheme.colorScheme.error
                             )
@@ -2068,22 +2106,37 @@ fun ModeOption(
     description: String,
     onClick: () -> Unit
 ) {
-    Row(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.32f))
     ) {
-        Icon(icon, contentDescription = null, modifier = Modifier.size(24.dp))
-        Spacer(modifier = Modifier.width(16.dp))
-        Column {
-            Text(text = title, style = MaterialTheme.typography.titleSmall)
-            Text(
-                text = description,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                modifier = Modifier.size(22.dp),
+                tint = MaterialTheme.colorScheme.primary
             )
+            Spacer(modifier = Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }
@@ -2105,26 +2158,32 @@ fun CustomTimerDialog(
 ) {
     var hours by remember { mutableStateOf("0") }
     var minutes by remember { mutableStateOf("25") }
+    val totalMinutes = (hours.toIntOrNull() ?: 0) * 60 + (minutes.toIntOrNull() ?: 0)
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("自定义计时器") },
+        shape = RoundedCornerShape(8.dp),
+        title = {
+            Text(
+                text = "自定义计时器",
+                style = MaterialTheme.typography.titleMedium
+            )
+        },
         text = {
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
                     text = "设置您想要的学习时长",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                 )
-                Spacer(modifier = Modifier.height(24.dp))
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Hours input
                     OutlinedTextField(
                         value = hours,
                         onValueChange = { newValue ->
@@ -2133,11 +2192,12 @@ fun CustomTimerDialog(
                             }
                         },
                         label = { Text("小时") },
-                        modifier = Modifier.width(80.dp),
-                        singleLine = true
+                        modifier = Modifier.width(84.dp),
+                        singleLine = true,
+                        shape = RoundedCornerShape(8.dp),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                     )
-                    Text(":", style = MaterialTheme.typography.headlineMedium)
-                    // Minutes input
+                    Text(":", style = MaterialTheme.typography.titleLarge)
                     OutlinedTextField(
                         value = minutes,
                         onValueChange = { newValue ->
@@ -2146,21 +2206,20 @@ fun CustomTimerDialog(
                             }
                         },
                         label = { Text("分钟") },
-                        modifier = Modifier.width(80.dp),
-                        singleLine = true
+                        modifier = Modifier.width(84.dp),
+                        singleLine = true,
+                        shape = RoundedCornerShape(8.dp),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                     )
                 }
-                Spacer(modifier = Modifier.height(16.dp))
-                // Quick presets
                 Text(
                     text = "快速选择",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                 )
-                Spacer(modifier = Modifier.height(8.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     listOf(15, 25, 45, 60).forEach { preset ->
                         FilterChip(
@@ -2170,7 +2229,8 @@ fun CustomTimerDialog(
                                 minutes = (preset % 60).toString()
                             },
                             label = { Text("${preset}m") },
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp)
                         )
                     }
                 }
@@ -2179,12 +2239,12 @@ fun CustomTimerDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    val totalMinutes = (hours.toIntOrNull() ?: 0) * 60 + (minutes.toIntOrNull() ?: 0)
                     if (totalMinutes > 0) {
                         onConfirm(totalMinutes)
                     }
                 },
-                enabled = ((hours.toIntOrNull() ?: 0) * 60 + (minutes.toIntOrNull() ?: 0)) > 0
+                enabled = totalMinutes > 0,
+                shape = RoundedCornerShape(8.dp)
             ) {
                 Text("开始")
             }
