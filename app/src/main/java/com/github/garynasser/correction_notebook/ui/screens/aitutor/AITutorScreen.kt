@@ -1115,7 +1115,7 @@ private fun ErrorBanner(message: String, onDismiss: () -> Unit) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun ProviderDialog(
     uiState: AITutorUiState,
@@ -1152,9 +1152,21 @@ fun ProviderDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("AI Provider 配置") },
+        shape = RoundedCornerShape(8.dp),
+        title = {
+            Text(
+                text = "AI Provider 配置",
+                style = MaterialTheme.typography.titleMedium
+            )
+        },
         text = {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 520.dp),
+                contentPadding = PaddingValues(vertical = 2.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 item {
                     ExposedDropdownMenuBox(
                         expanded = presetExpanded,
@@ -1288,32 +1300,35 @@ fun ProviderDialog(
                     }
                 }
                 item {
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-	                        Button(
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
                             onClick = {
                                 onClearProviderStatus()
                                 fetchedModelsScopeKey = formScopeKey
                                 onFetchModels(form)
                             },
-	                            enabled = !uiState.isProviderBusy,
-	                            modifier = Modifier.weight(1f),
-	                            shape = RoundedCornerShape(8.dp)
-	                        ) {
+                            enabled = !uiState.isProviderBusy,
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
                             if (uiState.isProviderBusy) {
                                 CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                             } else {
                                 Text("获取模型")
                             }
                         }
-	                        Button(
+                        Button(
                             onClick = {
                                 onClearProviderStatus()
                                 onTestProvider(form)
                             },
-	                            enabled = !uiState.isProviderBusy,
-	                            modifier = Modifier.weight(1f),
-	                            shape = RoundedCornerShape(8.dp)
-	                        ) {
+                            enabled = !uiState.isProviderBusy,
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
                             Text("测试连接")
                         }
                     }
@@ -1401,21 +1416,63 @@ fun ProviderDialog(
                         HorizontalDivider()
                         Text("已保存 Provider", style = MaterialTheme.typography.titleSmall)
                     }
-                    items(uiState.providers) { provider ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(provider.name, fontWeight = FontWeight.Medium)
+                    items(uiState.providers, key = { it.id }) { provider ->
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.48f),
+                            border = BorderStroke(
+                                1.dp,
+                                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.32f)
+                            )
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(10.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = provider.name,
+                                        modifier = Modifier.weight(1f),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    if (provider.isActive) {
+                                        Text(
+                                            text = "使用中",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
                                 Text(
-                                    "${provider.type.displayName()} · ${provider.defaultModel}",
-                                    style = MaterialTheme.typography.bodySmall
+                                    text = "${provider.type.displayName()} · ${provider.defaultModel}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
                                 )
-                            }
-                            TextButton(onClick = { updateForm(provider.toForm()) }) { Text("编辑") }
-                            TextButton(onClick = { onActivate(provider.id) }) {
-                                Text(if (provider.isActive) "已启用" else "启用")
-                            }
-                            IconButton(onClick = { providerToDelete = provider }) {
-                                Icon(Icons.Default.Delete, contentDescription = "删除")
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    TextButton(onClick = { updateForm(provider.toForm()) }) { Text("编辑") }
+                                    TextButton(
+                                        onClick = { onActivate(provider.id) },
+                                        enabled = !provider.isActive
+                                    ) {
+                                        Text(if (provider.isActive) "已启用" else "启用")
+                                    }
+                                    TextButton(onClick = { providerToDelete = provider }) {
+                                        Text("删除")
+                                    }
+                                }
                             }
                         }
                     }

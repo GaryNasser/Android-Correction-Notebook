@@ -40,16 +40,25 @@ fun ProfileScreen(
     val isProviderBusy by viewModel.isProviderBusy.collectAsStateWithLifecycle()
     val providerStatusMessage by viewModel.providerStatusMessage.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
+    val profileMessage by viewModel.profileMessage.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     var showLogoutDialog by remember { mutableStateOf(false) }
     var showFeedbackDialog by remember { mutableStateOf(false) }
     var showAiSettingsDialog by remember { mutableStateOf(false) }
 
+    LaunchedEffect(profileMessage) {
+        val message = profileMessage ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(message)
+        viewModel.consumeProfileMessage()
+    }
+
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("个人中心") },
+                title = { Text("设置") },
                 windowInsets = WindowInsets(0, 0, 0, 0),
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0.92f),
@@ -66,140 +75,136 @@ fun ProfileScreen(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-            // 用户信息卡片
-            item {
-                FreshCard(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            if (authState is AuthState.Unauthenticated) {
-                                onNavigateToLogin()
-                            } else {
-                                showLogoutDialog = true
-                            }
-                        }
-                ) {
-                    Row(
+                // 用户信息卡片
+                item {
+                    FreshCard(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .clickable(enabled = !isLoading) {
+                                if (authState is AuthState.Unauthenticated) {
+                                    onNavigateToLogin()
+                                } else {
+                                    showLogoutDialog = true
+                                }
+                            }
                     ) {
-                        Surface(
-                            modifier = Modifier.size(44.dp),
-                            shape = MaterialTheme.shapes.medium,
-                            color = if (authState is AuthState.Authenticated)
-                                MaterialTheme.colorScheme.primaryContainer
-                            else
-                                MaterialTheme.colorScheme.surfaceVariant
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    if (authState is AuthState.Authenticated)
-                                        Icons.Default.AccountCircle
+                            Surface(
+                                modifier = Modifier.size(40.dp),
+                                shape = MaterialTheme.shapes.medium,
+                                color = if (authState is AuthState.Authenticated)
+                                    MaterialTheme.colorScheme.primaryContainer
+                                else
+                                    MaterialTheme.colorScheme.surfaceVariant
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        if (authState is AuthState.Authenticated)
+                                            Icons.Default.AccountCircle
+                                        else
+                                            Icons.Default.Person,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(24.dp),
+                                        tint = if (authState is AuthState.Authenticated)
+                                            MaterialTheme.colorScheme.onPrimaryContainer
+                                        else
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.width(12.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = if (authState is AuthState.Authenticated) "延河课堂已登录" else "延河课堂未登录",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = if (authState is AuthState.Authenticated)
+                                        "点击退出延河课堂账号"
                                     else
-                                        Icons.Default.Person,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(28.dp),
-                                    tint = if (authState is AuthState.Authenticated)
-                                        MaterialTheme.colorScheme.onPrimaryContainer
-                                    else
-                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                        "点击登录北理工统一认证",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                                 )
                             }
-                        }
 
-                        Spacer(modifier = Modifier.width(12.dp))
-
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = if (authState is AuthState.Authenticated) "延河课堂已登录" else "延河课堂未登录",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = if (authState is AuthState.Authenticated)
-                                    "点击退出延河课堂账号"
-                                else
-                                    "点击登录北理工统一认证",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                            )
-                        }
-
-                        if (authState is AuthState.Authenticated) {
-                            Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "退出延河课堂")
-                        } else {
-                            Icon(Icons.Default.ChevronRight, contentDescription = null)
-                        }
-                    }
-                }
-            }
-
-            item { Spacer(modifier = Modifier.height(2.dp)) }
-
-            // AI 功能开关
-            item {
-                FreshCard(
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    SettingsSwitchItem(
-                        icon = Icons.Default.SmartToy,
-                        title = "AI导师功能",
-                        subtitle = if (aiEnabled) {
-                            activeProvider?.let { "已启用 - ${it.defaultModel}" } ?: "已启用 - 请配置 Provider"
-                        } else {
-                            "已关闭"
-                        },
-                        checked = aiEnabled,
-                        onCheckedChange = { enabled ->
-                            if (enabled) {
-                                showAiSettingsDialog = true
+                            if (authState is AuthState.Authenticated) {
+                                Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "退出延河课堂")
                             } else {
-                                viewModel.setAiEnabled(false)
+                                Icon(Icons.Default.ChevronRight, contentDescription = null)
                             }
                         }
-                    )
+                    }
                 }
-            }
 
-            item { Spacer(modifier = Modifier.height(2.dp)) }
-
-            // 设置列表
-            item {
-                FreshCard(
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column {
-                        SettingsItem(
-                            icon = Icons.Default.Key,
-                            title = "API配置",
-                            subtitle = activeProvider?.let { "${it.name} · ${it.defaultModel}" } ?: "设置 AI Provider、模型和接口密钥",
-                            onClick = { showAiSettingsDialog = true }
-                        )
-                        HorizontalDivider()
-                        SettingsItem(
-                            icon = Icons.Default.SystemUpdate,
-                            title = "检查更新",
-                            subtitle = "当前版本 $currentVersionName",
-                            onClick = onCheckForUpdates
-                        )
-                        HorizontalDivider()
-                        SettingsItem(
-                            icon = Icons.AutoMirrored.Filled.Help,
-                            title = "帮助与反馈",
-                            subtitle = "常见问题、联系客服",
-                            onClick = { showFeedbackDialog = true }
+                // AI 功能开关
+                item {
+                    FreshCard(
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        SettingsSwitchItem(
+                            icon = Icons.Default.SmartToy,
+                            title = "AI导师功能",
+                            subtitle = if (aiEnabled) {
+                                activeProvider?.let { "已启用 - ${it.defaultModel}" } ?: "已启用 - 请配置 Provider"
+                            } else {
+                                "已关闭"
+                            },
+                            checked = aiEnabled,
+                            onCheckedChange = { enabled ->
+                                if (enabled) {
+                                    showAiSettingsDialog = true
+                                } else {
+                                    viewModel.setAiEnabled(false)
+                                }
+                            }
                         )
                     }
                 }
-            }
 
-            item { Spacer(modifier = Modifier.height(24.dp)) }
-        }
+                // 设置列表
+                item {
+                    FreshCard(
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column {
+                            SettingsItem(
+                                icon = Icons.Default.Key,
+                                title = "API配置",
+                                subtitle = activeProvider?.let { "${it.name} · ${it.defaultModel}" } ?: "设置 AI Provider、模型和接口密钥",
+                                onClick = { showAiSettingsDialog = true }
+                            )
+                            HorizontalDivider()
+                            SettingsItem(
+                                icon = Icons.Default.SystemUpdate,
+                                title = "检查更新",
+                                subtitle = "当前版本 $currentVersionName",
+                                onClick = onCheckForUpdates
+                            )
+                            HorizontalDivider()
+                            SettingsItem(
+                                icon = Icons.AutoMirrored.Filled.Help,
+                                title = "帮助与反馈",
+                                subtitle = "常见问题、联系客服",
+                                onClick = { showFeedbackDialog = true }
+                            )
+                        }
+                    }
+                }
+
+                item { Spacer(modifier = Modifier.height(12.dp)) }
+            }
         }
     }
 
@@ -229,6 +234,7 @@ fun ProfileScreen(
     if (showLogoutDialog) {
         AlertDialog(
             onDismissRequest = { showLogoutDialog = false },
+            shape = MaterialTheme.shapes.extraSmall,
             title = { Text("退出延河课堂") },
             text = { Text("确定要清除当前延河课堂登录吗？") },
             confirmButton = {
@@ -236,7 +242,8 @@ fun ProfileScreen(
                     onClick = {
                         viewModel.logout()
                         showLogoutDialog = false
-                    }
+                    },
+                    enabled = !isLoading
                 ) {
                     Text("确定")
                 }
@@ -253,14 +260,19 @@ fun ProfileScreen(
     if (showFeedbackDialog) {
         AlertDialog(
             onDismissRequest = { showFeedbackDialog = false },
+            shape = MaterialTheme.shapes.extraSmall,
             title = { Text("帮助与反馈") },
             text = {
-                Column {
-                    Text("如有bug或功能建议，请联系开发者邮箱：")
-                    Spacer(modifier = Modifier.height(8.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "如有 bug 或功能建议，请联系开发者邮箱：",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                     Text(
                         text = "fangmierui@gmail.com",
-                        style = MaterialTheme.typography.bodyLarge,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.primary
                     )
                 }

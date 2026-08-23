@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -56,6 +57,9 @@ class ProfileViewModel @Inject constructor(
 
     private val _fetchedModels = MutableStateFlow<List<AiModelOption>>(emptyList())
     val fetchedModels: StateFlow<List<AiModelOption>> = _fetchedModels.asStateFlow()
+
+    private val _profileMessage = MutableStateFlow<String?>(null)
+    val profileMessage: StateFlow<String?> = _profileMessage.asStateFlow()
 
     fun setAiEnabled(enabled: Boolean) {
         viewModelScope.launch {
@@ -141,15 +145,25 @@ class ProfileViewModel @Inject constructor(
     }
 
     fun logout() {
+        if (_isLoading.value) return
         viewModelScope.launch {
-            _isLoading.value = true
+            _isLoading.update { true }
             try {
                 yanheRepository.clearYanheSession()
                 authStateManager.updateState(AuthState.Unauthenticated)
+                _profileMessage.value = "已退出延河课堂"
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                _profileMessage.value = "退出失败，请稍后再试"
             } finally {
-                _isLoading.value = false
+                _isLoading.update { false }
             }
         }
+    }
+
+    fun consumeProfileMessage() {
+        _profileMessage.value = null
     }
 
 }
