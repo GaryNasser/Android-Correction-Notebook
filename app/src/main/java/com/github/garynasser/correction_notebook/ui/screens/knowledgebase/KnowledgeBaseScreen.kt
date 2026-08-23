@@ -98,6 +98,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -618,6 +619,7 @@ fun KnowledgeBaseScreen(
                             fileToExport = it
                             exportLauncher.launch(it.displayName)
                         },
+                        onCreateFolder = { showCreateFolderDialog = true },
                         onImportLocalFile = { importLauncher.launch(arrayOf("*/*")) },
                         onFileShare = {
                             shareFile(
@@ -713,6 +715,7 @@ private fun FileManagementPage(
     onFileMove: (KnowledgeBaseFileSummary) -> Unit,
     onFileContext: (KnowledgeBaseFileSummary) -> Unit,
     onFileExport: (KnowledgeBaseFileSummary) -> Unit,
+    onCreateFolder: () -> Unit,
     onImportLocalFile: () -> Unit,
     onFileShare: (KnowledgeBaseFileSummary) -> Unit
 ) {
@@ -840,6 +843,16 @@ private fun FileManagementPage(
             }
         }
 
+        if (uiState.isImportingLocalFile || uiState.isLocalBusy) {
+            KnowledgeBaseStatusStrip(
+                text = if (uiState.isImportingLocalFile) {
+                    "正在导入资料，完成后会自动出现在当前目录"
+                } else {
+                    "正在更新知识库内容"
+                }
+            )
+        }
+
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -851,9 +864,23 @@ private fun FileManagementPage(
 
             if (uiState.folderContent.folders.isEmpty() && files.isEmpty()) {
                 item {
+                    val isSearching = uiState.localSearchQuery.isNotBlank()
                     EmptyStateCard(
-                        title = "目录是空的",
-                        description = "先创建文件夹，或者去 BITShare 页把资料下载进来。"
+                        title = if (isSearching) "没有匹配结果" else "目录是空的",
+                        description = if (isSearching) {
+                            "当前目录里没有匹配“${uiState.localSearchQuery}”的文件或文件夹。"
+                        } else {
+                            "导入本地资料，或先创建文件夹整理课程文件。"
+                        },
+                        icon = if (isSearching) Icons.Default.Search else Icons.Default.Folder,
+                        primaryActionText = if (isSearching) "清空搜索" else "导入资料",
+                        onPrimaryAction = if (isSearching) {
+                            { onLocalSearchChanged("") }
+                        } else {
+                            onImportLocalFile
+                        },
+                        secondaryActionText = if (isSearching) null else "新建文件夹",
+                        onSecondaryAction = if (isSearching) null else onCreateFolder
                     )
                 }
             }
@@ -2780,15 +2807,51 @@ private fun LoadingState(message: String) {
 }
 
 @Composable
+private fun KnowledgeBaseStatusStrip(text: String) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.48f)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(18.dp),
+                strokeWidth = 2.dp
+            )
+            Text(
+                text = text,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalLayoutApi::class)
 private fun EmptyStateCard(
     title: String,
-    description: String
+    description: String,
+    icon: ImageVector? = null,
+    primaryActionText: String? = null,
+    onPrimaryAction: (() -> Unit)? = null,
+    secondaryActionText: String? = null,
+    onSecondaryAction: (() -> Unit)? = null
 ) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .defaultMinSize(minHeight = 240.dp)
-            .padding(24.dp),
+            .defaultMinSize(minHeight = 220.dp)
+            .padding(horizontal = 18.dp, vertical = 16.dp),
         contentAlignment = Alignment.Center
     ) {
         Card(
@@ -2803,10 +2866,39 @@ private fun EmptyStateCard(
             ),
             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
         ) {
-            Column(modifier = Modifier.padding(20.dp)) {
+            Column(
+                modifier = Modifier.padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                icon?.let {
+                    Icon(
+                        imageVector = it,
+                        contentDescription = null,
+                        modifier = Modifier.size(28.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
                 Text(text = title, style = MaterialTheme.typography.titleMedium)
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(text = description, style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (primaryActionText != null && onPrimaryAction != null) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(onClick = onPrimaryAction) {
+                            Text(primaryActionText)
+                        }
+                        if (secondaryActionText != null && onSecondaryAction != null) {
+                            OutlinedButton(onClick = onSecondaryAction) {
+                                Text(secondaryActionText)
+                            }
+                        }
+                    }
+                }
             }
         }
     }
