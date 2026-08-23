@@ -16,6 +16,7 @@ import javax.inject.Inject
 
 data class ArticleDetailUiState(
     val isLoading: Boolean = true,
+    val isRefreshing: Boolean = false,
     val articleDetail: ArticleDetail? = null,
     val errorMessage: String? = null
 )
@@ -41,8 +42,10 @@ class ArticleDetailViewModel @Inject constructor(
 
     private fun loadArticleDetail(forceRefresh: Boolean = false) {
         viewModelScope.launch {
+            val currentDetail = _uiState.value.articleDetail
             _uiState.value = _uiState.value.copy(
-                isLoading = true,
+                isLoading = currentDetail == null,
+                isRefreshing = currentDetail != null,
                 errorMessage = null
             )
             runCatching {
@@ -53,11 +56,14 @@ class ArticleDetailViewModel @Inject constructor(
             }.onSuccess { detail ->
                 _uiState.value = ArticleDetailUiState(
                     isLoading = false,
+                    isRefreshing = false,
                     articleDetail = detail
                 )
             }.onFailure { throwable ->
                 _uiState.value = ArticleDetailUiState(
                     isLoading = false,
+                    isRefreshing = false,
+                    articleDetail = currentDetail,
                     errorMessage = throwable.message?.takeIf { it.isNotBlank() } ?: "文章加载失败"
                 )
             }

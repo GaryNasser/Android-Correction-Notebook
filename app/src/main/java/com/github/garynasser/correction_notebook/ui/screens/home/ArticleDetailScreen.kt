@@ -21,9 +21,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -34,6 +36,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -158,11 +161,29 @@ fun ArticleDetailScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(innerPadding),
-                    contentPadding = PaddingValues(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    contentPadding = PaddingValues(horizontal = 18.dp, vertical = 14.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
+                    if (uiState.isRefreshing) {
+                        item {
+                            ArticleInlineStatus(
+                                message = "正在刷新正文...",
+                                isLoading = true
+                            )
+                        }
+                    } else if (uiState.errorMessage != null) {
+                        item {
+                            ArticleInlineStatus(
+                                message = uiState.errorMessage ?: "刷新失败，请稍后再试",
+                                isError = true,
+                                actionLabel = "重试",
+                                onAction = { viewModel.refresh() }
+                            )
+                        }
+                    }
+
                     item {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
                             Text(
                                 text = article.title,
                                 style = MaterialTheme.typography.headlineSmall,
@@ -171,7 +192,7 @@ fun ArticleDetailScreen(
                             Text(
                                 text = "${article.source} · ${formatArticleDate(article.publishTime)}",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f)
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -188,10 +209,11 @@ fun ArticleDetailScreen(
 
                             is ArticleContentBlock.Image -> {
                                 Card(
-                                    shape = RoundedCornerShape(20.dp),
+                                    shape = RoundedCornerShape(8.dp),
                                     colors = CardDefaults.cardColors(
                                         containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                                    )
+                                    ),
+                                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                                 ) {
                                     Column {
                                         AsyncImage(
@@ -205,9 +227,9 @@ fun ArticleDetailScreen(
                                         if (block.caption.isNotBlank()) {
                                             Text(
                                                 text = block.caption,
-                                                modifier = Modifier.padding(14.dp),
+                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                                                 style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         }
                                     }
@@ -219,15 +241,16 @@ fun ArticleDetailScreen(
                                     modifier = Modifier.clickable {
                                         runCatching { uriHandler.openUri(block.url) }
                                     },
-                                    shape = RoundedCornerShape(18.dp),
+                                    shape = RoundedCornerShape(8.dp),
                                     colors = CardDefaults.cardColors(
                                         containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-                                    )
+                                    ),
+                                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                                 ) {
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .padding(16.dp),
+                                            .padding(14.dp),
                                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                                         verticalAlignment = Alignment.Top
                                     ) {
@@ -249,7 +272,7 @@ fun ArticleDetailScreen(
                                                 Text(
                                                     text = block.description,
                                                     style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
                                             }
                                             Text(
@@ -270,7 +293,8 @@ fun ArticleDetailScreen(
                                 title = "正文暂不可用",
                                 description = "这篇文章暂时没有可在应用内展示的正文内容。",
                                 showOpenOriginal = !article.url.isNullOrBlank(),
-                                onOpenOriginal = ::openFallbackUrl
+                                onOpenOriginal = ::openFallbackUrl,
+                                actionLabel = "打开原文"
                             )
                         }
                     }
@@ -293,7 +317,10 @@ fun ArticleDetailScreen(
                         title = "文章加载失败",
                         description = uiState.errorMessage ?: "稍后再试，或先打开原文查看。",
                         showOpenOriginal = !uiState.articleDetail?.url.isNullOrBlank(),
-                        onOpenOriginal = ::openFallbackUrl
+                        onOpenOriginal = ::openFallbackUrl,
+                        actionLabel = "打开原文",
+                        secondaryActionLabel = "重试",
+                        onSecondaryAction = { viewModel.refresh() }
                     )
                 }
             }
@@ -306,12 +333,17 @@ private fun ArticleFallbackState(
     title: String,
     description: String,
     showOpenOriginal: Boolean,
-    onOpenOriginal: () -> Unit
+    onOpenOriginal: () -> Unit,
+    actionLabel: String = "打开原文",
+    secondaryActionLabel: String? = null,
+    onSecondaryAction: (() -> Unit)? = null
 ) {
     Card(
+        shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.52f)
-        )
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
             modifier = Modifier
@@ -338,7 +370,55 @@ private fun ArticleFallbackState(
             )
             if (showOpenOriginal) {
                 TextButton(onClick = onOpenOriginal) {
-                    Text("打开原文")
+                    Text(actionLabel)
+                }
+            }
+            if (secondaryActionLabel != null && onSecondaryAction != null) {
+                TextButton(onClick = onSecondaryAction) {
+                    Text(secondaryActionLabel)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ArticleInlineStatus(
+    message: String,
+    modifier: Modifier = Modifier,
+    isLoading: Boolean = false,
+    isError: Boolean = false,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        color = if (isError) {
+            MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.72f)
+        } else {
+            MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.48f)
+        }
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+            horizontalArrangement = Arrangement.spacedBy(9.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            when {
+                isLoading -> CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                isError -> Icon(Icons.Default.Warning, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error)
+                else -> Icon(Icons.Default.Info, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+            }
+            Text(
+                text = message,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodySmall,
+                color = if (isError) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSecondaryContainer
+            )
+            if (actionLabel != null && onAction != null) {
+                TextButton(onClick = onAction, contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)) {
+                    Text(actionLabel)
                 }
             }
         }
