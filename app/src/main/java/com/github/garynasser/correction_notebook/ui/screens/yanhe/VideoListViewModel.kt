@@ -14,6 +14,7 @@ import com.github.garynasser.correction_notebook.data.repository.VideoRepository
 import com.github.garynasser.correction_notebook.ui.navigation.VideoList
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import javax.inject.Inject
@@ -49,6 +50,9 @@ class VideoListViewModel @Inject constructor(
     var progress by mutableStateOf<CourseProgress?>(null)
         private set
 
+    private var videoListJob: Job? = null
+    private var playJob: Job? = null
+
     init {
         getVideoList(courseId)
         loadProgress()
@@ -59,7 +63,8 @@ class VideoListViewModel @Inject constructor(
     }
 
     fun getVideoList(courseId: Int) {
-        viewModelScope.launch {
+        videoListJob?.cancel()
+        videoListJob = viewModelScope.launch {
             uiState = VideoUIState.Loading
             try {
                 val results = withTimeout(20_000) {
@@ -85,7 +90,8 @@ class VideoListViewModel @Inject constructor(
     }
 
     fun playSection(section: CourseSection, preferScreen: Boolean) {
-        viewModelScope.launch {
+        if (playJob?.isActive == true) return
+        playJob = viewModelScope.launch {
             playState = PlayState.Loading
             try {
                 val playableSection = if (section.videos.any { it.mainUrl.isNotBlank() || it.vgaUrl.isNotBlank() }) {

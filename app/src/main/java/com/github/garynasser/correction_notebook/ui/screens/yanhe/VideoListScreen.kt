@@ -131,8 +131,8 @@ fun CourseVideoListScreen(
                 is VideoUIState.Success -> {
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(1),
-                        contentPadding = PaddingValues(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         item {
                             CourseProgressHeader(
@@ -183,9 +183,11 @@ fun CourseVideoListScreen(
                         }
                         items(state.videos) { video ->
                             val isCompleted = viewModel.progress?.completedSectionIds?.contains(video.id) == true
+                            val isResolvingVideo = viewModel.playState is PlayState.Loading
                             VideoCard(
                                 section = video,
                                 isCompleted = isCompleted,
+                                isResolvingVideo = isResolvingVideo,
                                 onCompletedChange = { checked ->
                                     viewModel.setSectionCompleted(video, checked)
                                 },
@@ -246,7 +248,7 @@ fun CourseVideoListScreen(
                     assistantState.actions.forEach { action ->
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(8.dp),
                             color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.45f)
                         ) {
                             Row(
@@ -321,6 +323,7 @@ fun CourseVideoListScreen(
 fun VideoCard(
     section: CourseSection,
     isCompleted: Boolean,
+    isResolvingVideo: Boolean,
     onCompletedChange: (Boolean) -> Unit,
     onAiAssistantClick: (String) -> Unit,
     onCameraPlayClick: () -> Unit,
@@ -339,9 +342,8 @@ fun VideoCard(
 
     Card(
         modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        shape = MaterialTheme.shapes.large,
+            .fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)
         ),
@@ -350,9 +352,9 @@ fun VideoCard(
     ) {
         Column(
             modifier = Modifier
-                .padding(14.dp)
+                .padding(horizontal = 11.dp, vertical = 10.dp)
                 .fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -360,7 +362,7 @@ fun VideoCard(
             ) {
                 Column(
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Text(
                         text = section.title.ifBlank { timeInfo },
@@ -377,52 +379,54 @@ fun VideoCard(
                 }
                 Checkbox(
                     checked = isCompleted,
-                    onCheckedChange = onCompletedChange
+                    onCheckedChange = onCompletedChange,
+                    modifier = Modifier.size(40.dp)
                 )
             }
 
             val canResolveVideo = section.videos.isNotEmpty() || section.id > 0
+            val canClickPlay = canResolveVideo && !isResolvingVideo
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 FilledIconButton(
                     onClick = { onAiAssistantClick(timeInfo) },
-                    modifier = Modifier.size(40.dp),
-                    shape = RoundedCornerShape(11.dp)
+                    modifier = Modifier.size(36.dp),
+                    shape = RoundedCornerShape(8.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Psychology,
                         contentDescription = "课程助手",
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(19.dp)
                     )
                 }
 
                 FilledIconButton(
                     onClick = onCameraPlayClick,
-                    enabled = canResolveVideo,
-                    modifier = Modifier.size(40.dp),
-                    shape = RoundedCornerShape(11.dp)
+                    enabled = canClickPlay,
+                    modifier = Modifier.size(36.dp),
+                    shape = RoundedCornerShape(8.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Camera,
                         contentDescription = "播放摄像头视频",
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(19.dp)
                     )
                 }
 
                 FilledIconButton(
                     onClick = onScreenPlayClick,
-                    enabled = canResolveVideo,
-                    modifier = Modifier.size(40.dp),
-                    shape = RoundedCornerShape(11.dp)
+                    enabled = canClickPlay,
+                    modifier = Modifier.size(36.dp),
+                    shape = RoundedCornerShape(8.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.PlayArrow,
                         contentDescription = "播放屏幕录像",
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(19.dp)
                     )
                 }
             }
@@ -439,14 +443,15 @@ private fun CourseProgressHeader(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
         ),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.School, contentDescription = null)
