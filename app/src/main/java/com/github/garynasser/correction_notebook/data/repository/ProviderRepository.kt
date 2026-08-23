@@ -73,7 +73,7 @@ class ProviderRepository @Inject constructor(
     }
 
     suspend fun deleteProvider(providerId: Long) {
-        dao.deleteProviderById(providerId)
+        dao.deleteProviderAndActivateFallback(providerId)
     }
 
     suspend fun countProviders(): Int = dao.countProviders()

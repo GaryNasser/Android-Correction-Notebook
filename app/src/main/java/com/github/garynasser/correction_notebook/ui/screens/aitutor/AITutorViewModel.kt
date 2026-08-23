@@ -310,7 +310,16 @@ class AITutorViewModel @Inject constructor(
     }
 
     fun deleteProvider(providerId: Long) {
-        viewModelScope.launch { providerRepository.deleteProvider(providerId) }
+        viewModelScope.launch {
+            val wasActive = providerRepository.getProviderById(providerId)?.isActive == true
+            providerRepository.deleteProvider(providerId)
+            if (wasActive) {
+                selectedSessionId.value = null
+            }
+            if (providerRepository.countProviders() == 0) {
+                aiSettingsManager.setAiEnabled(false)
+            }
+        }
     }
 
     fun saveMemory(category: String, content: String) {

@@ -91,6 +91,9 @@ class ProfileViewModel @Inject constructor(
     fun deleteProvider(providerId: Long) {
         viewModelScope.launch {
             providerRepository.deleteProvider(providerId)
+            if (providerRepository.countProviders() == 0) {
+                aiSettingsManager.setAiEnabled(false)
+            }
         }
     }
 
