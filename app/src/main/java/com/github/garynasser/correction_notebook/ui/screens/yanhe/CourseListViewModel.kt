@@ -49,7 +49,10 @@ class CourseListViewModel @Inject constructor(
     var isLoadingMore by mutableStateOf(false)
     val courses = mutableStateListOf<Course>()
     private var personalCourses: List<Course> = emptyList()
-    private var isRefreshingSchedule = false
+    var isRefreshingSchedule by mutableStateOf(false)
+        private set
+    var loadMoreErrorMessage by mutableStateOf<String?>(null)
+        private set
     private var courseLoadJob: Job? = null
 
     // UI 状态
@@ -105,10 +108,12 @@ class CourseListViewModel @Inject constructor(
             if (!isNextPage) {
                 currentPage = 1
                 isEndReached = false
+                loadMoreErrorMessage = null
                 courses.clear()
                 uiState = CourseUiState.Loading
             } else {
                 isLoadingMore = true
+                loadMoreErrorMessage = null
             }
 
             try {
@@ -133,7 +138,9 @@ class CourseListViewModel @Inject constructor(
                 throw e
             } catch (e: Exception) {
                 if (!isNextPage) {
-                    uiState = CourseUiState.Error("加载失败: ${e.message}")
+                    uiState = CourseUiState.Error("加载失败: ${e.message ?: "课程资源请求失败"}")
+                } else {
+                    loadMoreErrorMessage = "继续加载失败：${e.message ?: "请稍后再试"}"
                 }
             } finally {
                 isLoadingMore = false
@@ -154,6 +161,7 @@ class CourseListViewModel @Inject constructor(
         courseLoadJob?.cancel()
         viewModelScope.launch {
             uiState = CourseUiState.Loading
+            loadMoreErrorMessage = null
             isPersonalCoursesMode = true
             isLoadingMore = false
             isEndReached = true

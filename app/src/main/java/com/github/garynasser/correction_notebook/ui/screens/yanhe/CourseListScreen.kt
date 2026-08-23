@@ -67,16 +67,21 @@ fun CourseListScreen(
                 actions = {
                     FilledTonalButton(
                         onClick = { viewModel.refreshMySchedule() },
+                        enabled = !viewModel.isRefreshingSchedule,
                         modifier = Modifier.padding(end = 8.dp),
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                     ) {
-                        Icon(
-                            Icons.Default.CalendarMonth,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
+                        if (viewModel.isRefreshingSchedule) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(
+                                Icons.Default.CalendarMonth,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                         Spacer(Modifier.width(6.dp))
-                        Text("课表")
+                        Text(if (viewModel.isRefreshingSchedule) "同步中" else "课表")
                     }
                 }
             )
@@ -140,17 +145,69 @@ fun CourseListScreen(
                                 // 底部加载指示器
                                 if (viewModel.isLoadingMore) {
                                     item(span = { GridItemSpan(maxLineSpan) }) {
-                                        Box(
-                                            modifier = Modifier.fillMaxWidth().padding(8.dp),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                                        }
+                                        CourseListInlineStatus(message = "正在加载更多课程...", isLoading = true)
+                                    }
+                                } else if (viewModel.loadMoreErrorMessage != null) {
+                                    item(span = { GridItemSpan(maxLineSpan) }) {
+                                        CourseListInlineStatus(
+                                            message = viewModel.loadMoreErrorMessage ?: "继续加载失败",
+                                            isError = true,
+                                            actionText = "重试",
+                                            onAction = { viewModel.loadCourses(isNextPage = true) }
+                                        )
                                     }
                                 }
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CourseListInlineStatus(
+    message: String,
+    isLoading: Boolean = false,
+    isError: Boolean = false,
+    actionText: String? = null,
+    onAction: (() -> Unit)? = null
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        color = if (isError) {
+            MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.68f)
+        } else {
+            MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.45f)
+        },
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.42f))
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (isLoading) {
+                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+            } else {
+                Icon(
+                    imageVector = if (isError) Icons.Default.CloudOff else Icons.Default.Info,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                )
+            }
+            Text(
+                text = message,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodySmall,
+                color = if (isError) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSecondaryContainer
+            )
+            if (actionText != null && onAction != null) {
+                TextButton(onClick = onAction, contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)) {
+                    Text(actionText)
                 }
             }
         }
