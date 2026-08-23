@@ -2,6 +2,7 @@ package com.github.garynasser.correction_notebook
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -258,11 +259,28 @@ fun MainContainer(
                             .verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text(
-                            text = "最新版本 ${update.latestVersionName}",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.48f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.32f))
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Text(
+                                    text = "当前 ${appUpdateUiState.currentVersionName.ifBlank { "未知版本" }}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f)
+                                )
+                                Text(
+                                    text = "更新到 ${update.latestVersionName}",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                        }
                         Text(
                             text = update.updateContent.ifBlank {
                                 "检测到新版本，建议尽快更新以获得更稳定的使用体验。"
@@ -277,6 +295,21 @@ fun MainContainer(
                                 color = MaterialTheme.colorScheme.error
                             )
                         }
+                        appUpdateUiState.downloadErrorMessage?.let { message ->
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.72f),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.18f))
+                            ) {
+                                Text(
+                                    text = message,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
+                        }
                     }
                 },
                 confirmButton = {
@@ -288,7 +321,12 @@ fun MainContainer(
                                 return@TextButton
                             }
                             try {
-                                val intent = Intent(Intent.ACTION_VIEW, downloadUrl.toUri())
+                                val uri = downloadUrl.toUri()
+                                if (uri.scheme !in setOf("http", "https")) {
+                                    appUpdateViewModel.reportDownloadFailure("下载链接格式不正确")
+                                    return@TextButton
+                                }
+                                val intent = Intent(Intent.ACTION_VIEW, uri)
                                 context.startActivity(intent)
                                 if (!update.forceUpdate) {
                                     appUpdateViewModel.dismissUpdateDialog()
