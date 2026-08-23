@@ -351,6 +351,7 @@ fun KnowledgeBaseScreen(
                 }
                 showDownloadFolderPicker = false
                 pendingRemoteDownload = null
+                viewModel.dismissRemoteDetail()
             }
         )
     }
@@ -478,11 +479,14 @@ fun KnowledgeBaseScreen(
         )
     }
 
-    uiState.selectedRemoteDetail?.takeIf { !showDownloadFolderPicker && pendingRemoteDownload == null }?.let { detail ->
+    uiState.selectedRemoteDetail?.takeIf { !showDownloadFolderPicker }?.let { detail ->
         RemoteDetailDialog(
             detail = detail,
             isDownloading = uiState.activeDownloadId == detail.id,
-            onDismiss = { viewModel.dismissRemoteDetail() },
+            onDismiss = {
+                pendingRemoteDownload = null
+                viewModel.dismissRemoteDetail()
+            },
             onDownloadClick = { showDownloadFolderPicker = true }
         )
     }
@@ -678,7 +682,7 @@ fun KnowledgeBaseScreen(
                         onSearchClick = viewModel::searchRemoteResources,
                         onOpenDetail = {
                             pendingRemoteDownload = it
-                            showDownloadFolderPicker = true
+                            viewModel.loadRemoteDetail(it.id)
                         },
                         onOpenFolderDetail = viewModel::loadRemoteFolderDetail
                     )
@@ -2175,8 +2179,17 @@ private fun BitSharePage(
                 label = { Text("搜索课程资料") },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                 trailingIcon = {
-                    IconButton(onClick = onSearchClick) {
-                        Icon(Icons.Default.CloudDownload, contentDescription = "搜索")
+                    if (uiState.isRemoteSearching) {
+                        CircularProgressIndicator(
+                            modifier = Modifier
+                                .padding(end = 12.dp)
+                                .size(20.dp),
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        IconButton(onClick = onSearchClick) {
+                            Icon(Icons.Default.CloudDownload, contentDescription = "搜索")
+                        }
                     }
                 }
             )
@@ -2217,6 +2230,24 @@ private fun BitSharePage(
                     )
                 }
             }
+
+            if (uiState.isRemoteDetailLoading || uiState.isRemoteFolderLoading) {
+                KnowledgeBaseStatusStrip(
+                    text = if (uiState.isRemoteFolderLoading) {
+                        "正在打开目录信息"
+                    } else {
+                        "正在打开资料详情"
+                    }
+                )
+            }
+
+            if (uiState.remoteErrorMessage != null && uiState.remoteResults.isNotEmpty()) {
+                KnowledgeBaseStatusStrip(
+                    text = uiState.remoteErrorMessage,
+                    isLoading = false,
+                    isError = true
+                )
+            }
         }
 
         when {
@@ -2227,28 +2258,34 @@ private fun BitSharePage(
             uiState.remoteErrorMessage != null && uiState.remoteResults.isEmpty() -> {
                 EmptyStateCard(
                     title = "搜索失败",
-                    description = uiState.remoteErrorMessage
+                    description = uiState.remoteErrorMessage,
+                    icon = Icons.Default.Warning,
+                    primaryActionText = uiState.remoteQuery.takeIf { it.isNotBlank() }?.let { "重试" },
+                    onPrimaryAction = uiState.remoteQuery.takeIf { it.isNotBlank() }?.let { { onSearchClick() } }
                 )
             }
 
             uiState.remoteQuery.isBlank() -> {
                 EmptyStateCard(
                     title = "搜索公开资料",
-                    description = "⚠️ 请确保已连接 BIT 校园网（内网 WiFi 或 VPN）\n输入课程名、老师名或关键词后搜索"
+                    description = "请先连接 BIT 校园网或 VPN，再输入课程名、老师名或关键词搜索。",
+                    icon = Icons.Default.CloudDownload
                 )
             }
 
             uiState.remoteResults.isEmpty() -> {
                 EmptyStateCard(
                     title = "没有找到结果",
-                    description = "换个关键词试试，或者缩短搜索条件。"
+                    description = "换个关键词试试，或者缩短搜索条件。",
+                    icon = Icons.Default.Search
                 )
             }
 
             else -> {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(bottom = 88.dp)
                 ) {
                     items(uiState.remoteResults, key = { it.id }) { result ->
                         RemoteResultRow(
@@ -2807,28 +2844,45 @@ private fun LoadingState(message: String) {
 }
 
 @Composable
-private fun KnowledgeBaseStatusStrip(text: String) {
+private fun KnowledgeBaseStatusStrip(
+    text: String,
+    isLoading: Boolean = true,
+    isError: Boolean = false
+) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 6.dp),
         shape = RoundedCornerShape(8.dp),
-        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.48f)
+        color = if (isError) {
+            MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.58f)
+        } else {
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.48f)
+        }
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(18.dp),
-                strokeWidth = 2.dp
-            )
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    strokeWidth = 2.dp
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Default.Warning,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                )
+            }
             Text(
                 text = text,
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                color = if (isError) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
