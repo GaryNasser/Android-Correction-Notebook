@@ -22,6 +22,9 @@ interface AiProviderDao {
     @Query("SELECT * FROM ai_provider WHERE id = :providerId LIMIT 1")
     suspend fun getProviderById(providerId: Long): AiProviderEntity?
 
+    @Query("SELECT * FROM ai_provider ORDER BY updatedAt DESC, name COLLATE NOCASE ASC LIMIT 1")
+    suspend fun getLatestProvider(): AiProviderEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertProvider(provider: AiProviderEntity): Long
 
@@ -44,5 +47,16 @@ interface AiProviderDao {
     suspend fun activateProvider(providerId: Long, updatedAt: Long = System.currentTimeMillis()) {
         clearActiveProvider()
         setActiveProvider(providerId, updatedAt)
+    }
+
+    @Transaction
+    suspend fun deleteProviderAndActivateFallback(providerId: Long) {
+        val wasActive = getProviderById(providerId)?.isActive == true
+        deleteProviderById(providerId)
+        if (wasActive) {
+            getLatestProvider()?.let { fallback ->
+                activateProvider(fallback.id)
+            }
+        }
     }
 }
