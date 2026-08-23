@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.github.garynasser.correction_notebook.data.model.home.PomodoroSettings
+import kotlin.math.roundToInt
 
 @Composable
 fun PomodoroSettingsDialog(
@@ -36,14 +37,14 @@ fun PomodoroSettingsDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 420.dp)
+                    .heightIn(max = 380.dp)
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 SettingSlider(
                     label = "学习时长",
                     value = focusMinutes,
-                    onValueChange = { focusMinutes = it },
+                    onValueChange = { focusMinutes = it.roundToInt().toFloat() },
                     valueRange = 5f..60f,
                     valueDisplay = "${focusMinutes.toInt()} 分钟"
                 )
@@ -51,7 +52,7 @@ fun PomodoroSettingsDialog(
                 SettingSlider(
                     label = "短休息",
                     value = shortBreakMinutes,
-                    onValueChange = { shortBreakMinutes = it },
+                    onValueChange = { shortBreakMinutes = it.roundToInt().toFloat() },
                     valueRange = 1f..15f,
                     valueDisplay = "${shortBreakMinutes.toInt()} 分钟"
                 )
@@ -59,7 +60,7 @@ fun PomodoroSettingsDialog(
                 SettingSlider(
                     label = "长休息",
                     value = longBreakMinutes,
-                    onValueChange = { longBreakMinutes = it },
+                    onValueChange = { longBreakMinutes = it.roundToInt().toFloat() },
                     valueRange = 5f..30f,
                     valueDisplay = "${longBreakMinutes.toInt()} 分钟"
                 )
@@ -67,7 +68,7 @@ fun PomodoroSettingsDialog(
                 SettingSlider(
                     label = "循环轮数",
                     value = pomodorosBeforeLongBreak,
-                    onValueChange = { pomodorosBeforeLongBreak = it },
+                    onValueChange = { pomodorosBeforeLongBreak = it.roundToInt().toFloat() },
                     valueRange = 2f..8f,
                     valueDisplay = "${pomodorosBeforeLongBreak.toInt()} 轮"
                 )
@@ -78,10 +79,10 @@ fun PomodoroSettingsDialog(
                 onClick = {
                     onSave(
                         PomodoroSettings(
-                            focusMinutes = focusMinutes.toInt(),
-                            shortBreakMinutes = shortBreakMinutes.toInt(),
-                            longBreakMinutes = longBreakMinutes.toInt(),
-                            pomodorosBeforeLongBreak = pomodorosBeforeLongBreak.toInt()
+                            focusMinutes = focusMinutes.roundToInt(),
+                            shortBreakMinutes = shortBreakMinutes.roundToInt(),
+                            longBreakMinutes = longBreakMinutes.roundToInt(),
+                            pomodorosBeforeLongBreak = pomodorosBeforeLongBreak.roundToInt()
                         )
                     )
                 },
@@ -106,7 +107,7 @@ private fun SettingSlider(
     valueRange: ClosedFloatingPointRange<Float>,
     valueDisplay: String
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -128,6 +129,7 @@ private fun SettingSlider(
             value = value,
             onValueChange = onValueChange,
             valueRange = valueRange,
+            modifier = Modifier.height(36.dp),
             steps = (valueRange.endInclusive - valueRange.start).toInt() - 1
         )
     }

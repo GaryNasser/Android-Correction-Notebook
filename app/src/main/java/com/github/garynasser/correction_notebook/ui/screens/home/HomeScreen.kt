@@ -8,6 +8,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
@@ -30,6 +31,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -2044,7 +2046,7 @@ fun ModeSelectorDialog(
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(104.dp),
+                            .height(92.dp),
                         shape = RoundedCornerShape(8.dp),
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
@@ -2065,26 +2067,33 @@ fun ModeSelectorDialog(
                 ) {
                     OutlinedButton(
                         onClick = onSelectBackground,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp),
                         shape = RoundedCornerShape(8.dp)
                     ) {
-                        Icon(Icons.Default.Image, contentDescription = null)
+                        Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text(if (currentBackgroundUri == null) "上传背景图" else "更换背景图")
+                        Text(
+                            if (currentBackgroundUri == null) "上传背景" else "更换背景",
+                            maxLines = 1
+                        )
                     }
 
                     if (currentBackgroundUri != null) {
                         OutlinedButton(
                             onClick = onClearBackground,
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(44.dp),
                             shape = RoundedCornerShape(8.dp),
                             colors = ButtonDefaults.outlinedButtonColors(
                                 contentColor = MaterialTheme.colorScheme.error
                             )
                         ) {
-                            Icon(Icons.Default.Delete, contentDescription = null)
+                            Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("清除")
+                            Text("清除", maxLines = 1)
                         }
                     }
                 }
@@ -2158,7 +2167,21 @@ fun CustomTimerDialog(
 ) {
     var hours by remember { mutableStateOf("0") }
     var minutes by remember { mutableStateOf("25") }
-    val totalMinutes = (hours.toIntOrNull() ?: 0) * 60 + (minutes.toIntOrNull() ?: 0)
+    val parsedHours = hours.toIntOrNull() ?: 0
+    val parsedMinutes = minutes.toIntOrNull() ?: 0
+    val totalMinutes = parsedHours * 60 + parsedMinutes
+    val isValidDuration = totalMinutes in 1..720
+    val durationLabel = when {
+        totalMinutes <= 0 -> "至少设置 1 分钟"
+        totalMinutes > 720 -> "最长支持 12 小时"
+        parsedHours > 0 -> "将专注 ${parsedHours} 小时 ${parsedMinutes} 分钟"
+        else -> "将专注 ${parsedMinutes} 分钟"
+    }
+    val confirmSelection = {
+        if (isValidDuration) {
+            onConfirm(totalMinutes)
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -2173,7 +2196,7 @@ fun CustomTimerDialog(
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
                     text = "设置您想要的学习时长",
@@ -2188,30 +2211,49 @@ fun CustomTimerDialog(
                         value = hours,
                         onValueChange = { newValue ->
                             if (newValue.isEmpty() || newValue.all { it.isDigit() }) {
-                                hours = newValue.take(2)
+                                hours = newValue.take(2).trimStart('0').ifEmpty { "0" }
                             }
                         },
                         label = { Text("小时") },
                         modifier = Modifier.width(84.dp),
                         singleLine = true,
                         shape = RoundedCornerShape(8.dp),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        supportingText = null,
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Number,
+                            imeAction = ImeAction.Next
+                        )
                     )
                     Text(":", style = MaterialTheme.typography.titleLarge)
                     OutlinedTextField(
                         value = minutes,
                         onValueChange = { newValue ->
                             if (newValue.isEmpty() || (newValue.all { it.isDigit() } && (newValue.toIntOrNull() ?: 0) <= 59)) {
-                                minutes = newValue.take(2)
+                                minutes = newValue.take(2).trimStart('0').ifEmpty { "0" }
                             }
                         },
                         label = { Text("分钟") },
                         modifier = Modifier.width(84.dp),
                         singleLine = true,
                         shape = RoundedCornerShape(8.dp),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        supportingText = null,
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Number,
+                            imeAction = ImeAction.Done
+                        ),
+                        keyboardActions = KeyboardActions(onDone = { confirmSelection() })
                     )
                 }
+                Text(
+                    text = durationLabel,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (isValidDuration) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.error
+                    },
+                    textAlign = TextAlign.Center
+                )
                 Text(
                     text = "快速选择",
                     style = MaterialTheme.typography.labelMedium,
@@ -2238,12 +2280,8 @@ fun CustomTimerDialog(
         },
         confirmButton = {
             Button(
-                onClick = {
-                    if (totalMinutes > 0) {
-                        onConfirm(totalMinutes)
-                    }
-                },
-                enabled = totalMinutes > 0,
+                onClick = confirmSelection,
+                enabled = isValidDuration,
                 shape = RoundedCornerShape(8.dp)
             ) {
                 Text("开始")
@@ -2266,11 +2304,12 @@ fun SettingsDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("沉浸模式设置") },
+        shape = RoundedCornerShape(8.dp),
+        title = { Text("沉浸模式设置", style = MaterialTheme.typography.titleMedium) },
         text = {
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
                     text = "背景图片",
@@ -2282,7 +2321,11 @@ fun SettingsDialog(
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(120.dp)
+                            .height(92.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                        )
                     ) {
                         coil.compose.AsyncImage(
                             model = currentBackgroundUri.toUri(),
@@ -2300,24 +2343,30 @@ fun SettingsDialog(
                 ) {
                     OutlinedButton(
                         onClick = onSelectImage,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp),
+                        shape = RoundedCornerShape(8.dp)
                     ) {
-                        Icon(Icons.Default.Image, contentDescription = null)
+                        Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("选择图片")
+                        Text("选择图片", maxLines = 1)
                     }
 
                     if (currentBackgroundUri != null) {
                         OutlinedButton(
                             onClick = onClearImage,
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(44.dp),
+                            shape = RoundedCornerShape(8.dp),
                             colors = ButtonDefaults.outlinedButtonColors(
                                 contentColor = MaterialTheme.colorScheme.error
                             )
                         ) {
-                            Icon(Icons.Default.Delete, contentDescription = null)
+                            Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("清除")
+                            Text("清除", maxLines = 1)
                         }
                     }
                 }

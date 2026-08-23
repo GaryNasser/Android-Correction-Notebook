@@ -387,23 +387,23 @@ private fun ImmersiveMoreSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = MaterialTheme.colorScheme.surface,
-        dragHandle = null,
+        dragHandle = { BottomSheetDefaults.DragHandle() },
         sheetMaxWidth = 640.dp
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+                .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Text("沉浸模式选项", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            Text("沉浸模式选项", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("提醒声音", style = MaterialTheme.typography.bodyLarge)
+                Text("提醒声音", style = MaterialTheme.typography.bodyMedium)
                 Switch(checked = soundEnabled, onCheckedChange = { onSoundToggle() })
             }
             Row(
@@ -411,20 +411,26 @@ private fun ImmersiveMoreSheet(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("震动提醒", style = MaterialTheme.typography.bodyLarge)
+                Text("震动提醒", style = MaterialTheme.typography.bodyMedium)
                 Switch(checked = vibrationEnabled, onCheckedChange = { onVibrationToggle() })
             }
 
             if (isPomodoroMode) {
-                OutlinedButton(onClick = onOpenPomodoroSettings, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Default.Settings, contentDescription = null)
+                OutlinedButton(
+                    onClick = onOpenPomodoroSettings,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp),
+                    shape = CircleShape
+                ) {
+                    Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("番茄钟设置")
                 }
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("白噪音", style = MaterialTheme.typography.titleMedium)
+                Text("白噪音", style = MaterialTheme.typography.titleSmall)
                 WhiteNoiseSelector(
                     selectedNoise = selectedNoise,
                     onNoiseSelect = onNoiseSelect,
@@ -436,7 +442,7 @@ private fun ImmersiveMoreSheet(
                 )
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(4.dp))
         }
     }
 }
@@ -508,79 +514,87 @@ private fun BottomControls(
     onPlayPause: () -> Unit,
     onStop: () -> Unit
 ) {
-    val sideButtonWidth = 104.dp
-    val playButtonSize = 88.dp
+    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+        val compact = maxWidth < 360.dp
+        val sideButtonWidth = if (compact) 72.dp else 92.dp
+        val playButtonSize = if (compact) 76.dp else 84.dp
+        val playIconSize = if (compact) 30.dp else 34.dp
 
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        when (timerState) {
-            is TimerState.Pomodoro -> SecondaryControlButton(
-                modifier = Modifier.width(sideButtonWidth),
-                onClick = onSkip,
-                icon = Icons.Default.SkipNext,
-                label = "跳过"
-            )
-            is TimerState.Countdown,
-            is TimerState.Stopwatch,
-            is TimerState.CountdownFinished,
-            is TimerState.StopwatchFinished -> SecondaryControlButton(
-                modifier = Modifier.width(sideButtonWidth),
-                onClick = onReset,
-                icon = Icons.Default.Refresh,
-                label = "重置"
-            )
-            TimerState.Idle -> Spacer(modifier = Modifier.width(sideButtonWidth))
-        }
-
-        IconButton(
-            onClick = onPlayPause,
-            enabled = timerState !is TimerState.Idle,
-            modifier = Modifier
-                .size(playButtonSize)
-                .clip(CircleShape)
-                .background(
-                    if (timerState is TimerState.Idle) {
-                        Color.White.copy(alpha = 0.22f)
-                    } else {
-                        Color.White
-                    }
-                )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = when (timerState) {
-                    TimerState.Idle -> Icons.Default.PlayArrow
-                    is TimerState.Pomodoro -> if (timerState.state.isRunning) Icons.Default.Pause else Icons.Default.PlayArrow
-                    is TimerState.Countdown -> if (timerState.isRunning) Icons.Default.Pause else Icons.Default.PlayArrow
-                    is TimerState.Stopwatch -> if (timerState.isRunning) Icons.Default.Pause else Icons.Default.PlayArrow
-                    is TimerState.CountdownFinished,
-                    is TimerState.StopwatchFinished -> Icons.Default.Refresh
-                },
-                contentDescription = "播放/暂停",
-                tint = Color(0xFF006781),
-                modifier = Modifier.size(36.dp)
-            )
-        }
+            when (timerState) {
+                is TimerState.Pomodoro -> SecondaryControlButton(
+                    modifier = Modifier.width(sideButtonWidth),
+                    onClick = onSkip,
+                    icon = Icons.Default.SkipNext,
+                    label = "跳过",
+                    compact = compact
+                )
+                is TimerState.Countdown,
+                is TimerState.Stopwatch,
+                is TimerState.CountdownFinished,
+                is TimerState.StopwatchFinished -> SecondaryControlButton(
+                    modifier = Modifier.width(sideButtonWidth),
+                    onClick = onReset,
+                    icon = Icons.Default.Refresh,
+                    label = "重置",
+                    compact = compact
+                )
+                TimerState.Idle -> Spacer(modifier = Modifier.width(sideButtonWidth))
+            }
 
-        when (timerState) {
-            is TimerState.Pomodoro,
-            is TimerState.Countdown,
-            is TimerState.Stopwatch -> SecondaryControlButton(
-                modifier = Modifier.width(sideButtonWidth),
-                onClick = onStop,
-                icon = Icons.Default.Stop,
-                label = "结束"
-            )
-            is TimerState.CountdownFinished,
-            is TimerState.StopwatchFinished -> SecondaryControlButton(
-                modifier = Modifier.width(sideButtonWidth),
-                onClick = onReset,
-                icon = Icons.Default.Refresh,
-                label = "重置"
-            )
-            TimerState.Idle -> Spacer(modifier = Modifier.width(sideButtonWidth))
+            IconButton(
+                onClick = onPlayPause,
+                enabled = timerState !is TimerState.Idle,
+                modifier = Modifier
+                    .size(playButtonSize)
+                    .clip(CircleShape)
+                    .background(
+                        if (timerState is TimerState.Idle) {
+                            Color.White.copy(alpha = 0.22f)
+                        } else {
+                            Color.White
+                        }
+                    )
+            ) {
+                Icon(
+                    imageVector = when (timerState) {
+                        TimerState.Idle -> Icons.Default.PlayArrow
+                        is TimerState.Pomodoro -> if (timerState.state.isRunning) Icons.Default.Pause else Icons.Default.PlayArrow
+                        is TimerState.Countdown -> if (timerState.isRunning) Icons.Default.Pause else Icons.Default.PlayArrow
+                        is TimerState.Stopwatch -> if (timerState.isRunning) Icons.Default.Pause else Icons.Default.PlayArrow
+                        is TimerState.CountdownFinished,
+                        is TimerState.StopwatchFinished -> Icons.Default.Refresh
+                    },
+                    contentDescription = "播放/暂停",
+                    tint = Color(0xFF006781),
+                    modifier = Modifier.size(playIconSize)
+                )
+            }
+
+            when (timerState) {
+                is TimerState.Pomodoro,
+                is TimerState.Countdown,
+                is TimerState.Stopwatch -> SecondaryControlButton(
+                    modifier = Modifier.width(sideButtonWidth),
+                    onClick = onStop,
+                    icon = Icons.Default.Stop,
+                    label = "结束",
+                    compact = compact
+                )
+                is TimerState.CountdownFinished,
+                is TimerState.StopwatchFinished -> SecondaryControlButton(
+                    modifier = Modifier.width(sideButtonWidth),
+                    onClick = onReset,
+                    icon = Icons.Default.Refresh,
+                    label = "重置",
+                    compact = compact
+                )
+                TimerState.Idle -> Spacer(modifier = Modifier.width(sideButtonWidth))
+            }
         }
     }
 }
@@ -590,22 +604,25 @@ private fun SecondaryControlButton(
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String
+    label: String,
+    compact: Boolean = false
 ) {
     OutlinedButton(
         onClick = onClick,
-        modifier = modifier.height(52.dp),
+        modifier = modifier.height(if (compact) 46.dp else 50.dp),
         shape = CircleShape,
         border = BorderStroke(1.dp, Color.White.copy(alpha = 0.24f)),
         colors = ButtonDefaults.outlinedButtonColors(
             containerColor = Color.White.copy(alpha = 0.12f),
             contentColor = Color.White
         ),
-        contentPadding = PaddingValues(horizontal = 14.dp)
+        contentPadding = PaddingValues(horizontal = if (compact) 0.dp else 12.dp)
     ) {
-        Icon(icon, contentDescription = label, modifier = Modifier.size(22.dp))
-        Spacer(modifier = Modifier.width(6.dp))
-        Text(label, maxLines = 1)
+        Icon(icon, contentDescription = label, modifier = Modifier.size(if (compact) 22.dp else 20.dp))
+        if (!compact) {
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(label, maxLines = 1, style = MaterialTheme.typography.labelLarge)
+        }
     }
 }
 
