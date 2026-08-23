@@ -10,9 +10,11 @@ import com.github.garynasser.correction_notebook.data.repository.AppUpdateReposi
 import com.github.garynasser.correction_notebook.utils.isRemoteVersionNewer
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -40,35 +42,51 @@ class AppUpdateViewModel @Inject constructor(
 
     fun checkForUpdates(silent: Boolean) {
         if (_uiState.value.isChecking) return
+        _uiState.update {
+            it.copy(
+                isChecking = true,
+                snackbarMessage = null
+            )
+        }
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isChecking = true)
-            runCatching {
-                appUpdateRepository.getLatestVersion()
-            }.onSuccess { latest ->
+            try {
+                val latest = appUpdateRepository.getLatestVersion()
                 val hasUpdate = isRemoteVersionNewer(
                     remoteVersionName = latest.latestVersionName,
                     currentVersionName = _uiState.value.currentVersionName
                 )
-                _uiState.value = _uiState.value.copy(
-                    isChecking = false,
-                    availableUpdate = latest.takeIf { hasUpdate },
-                    snackbarMessage = if (!hasUpdate && !silent) "当前已是最新版本" else null
-                )
-            }.onFailure { error ->
-                _uiState.value = _uiState.value.copy(
-                    isChecking = false,
-                    snackbarMessage = if (silent) null else (error.message ?: "检查更新失败")
-                )
+                _uiState.update {
+                    it.copy(
+                        availableUpdate = latest.takeIf { hasUpdate },
+                        snackbarMessage = if (!hasUpdate && !silent) "当前已是最新版本" else null
+                    )
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                _uiState.update {
+                    it.copy(
+                        snackbarMessage = if (silent) null else (error.message ?: "检查更新失败")
+                    )
+                }
+            } finally {
+                _uiState.update {
+                    it.copy(isChecking = false)
+                }
             }
         }
     }
 
     fun dismissUpdateDialog() {
-        _uiState.value = _uiState.value.copy(availableUpdate = null)
+        _uiState.update { it.copy(availableUpdate = null) }
     }
 
     fun consumeSnackbarMessage() {
-        _uiState.value = _uiState.value.copy(snackbarMessage = null)
+        _uiState.update { it.copy(snackbarMessage = null) }
+    }
+
+    fun reportDownloadFailure(message: String) {
+        _uiState.update { it.copy(snackbarMessage = message) }
     }
 
     private fun readCurrentVersionName(): String {
