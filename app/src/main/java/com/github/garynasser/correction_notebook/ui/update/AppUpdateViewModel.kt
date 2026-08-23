@@ -23,7 +23,8 @@ data class AppUpdateUiState(
     val currentVersionCode: Long = 0L,
     val isChecking: Boolean = false,
     val availableUpdate: AppVersionInfo? = null,
-    val snackbarMessage: String? = null
+    val snackbarMessage: String? = null,
+    val downloadErrorMessage: String? = null
 )
 
 @HiltViewModel
@@ -45,19 +46,24 @@ class AppUpdateViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 isChecking = true,
-                snackbarMessage = null
+                snackbarMessage = null,
+                downloadErrorMessage = null
             )
         }
         viewModelScope.launch {
             try {
                 val latest = appUpdateRepository.getLatestVersion()
+                val forceUpdate = latest.forceUpdate ||
+                    (latest.minSupportedVersionCode > 0 &&
+                        _uiState.value.currentVersionCode < latest.minSupportedVersionCode)
                 val hasUpdate = isRemoteVersionNewer(
                     remoteVersionName = latest.latestVersionName,
                     currentVersionName = _uiState.value.currentVersionName
-                )
+                ) || forceUpdate
+                val updateInfo = latest.copy(forceUpdate = forceUpdate)
                 _uiState.update {
                     it.copy(
-                        availableUpdate = latest.takeIf { hasUpdate },
+                        availableUpdate = updateInfo.takeIf { hasUpdate },
                         snackbarMessage = if (!hasUpdate && !silent) "当前已是最新版本" else null
                     )
                 }
@@ -78,7 +84,7 @@ class AppUpdateViewModel @Inject constructor(
     }
 
     fun dismissUpdateDialog() {
-        _uiState.update { it.copy(availableUpdate = null) }
+        _uiState.update { it.copy(availableUpdate = null, downloadErrorMessage = null) }
     }
 
     fun consumeSnackbarMessage() {
@@ -86,7 +92,7 @@ class AppUpdateViewModel @Inject constructor(
     }
 
     fun reportDownloadFailure(message: String) {
-        _uiState.update { it.copy(snackbarMessage = message) }
+        _uiState.update { it.copy(snackbarMessage = message, downloadErrorMessage = message) }
     }
 
     private fun readCurrentVersionName(): String {
