@@ -22,14 +22,17 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.github.garynasser.correction_notebook.data.repository.StudySessionRepository
 import com.github.garynasser.correction_notebook.data.repository.CourseLearningRepository
+import com.github.garynasser.correction_notebook.data.repository.StudySessionRepository
 import com.github.garynasser.correction_notebook.domain.usecase.AiStudyUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -54,7 +57,8 @@ data class StatsUiState(
     val subjectDistribution: Map<String, Int> = emptyMap(),
     val aiInsight: String? = null,
     val isAiInsightLoading: Boolean = false,
-    val aiInsightError: String? = null
+    val aiInsightError: String? = null,
+    val statsError: String? = null
 )
 
 @HiltViewModel
@@ -66,82 +70,109 @@ class StatisticsViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(StatsUiState())
     val uiState: StateFlow<StatsUiState> = _uiState.asStateFlow()
+    private var statsJob: Job? = null
+    private var aiInsightJob: Job? = null
 
     init {
         loadStats()
     }
 
     fun setPeriod(period: StatsPeriod) {
+        if (_uiState.value.period == period) return
         _uiState.value = _uiState.value.copy(period = period)
         loadStats()
     }
 
     fun generateAiInsight() {
-        viewModelScope.launch {
+        if (_uiState.value.isAiInsightLoading || aiInsightJob?.isActive == true) return
+        aiInsightJob = viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isAiInsightLoading = true, aiInsightError = null)
-            aiStudyUseCase.generateStatsInsight()
-                .onSuccess {
-                    _uiState.value = _uiState.value.copy(
-                        aiInsight = it,
-                        isAiInsightLoading = false
-                    )
-                }
-                .onFailure {
-                    _uiState.value = _uiState.value.copy(
-                        isAiInsightLoading = false,
-                        aiInsightError = it.message ?: "AI 解读失败"
-                    )
-                }
+            try {
+                aiStudyUseCase.generateStatsInsight()
+                    .onSuccess {
+                        _uiState.value = _uiState.value.copy(
+                            aiInsight = it,
+                            isAiInsightLoading = false
+                        )
+                    }
+                    .onFailure {
+                        if (it is CancellationException) throw it
+                        _uiState.value = _uiState.value.copy(
+                            isAiInsightLoading = false,
+                            aiInsightError = it.message ?: "AI 解读失败"
+                        )
+                    }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isAiInsightLoading = false,
+                    aiInsightError = e.message ?: "AI 解读失败"
+                )
+            }
         }
     }
 
     private fun loadStats() {
-        viewModelScope.launch {
-            val today = LocalDate.now()
-            val (startDate, endDate) = when (_uiState.value.period) {
-                StatsPeriod.DAY -> today to today
-                StatsPeriod.WEEK -> today.minusDays(6) to today
-                StatsPeriod.MONTH -> today.withDayOfMonth(1) to today
-            }
-
-            val sessions = studySessionRepository.getSessionsBetween(startDate, endDate)
-            val dateRange = generateSequence(startDate) { current ->
-                current.plusDays(1).takeIf { !it.isAfter(endDate) }
-            }.toList()
-
-            val sessionsByDate = sessions.groupBy { it.startTime.toLocalDate() }
-            val dailyStats = dateRange.map { date ->
-                studySessionRepository.buildDailyStats(date, sessionsByDate[date].orEmpty())
-            }
-            val totalMinutes = dailyStats.sumOf { it.totalStudyMinutes }
-            val pomodoros = dailyStats.sumOf { it.completedPomodoros }
-            val avgMinutes = if (dailyStats.isNotEmpty()) totalMinutes / dailyStats.size else 0
-            val dailyMinutes = dailyStats.map { it.totalStudyMinutes }
-            val chartLabels = buildChartLabels(dateRange, _uiState.value.period)
-            val subjectDistribution = sessions
-                .groupBy { it.subject }
-                .mapValues { (_, items) -> items.sumOf { it.durationMinutes } }
-                .filterValues { it > 0 }
-                .toMutableMap()
-
-            courseLearningRepository.progressItems.first()
-                .filter { progress -> progress.completedCount > 0 || progress.lastAccessedAt > 0L }
-                .forEach { progress ->
-                    val name = progress.courseName.ifBlank { "课程学习" }
-                    val minutes = (progress.watchedMinutes.takeIf { it > 0 } ?: progress.completedCount * 45).coerceAtLeast(0)
-                    if (minutes > 0) {
-                        subjectDistribution[name] = (subjectDistribution[name] ?: 0) + minutes
-                    }
+        statsJob?.cancel()
+        statsJob = viewModelScope.launch {
+            try {
+                val selectedPeriod = _uiState.value.period
+                val today = LocalDate.now()
+                val (startDate, endDate) = when (selectedPeriod) {
+                    StatsPeriod.DAY -> today to today
+                    StatsPeriod.WEEK -> today.minusDays(6) to today
+                    StatsPeriod.MONTH -> today.withDayOfMonth(1) to today
                 }
 
-            _uiState.value = _uiState.value.copy(
-                totalStudyMinutes = totalMinutes,
-                averageDailyMinutes = avgMinutes,
-                completedPomodoros = pomodoros,
-                dailyMinutes = dailyMinutes,
-                chartLabels = chartLabels,
-                subjectDistribution = subjectDistribution
-            )
+                val sessions = studySessionRepository.getSessionsBetween(startDate, endDate)
+                val dateRange = generateSequence(startDate) { current ->
+                    current.plusDays(1).takeIf { !it.isAfter(endDate) }
+                }.toList()
+
+                val sessionsByDate = sessions.groupBy { it.startTime.toLocalDate() }
+                val dailyStats = dateRange.map { date ->
+                    studySessionRepository.buildDailyStats(date, sessionsByDate[date].orEmpty())
+                }
+                val totalMinutes = dailyStats.sumOf { it.totalStudyMinutes }
+                val pomodoros = dailyStats.sumOf { it.completedPomodoros }
+                val avgMinutes = if (dailyStats.isNotEmpty()) totalMinutes / dailyStats.size else 0
+                val dailyMinutes = dailyStats.map { it.totalStudyMinutes }
+                val chartLabels = buildChartLabels(dateRange, selectedPeriod)
+                val subjectDistribution = sessions
+                    .groupBy { it.subject }
+                    .mapValues { (_, items) -> items.sumOf { it.durationMinutes } }
+                    .filterValues { it > 0 }
+                    .toMutableMap()
+
+                courseLearningRepository.progressItems.first()
+                    .filter { progress -> progress.completedCount > 0 || progress.lastAccessedAt > 0L }
+                    .forEach { progress ->
+                        val name = progress.courseName.ifBlank { "课程学习" }
+                        val minutes = (progress.watchedMinutes.takeIf { it > 0 } ?: progress.completedCount * 45)
+                            .coerceAtLeast(0)
+                        if (minutes > 0) {
+                            subjectDistribution[name] = (subjectDistribution[name] ?: 0) + minutes
+                        }
+                    }
+
+                if (_uiState.value.period != selectedPeriod) return@launch
+                _uiState.value = _uiState.value.copy(
+                    totalStudyMinutes = totalMinutes,
+                    averageDailyMinutes = avgMinutes,
+                    completedPomodoros = pomodoros,
+                    dailyMinutes = dailyMinutes,
+                    chartLabels = chartLabels,
+                    subjectDistribution = subjectDistribution,
+                    statsError = null
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    statsError = e.message ?: "学习统计加载失败"
+                )
+            }
         }
     }
 
@@ -202,10 +233,10 @@ fun StatisticsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(horizontal = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            item { Spacer(modifier = Modifier.height(8.dp)) }
+            item { Spacer(modifier = Modifier.height(4.dp)) }
 
             // Period selector
             item {
@@ -217,6 +248,7 @@ fun StatisticsScreen(
                         FilterChip(
                             selected = uiState.period == period,
                             onClick = { viewModel.setPeriod(period) },
+                            modifier = Modifier.weight(1f),
                             label = {
                                 Text(
                                     when (period) {
@@ -237,6 +269,23 @@ fun StatisticsScreen(
                     averageMinutes = uiState.averageDailyMinutes,
                     completedPomodoros = uiState.completedPomodoros
                 )
+            }
+
+            uiState.statsError?.let { message ->
+                item {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.72f)
+                    ) {
+                        Text(
+                            text = message,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                }
             }
 
             if (uiState.aiInsight != null || uiState.aiInsightError != null || uiState.isAiInsightLoading) {
@@ -264,7 +313,10 @@ fun StatisticsScreen(
                                     uiState.aiInsightError.orEmpty(),
                                     color = MaterialTheme.colorScheme.error
                                 )
-                                else -> Text(uiState.aiInsight.orEmpty())
+                                else -> Text(
+                                    uiState.aiInsight.orEmpty(),
+                                    style = MaterialTheme.typography.bodySmall
+                                )
                             }
                         }
                     }
@@ -295,13 +347,13 @@ fun StatisticsScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                         )
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
                         BarChart(
                             data = uiState.dailyMinutes,
                             labels = uiState.chartLabels,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(180.dp)
+                                .height(150.dp)
                         )
                     }
                 }
@@ -310,6 +362,7 @@ fun StatisticsScreen(
             // Pie chart for subject distribution
             if (uiState.subjectDistribution.isNotEmpty()) {
                 item {
+                    val subjectSlices = compactSubjectDistribution(uiState.subjectDistribution)
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(8.dp)
@@ -322,20 +375,21 @@ fun StatisticsScreen(
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
-                            Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(modifier = Modifier.height(10.dp))
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
                                 PieChart(
-                                    data = uiState.subjectDistribution.values.toList(),
-                                    modifier = Modifier.size(96.dp)
+                                    entries = subjectSlices,
+                                    modifier = Modifier.size(82.dp)
                                 )
                                 Column(
-                                    modifier = Modifier.weight(1f).padding(start = 16.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
-                                    uiState.subjectDistribution.forEach { (subject, minutes) ->
+                                    subjectSlices.forEach { (subject, minutes) ->
                                         LegendItem(
                                             color = getColorForSubject(subject),
                                             label = subject,
@@ -349,7 +403,7 @@ fun StatisticsScreen(
                 }
             }
 
-            item { Spacer(modifier = Modifier.height(12.dp)) }
+            item { Spacer(modifier = Modifier.height(6.dp)) }
         }
     }
 }
@@ -573,24 +627,17 @@ private fun EmptyChartState(
 
 @Composable
 private fun PieChart(
-    data: List<Int>,
+    entries: List<Pair<String, Int>>,
     modifier: Modifier = Modifier
 ) {
-    val total = data.sum().coerceAtLeast(1)
-    val colors = listOf(
-        Color(0xFF006781),
-        Color(0xFF006A40),
-        Color(0xFF43A047),
-        Color(0xFFFFA000),
-        Color(0xFFE53935)
-    )
+    val total = entries.sumOf { it.second }.coerceAtLeast(1)
 
     Canvas(modifier = modifier) {
         var startAngle = -90f
-        data.forEachIndexed { index, value ->
+        entries.forEach { (subject, value) ->
             val sweepAngle = (value.toFloat() / total) * 360f
             drawArc(
-                color = colors[index % colors.size],
+                color = getColorForSubject(subject),
                 startAngle = startAngle,
                 sweepAngle = sweepAngle,
                 useCenter = false,
@@ -621,7 +668,9 @@ private fun LegendItem(
         Text(
             text = label,
             style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
         Text(
             text = value,
@@ -651,8 +700,23 @@ private fun formatCompactMinutes(minutes: Int): String {
     }
 }
 
+private fun compactSubjectDistribution(
+    distribution: Map<String, Int>,
+    limit: Int = 6
+): List<Pair<String, Int>> {
+    val sorted = distribution
+        .toList()
+        .filter { it.second > 0 }
+        .sortedByDescending { it.second }
+    if (sorted.size <= limit) return sorted
+
+    val visible = sorted.take((limit - 1).coerceAtLeast(1))
+    val remainingMinutes = sorted.drop(visible.size).sumOf { it.second }
+    return visible + ("其它" to remainingMinutes)
+}
+
 private fun getColorForSubject(subject: String): Color {
-    return when (subject.hashCode() % 5) {
+    return when (subject.hashCode().mod(5)) {
         0 -> Color(0xFF006781)
         1 -> Color(0xFF006A40)
         2 -> Color(0xFF43A047)
