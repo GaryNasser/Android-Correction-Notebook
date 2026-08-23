@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,6 +18,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -33,13 +36,17 @@ fun BottomBarTab(
 
     Column(
         modifier = modifier
+            .fillMaxHeight()
             .selectable(
                 selected = isSelected,
                 onClick = onClick,
                 role = Role.Tab
             ),
         horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(3.dp)
+        verticalArrangement = Arrangement.spacedBy(
+            space = 3.dp,
+            alignment = androidx.compose.ui.Alignment.CenterVertically
+        )
     ) {
         Box(
             modifier = Modifier
@@ -66,7 +73,9 @@ fun BottomBarTab(
             style = MaterialTheme.typography.labelSmall,
             fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
             color = if (isSelected) selectedColor else inactiveColor,
-            maxLines = 1
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center
         )
     }
 }

@@ -4,9 +4,11 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -73,6 +75,12 @@ fun MainContainer(
         appUpdateViewModel.checkForUpdates(silent = true)
     }
 
+    LaunchedEffect(currentDestination) {
+        if (currentDestination?.hasRoute(Home::class) != true && hideBottomBar) {
+            hideBottomBar = false
+        }
+    }
+
     Scaffold(
         contentWindowInsets = if (hideBottomBar) {
             WindowInsets(0, 0, 0, 0)
@@ -85,35 +93,42 @@ fun MainContainer(
         bottomBar = {
             // 结合了配置和隐藏逻辑
             if (!hideBottomBar && shouldShowBottomBar) {
-                NavigationBar(
+                Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(64.dp),
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 0.dp,
-                    windowInsets = WindowInsets(0, 0, 0, 0)
+                        .navigationBarsPadding(),
+                    color = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 3.dp
                 ) {
-                    bottomNavList.forEach { item ->
-                        // AI 路由过滤逻辑
-                        if (item.route is AITutor && !aiEnabled) return@forEach
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(64.dp)
+                            .padding(horizontal = 6.dp),
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                    ) {
+                        bottomNavList.forEach { item ->
+                            // AI 路由过滤逻辑
+                            if (item.route is AITutor && !aiEnabled) return@forEach
 
-                        val isSelected = currentDestination?.hasRoute(item.route::class) ?: false
+                            val isSelected = currentDestination?.hasRoute(item.route::class) ?: false
 
-                        BottomBarTab(
-                            modifier = Modifier.weight(1f),
-                            label = item.title,
-                            icon = item.icon,
-                            isSelected = isSelected,
-                            onClick = {
-                                navController.navigate(item.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = true
+                            BottomBarTab(
+                                modifier = Modifier.weight(1f),
+                                label = item.title,
+                                icon = item.icon,
+                                isSelected = isSelected,
+                                onClick = {
+                                    navController.navigate(item.route) {
+                                        popUpTo(navController.graph.findStartDestination().id) {
+                                            saveState = true
+                                        }
+                                        launchSingleTop = true
+                                        restoreState = true
                                     }
-                                    launchSingleTop = true
-                                    restoreState = true
                                 }
-                            }
-                        )
+                            )
+                        }
                     }
                 }
             }
