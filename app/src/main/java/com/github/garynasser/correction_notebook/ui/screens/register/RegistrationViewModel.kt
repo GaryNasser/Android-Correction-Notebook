@@ -10,6 +10,7 @@ import com.github.garynasser.correction_notebook.data.model.auth.UserCredential
 import com.github.garynasser.correction_notebook.data.repository.AuthStateManager
 import com.github.garynasser.correction_notebook.data.repository.YanheRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -70,20 +71,19 @@ class RegistrationViewModel @Inject constructor(
 
         viewModelScope.launch {
             isCasLoading = true
-            val result = runCatching {
+            try {
                 yanheRepository.saveStudentCredential(UserCredential(trimmedStudentId, casPassword))
                 yanheRepository.getYanheLoginToken().getOrThrow()
-            }
-
-            result.onSuccess {
-                isCasLoading = false
                 authStateManager.updateState(AuthState.Authenticated)
                 onSuccess()
-            } .onFailure { exception ->
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (exception: Exception) {
                 errorMessage = exception.message ?: "延河课堂登录失败，请检查网络"
-                isCasLoading = false
-                yanheRepository.removeStudentCredential()
+                runCatching { yanheRepository.removeStudentCredential() }
                 authStateManager.updateState(AuthState.Unauthenticated)
+            } finally {
+                isCasLoading = false
             }
         }
     }
