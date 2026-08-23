@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -25,6 +27,7 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun AuthFormTemplate(
     title: String,
+    subtitle: String? = null,
     buttonText: String,
     onButtonClick: () -> Unit,
     isButtonEnabled: Boolean = false,
@@ -35,29 +38,39 @@ fun AuthFormTemplate(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(4.dp)
+            .widthIn(max = 420.dp)
+            .padding(2.dp)
     ) {
         Text(
             text = title,
-            style = MaterialTheme.typography.titleLarge,
+            style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface
         )
+        subtitle?.let {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
 
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(16.dp))
 
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             inputFields()
         }
 
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(16.dp))
 
         Button(
             onClick = onButtonClick,
             enabled = isButtonEnabled && !isLoading,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(46.dp)
+                .height(44.dp),
+            shape = RoundedCornerShape(8.dp)
         ) {
             if (isLoading) {
                 CircularProgressIndicator(
@@ -66,11 +79,11 @@ fun AuthFormTemplate(
                     color = MaterialTheme.colorScheme.onPrimary
                 )
             } else {
-                Text(text = buttonText)
+                Text(text = buttonText, style = MaterialTheme.typography.labelLarge)
             }
         }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(12.dp))
 
         if (footer != null) {
             Row(

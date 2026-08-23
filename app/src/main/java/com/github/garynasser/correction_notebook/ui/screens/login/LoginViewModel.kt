@@ -8,8 +8,8 @@ import androidx.lifecycle.viewModelScope
 import com.github.garynasser.correction_notebook.data.model.auth.AuthState
 import com.github.garynasser.correction_notebook.data.repository.AuthRepository
 import com.github.garynasser.correction_notebook.data.repository.AuthStateManager
-import com.github.garynasser.correction_notebook.ui.screens.main.MainViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -41,15 +41,22 @@ class LoginViewModel @Inject constructor (
         viewModelScope.launch {
             isLoading = true
 
-            val result = authRepository.login(trimmedUsername, password)
-
-            result.onSuccess {
-                isLoading = false
-                authStateManager.updateState(AuthState.Authenticated)
-            } .onFailure { exception ->
+            try {
+                authRepository.login(trimmedUsername, password)
+                    .onSuccess {
+                        authStateManager.updateState(AuthState.Authenticated)
+                    }
+                    .onFailure { exception ->
+                        errorMessage = exception.message ?: "登录失败，请检查网络"
+                        authStateManager.updateState(AuthState.Unauthenticated)
+                    }
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (exception: Exception) {
                 errorMessage = exception.message ?: "登录失败，请检查网络"
-                isLoading = false
                 authStateManager.updateState(AuthState.Unauthenticated)
+            } finally {
+                isLoading = false
             }
         }
     }

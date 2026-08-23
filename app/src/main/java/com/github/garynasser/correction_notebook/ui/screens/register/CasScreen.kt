@@ -1,8 +1,10 @@
 package com.github.garynasser.correction_notebook.ui.screens.register
 
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Visibility
@@ -55,16 +57,19 @@ fun CasScreen(
             Column(
                 modifier = modifier
                     .fillMaxSize()
-                    .padding(horizontal = 24.dp)
+                    .verticalScroll(rememberScrollState())
+                    .imePadding()
+                    .padding(horizontal = 20.dp)
                     .padding(
-                        top = innerPadding.calculateTopPadding() + 32.dp,
+                        top = innerPadding.calculateTopPadding() + 12.dp,
                         bottom = 24.dp
                     ),
-                verticalArrangement = Arrangement.Top,
+                verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 AuthFormTemplate(
                     title = "延河课堂登录",
+                    subtitle = "用于同步课程和视频，验证完成后会回到当前页面。",
                     buttonText = if (viewModel.isCasLoading) "正在验证" else "登录延河课堂",
                     onButtonClick = { onConfirm() },
                     isButtonEnabled = viewModel.isCasEnabled,
@@ -75,8 +80,9 @@ fun CasScreen(
                             onValueChange = { viewModel.studentId = it },
                             label = { Text("学号") },
                             placeholder = { Text("学号") },
+                            enabled = !viewModel.isCasLoading,
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(8.dp),
                             singleLine = true,
                         )
 
@@ -85,9 +91,14 @@ fun CasScreen(
                             onValueChange = { viewModel.casPassword = it },
                             label = { Text("统一验证密码") },
                             placeholder = { Text("统一验证密码") },
+                            enabled = !viewModel.isCasLoading,
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            visualTransformation = if (viewModel.isCasPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                            shape = RoundedCornerShape(8.dp),
+                            visualTransformation = if (viewModel.isCasPasswordVisible) {
+                                VisualTransformation.None
+                            } else {
+                                PasswordVisualTransformation()
+                            },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                             trailingIcon = {
@@ -104,11 +115,18 @@ fun CasScreen(
                     footer = {
                         val message = viewModel.errorMessage
                         if (message != null) {
-                            Text(
-                                text = message,
-                                color = MaterialTheme.colorScheme.error,
-                                style = MaterialTheme.typography.bodySmall
-                            )
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.72f)
+                            ) {
+                                Text(
+                                    text = message,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
                         } else {
                             Text(
                                 text = "使用北理工统一认证，仅用于拉取延河课堂我的课程和视频。",
