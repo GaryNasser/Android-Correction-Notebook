@@ -49,6 +49,7 @@ enum class StatsPeriod {
 
 data class StatsUiState(
     val period: StatsPeriod = StatsPeriod.WEEK,
+    val isStatsLoading: Boolean = false,
     val totalStudyMinutes: Int = 0,
     val averageDailyMinutes: Int = 0,
     val completedPomodoros: Int = 0,
@@ -80,6 +81,10 @@ class StatisticsViewModel @Inject constructor(
     fun setPeriod(period: StatsPeriod) {
         if (_uiState.value.period == period) return
         _uiState.value = _uiState.value.copy(period = period)
+        loadStats()
+    }
+
+    fun refreshStats() {
         loadStats()
     }
 
@@ -116,6 +121,7 @@ class StatisticsViewModel @Inject constructor(
     private fun loadStats() {
         statsJob?.cancel()
         statsJob = viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isStatsLoading = true, statsError = null)
             try {
                 val selectedPeriod = _uiState.value.period
                 val today = LocalDate.now()
@@ -164,12 +170,14 @@ class StatisticsViewModel @Inject constructor(
                     dailyMinutes = dailyMinutes,
                     chartLabels = chartLabels,
                     subjectDistribution = subjectDistribution,
+                    isStatsLoading = false,
                     statsError = null
                 )
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
+                    isStatsLoading = false,
                     statsError = e.message ?: "学习统计加载失败"
                 )
             }
@@ -238,7 +246,6 @@ fun StatisticsScreen(
         ) {
             item { Spacer(modifier = Modifier.height(4.dp)) }
 
-            // Period selector
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -249,6 +256,7 @@ fun StatisticsScreen(
                             selected = uiState.period == period,
                             onClick = { viewModel.setPeriod(period) },
                             modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp),
                             label = {
                                 Text(
                                     when (period) {
@@ -273,26 +281,27 @@ fun StatisticsScreen(
 
             uiState.statsError?.let { message ->
                 item {
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.72f)
-                    ) {
-                        Text(
-                            text = message,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    }
+                    StatsMessageCard(
+                        icon = Icons.Default.Warning,
+                        title = "统计加载失败",
+                        message = message,
+                        actionText = "重试",
+                        onAction = viewModel::refreshStats,
+                        isError = true
+                    )
                 }
             }
 
             if (uiState.aiInsight != null || uiState.aiInsightError != null || uiState.isAiInsightLoading) {
                 item {
-                    Card(
+                    Surface(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.42f)
+                        )
                     ) {
                         Column(
                             modifier = Modifier.padding(14.dp),
@@ -308,7 +317,13 @@ fun StatisticsScreen(
                                 )
                             }
                             when {
-                                uiState.isAiInsightLoading -> Text("AI 正在解读本周学习情况...")
+                                uiState.isAiInsightLoading -> Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                    Text("AI 正在解读${periodLabel(uiState.period)}学习情况...")
+                                }
                                 uiState.aiInsightError != null -> Text(
                                     uiState.aiInsightError.orEmpty(),
                                     color = MaterialTheme.colorScheme.error
@@ -323,7 +338,6 @@ fun StatisticsScreen(
                 }
             }
 
-            // Bar chart
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -348,18 +362,26 @@ fun StatisticsScreen(
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                         )
                         Spacer(modifier = Modifier.height(10.dp))
-                        BarChart(
-                            data = uiState.dailyMinutes,
-                            labels = uiState.chartLabels,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(150.dp)
-                        )
+                        if (uiState.isStatsLoading) {
+                            StatsLoadingBlock(
+                                message = "正在整理学习统计...",
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(164.dp)
+                            )
+                        } else {
+                            BarChart(
+                                data = uiState.dailyMinutes,
+                                labels = uiState.chartLabels,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(164.dp)
+                            )
+                        }
                     }
                 }
             }
 
-            // Pie chart for subject distribution
             if (uiState.subjectDistribution.isNotEmpty()) {
                 item {
                     val subjectSlices = compactSubjectDistribution(uiState.subjectDistribution)
@@ -401,10 +423,105 @@ fun StatisticsScreen(
                         }
                     }
                 }
+            } else if (!uiState.isStatsLoading && uiState.statsError == null) {
+                item {
+                    StatsMessageCard(
+                        icon = Icons.Default.AutoStories,
+                        title = "还没有科目分布",
+                        message = "完成一次专注学习或观看课程后，这里会显示学习投入最多的内容。"
+                    )
+                }
             }
 
             item { Spacer(modifier = Modifier.height(6.dp)) }
         }
+    }
+}
+
+@Composable
+private fun StatsMessageCard(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    message: String,
+    actionText: String? = null,
+    onAction: (() -> Unit)? = null,
+    isError: Boolean = false
+) {
+    val container = if (isError) {
+        MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.76f)
+    } else {
+        MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)
+    }
+    val iconTint = if (isError) {
+        MaterialTheme.colorScheme.error
+    } else {
+        MaterialTheme.colorScheme.primary
+    }
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        color = container,
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.42f)
+        )
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(24.dp), tint = iconTint)
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Text(
+                    message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            if (actionText != null && onAction != null) {
+                TextButton(onClick = onAction, shape = RoundedCornerShape(8.dp)) {
+                    Text(actionText)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatsLoadingBlock(
+    message: String,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.36f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+private fun periodLabel(period: StatsPeriod): String {
+    return when (period) {
+        StatsPeriod.DAY -> "今日"
+        StatsPeriod.WEEK -> "本周"
+        StatsPeriod.MONTH -> "本月"
     }
 }
 
