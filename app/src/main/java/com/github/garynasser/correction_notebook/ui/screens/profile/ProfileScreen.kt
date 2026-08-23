@@ -1,9 +1,11 @@
 package com.github.garynasser.correction_notebook.ui.screens.profile
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Help
 import androidx.compose.material.icons.automirrored.filled.Logout
@@ -19,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.garynasser.correction_notebook.data.model.auth.AuthState
+import com.github.garynasser.correction_notebook.data.repository.ProviderRecord
 import com.github.garynasser.correction_notebook.ui.screens.aitutor.AITutorUiState
 import com.github.garynasser.correction_notebook.ui.screens.aitutor.ProviderDialog
 import com.github.garynasser.correction_notebook.ui.components.FreshCard
@@ -75,105 +78,41 @@ fun ProfileScreen(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // 用户信息卡片
                 item {
-                    FreshCard(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable(enabled = !isLoading) {
-                                if (authState is AuthState.Unauthenticated) {
-                                    onNavigateToLogin()
-                                } else {
-                                    showLogoutDialog = true
-                                }
-                            }
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Surface(
-                                modifier = Modifier.size(40.dp),
-                                shape = MaterialTheme.shapes.medium,
-                                color = if (authState is AuthState.Authenticated)
-                                    MaterialTheme.colorScheme.primaryContainer
-                                else
-                                    MaterialTheme.colorScheme.surfaceVariant
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        if (authState is AuthState.Authenticated)
-                                            Icons.Default.AccountCircle
-                                        else
-                                            Icons.Default.Person,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(24.dp),
-                                        tint = if (authState is AuthState.Authenticated)
-                                            MaterialTheme.colorScheme.onPrimaryContainer
-                                        else
-                                            MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.width(12.dp))
-
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = if (authState is AuthState.Authenticated) "延河课堂已登录" else "延河课堂未登录",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = if (authState is AuthState.Authenticated)
-                                        "点击退出延河课堂账号"
-                                    else
-                                        "点击登录北理工统一认证",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                                )
-                            }
-
-                            if (authState is AuthState.Authenticated) {
-                                Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "退出延河课堂")
+                    AccountStatusCard(
+                        authState = authState,
+                        enabled = !isLoading,
+                        onClick = {
+                            if (authState is AuthState.Unauthenticated) {
+                                onNavigateToLogin()
                             } else {
-                                Icon(Icons.Default.ChevronRight, contentDescription = null)
+                                showLogoutDialog = true
                             }
                         }
-                    }
+                    )
                 }
 
-                // AI 功能开关
                 item {
-                    FreshCard(
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        SettingsSwitchItem(
-                            icon = Icons.Default.SmartToy,
-                            title = "AI导师功能",
-                            subtitle = if (aiEnabled) {
-                                activeProvider?.let { "已启用 - ${it.defaultModel}" } ?: "已启用 - 请配置 Provider"
+                    AiStatusCard(
+                        aiEnabled = aiEnabled,
+                        activeProvider = activeProvider,
+                        providerCount = providers.size,
+                        isProviderBusy = isProviderBusy,
+                        enabled = !isLoading,
+                        onOpenSettings = { showAiSettingsDialog = true },
+                        onCheckedChange = { enabled ->
+                            if (enabled) {
+                                showAiSettingsDialog = true
                             } else {
-                                "已关闭"
-                            },
-                            checked = aiEnabled,
-                            onCheckedChange = { enabled ->
-                                if (enabled) {
-                                    showAiSettingsDialog = true
-                                } else {
-                                    viewModel.setAiEnabled(false)
-                                }
+                                viewModel.setAiEnabled(false)
                             }
-                        )
-                    }
+                        }
+                    )
                 }
 
-                // 设置列表
                 item {
                     FreshCard(
                         modifier = Modifier.fillMaxWidth()
@@ -183,6 +122,7 @@ fun ProfileScreen(
                                 icon = Icons.Default.Key,
                                 title = "API配置",
                                 subtitle = activeProvider?.let { "${it.name} · ${it.defaultModel}" } ?: "设置 AI Provider、模型和接口密钥",
+                                enabled = !isLoading,
                                 onClick = { showAiSettingsDialog = true }
                             )
                             HorizontalDivider()
@@ -190,6 +130,7 @@ fun ProfileScreen(
                                 icon = Icons.Default.SystemUpdate,
                                 title = "检查更新",
                                 subtitle = "当前版本 $currentVersionName",
+                                enabled = !isLoading,
                                 onClick = onCheckForUpdates
                             )
                             HorizontalDivider()
@@ -197,6 +138,7 @@ fun ProfileScreen(
                                 icon = Icons.AutoMirrored.Filled.Help,
                                 title = "帮助与反馈",
                                 subtitle = "常见问题、联系客服",
+                                enabled = !isLoading,
                                 onClick = { showFeedbackDialog = true }
                             )
                         }
@@ -285,13 +227,194 @@ fun ProfileScreen(
         )
     }
 
-    // Loading indicator
     if (isLoading) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
+        ProfileLoadingOverlay()
+    }
+}
+
+@Composable
+private fun AccountStatusCard(
+    authState: AuthState,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    val isAuthenticated = authState is AuthState.Authenticated
+
+    FreshCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, onClick = onClick)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            CircularProgressIndicator()
+            Surface(
+                modifier = Modifier.size(42.dp),
+                shape = RoundedCornerShape(8.dp),
+                color = if (isAuthenticated) {
+                    MaterialTheme.colorScheme.primaryContainer
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant
+                },
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.34f))
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = if (isAuthenticated) Icons.Default.AccountCircle else Icons.Default.Person,
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp),
+                        tint = if (isAuthenticated) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    )
+                }
+            }
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "延河课堂",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    StatusChip(
+                        text = if (isAuthenticated) "已登录" else "未登录",
+                        isPositive = isAuthenticated
+                    )
+                }
+                Text(
+                    text = if (isAuthenticated) {
+                        "可同步课程、观看记录和学习进度"
+                    } else {
+                        "登录北理工统一认证后使用课程相关功能"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Icon(
+                imageVector = if (isAuthenticated) Icons.AutoMirrored.Filled.Logout else Icons.Default.ChevronRight,
+                contentDescription = if (isAuthenticated) "退出延河课堂" else null,
+                modifier = Modifier.size(21.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun AiStatusCard(
+    aiEnabled: Boolean,
+    activeProvider: ProviderRecord?,
+    providerCount: Int,
+    isProviderBusy: Boolean,
+    enabled: Boolean,
+    onOpenSettings: () -> Unit,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    val hasActiveProvider = activeProvider != null
+
+    FreshCard(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(vertical = 2.dp)
+        ) {
+            SettingsSwitchItem(
+                icon = Icons.Default.SmartToy,
+                title = "AI 导师功能",
+                subtitle = when {
+                    aiEnabled && hasActiveProvider -> "${activeProvider?.name} · ${activeProvider?.defaultModel}"
+                    aiEnabled -> "已启用，但还需要配置可用 Provider"
+                    else -> "关闭后隐藏 AI 入口和智能学习建议"
+                },
+                checked = aiEnabled,
+                enabled = enabled && !isProviderBusy,
+                onCheckedChange = onCheckedChange
+            )
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 12.dp))
+            SettingsItem(
+                icon = if (hasActiveProvider) Icons.Default.Verified else Icons.Default.Tune,
+                title = if (hasActiveProvider) "当前 Provider" else "配置 Provider",
+                subtitle = when {
+                    hasActiveProvider -> "已保存 $providerCount 个配置，可测试连接或切换模型"
+                    providerCount > 0 -> "已有配置但未激活，进入后选择默认 Provider"
+                    else -> "添加 OpenAI 兼容、Anthropic 或自定义接口"
+                },
+                enabled = enabled,
+                onClick = onOpenSettings
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatusChip(
+    text: String,
+    isPositive: Boolean
+) {
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = if (isPositive) {
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f)
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.82f)
+        },
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.28f))
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = if (isPositive) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            }
+        )
+    }
+}
+
+@Composable
+private fun ProfileLoadingOverlay() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.18f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.42f)),
+            tonalElevation = 0.dp
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                Text(
+                    text = "正在处理账号状态...",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }
@@ -302,6 +425,7 @@ private fun SettingsSwitchItem(
     title: String,
     subtitle: String,
     checked: Boolean,
+    enabled: Boolean = true,
     onCheckedChange: (Boolean) -> Unit
 ) {
     Row(
@@ -331,20 +455,22 @@ private fun SettingsSwitchItem(
                 text = title,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.SemiBold,
+                color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.48f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (enabled) 1f else 0.56f),
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
         }
         Switch(
             checked = checked,
-            onCheckedChange = onCheckedChange
+            onCheckedChange = onCheckedChange,
+            enabled = enabled
         )
     }
 }
@@ -354,13 +480,14 @@ fun SettingsItem(
     icon: ImageVector,
     title: String,
     subtitle: String,
+    enabled: Boolean = true,
     onClick: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
@@ -374,7 +501,7 @@ fun SettingsItem(
                 Icon(
                     icon,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (enabled) 1f else 0.48f),
                     modifier = Modifier.size(19.dp)
                 )
             }
@@ -384,14 +511,15 @@ fun SettingsItem(
                 text = title,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.SemiBold,
+                color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.48f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (enabled) 1f else 0.56f),
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
         }
@@ -399,7 +527,7 @@ fun SettingsItem(
             Icons.Default.ChevronRight,
             contentDescription = null,
             modifier = Modifier.size(20.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (enabled) 1f else 0.48f)
         )
     }
 }

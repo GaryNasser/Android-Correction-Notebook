@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -26,6 +25,7 @@ import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
 import com.github.garynasser.correction_notebook.data.local.AISettingsManager
+import com.github.garynasser.correction_notebook.ui.components.BottomBarTab
 import com.github.garynasser.correction_notebook.ui.navigation.ArticleDetailRoute
 import com.github.garynasser.correction_notebook.ui.navigation.AITutor
 import com.github.garynasser.correction_notebook.ui.navigation.CourseList
@@ -99,26 +99,11 @@ fun MainContainer(
 
                         val isSelected = currentDestination?.hasRoute(item.route::class) ?: false
 
-                        NavigationBarItem(
-                            icon = {
-                                Icon(
-                                    item.icon,
-                                    contentDescription = item.title,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            },
-                            label = {
-                                Text(
-                                    text = item.title,
-                                    style = MaterialTheme.typography.labelSmall
-                                )
-                            },
-                            selected = isSelected,
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = MaterialTheme.colorScheme.primary,
-                                selectedTextColor = MaterialTheme.colorScheme.primary,
-                                indicatorColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.62f)
-                            ),
+                        BottomBarTab(
+                            modifier = Modifier.weight(1f),
+                            label = item.title,
+                            icon = item.icon,
+                            isSelected = isSelected,
                             onClick = {
                                 navController.navigate(item.route) {
                                     popUpTo(navController.graph.findStartDestination().id) {
