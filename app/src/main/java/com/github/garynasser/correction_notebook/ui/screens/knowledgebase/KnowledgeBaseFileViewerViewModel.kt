@@ -227,7 +227,9 @@ class KnowledgeBaseFileViewerViewModel @Inject constructor(
     private fun loadFile() {
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
+            val previousPdfPages = uiState.value.pdfPages
             uiState.value = KnowledgeBaseFileViewerUiState(isLoading = true)
+            recyclePdfPages(previousPdfPages)
 
             val file = knowledgeBaseRepository.getFileSummary(args.fileId)
             if (file == null) {
