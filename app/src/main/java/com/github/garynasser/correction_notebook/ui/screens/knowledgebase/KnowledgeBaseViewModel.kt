@@ -21,6 +21,7 @@ import com.github.garynasser.correction_notebook.data.repository.BitShareReposit
 import com.github.garynasser.correction_notebook.data.repository.KnowledgeBaseRepository
 import com.github.garynasser.correction_notebook.data.repository.StudySetRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -603,31 +604,38 @@ class KnowledgeBaseViewModel @Inject constructor(
         if (fileUris.isEmpty()) return
         viewModelScope.launch {
             isImportingLocalFile.value = true
-            var successCount = 0
-            var failureCount = 0
-            var lastErrorMessage: String? = null
+            try {
+                var successCount = 0
+                var failureCount = 0
+                var lastErrorMessage: String? = null
 
-            fileUris.forEach { fileUri ->
-                knowledgeBaseRepository.importLocalFile(
-                    targetFolderId = currentFolderId.value,
-                    fileUri = fileUri
-                ).onSuccess {
-                    successCount += 1
-                }.onFailure {
-                    failureCount += 1
-                    lastErrorMessage = it.message
+                fileUris.forEach { fileUri ->
+                    knowledgeBaseRepository.importLocalFile(
+                        targetFolderId = currentFolderId.value,
+                        fileUri = fileUri
+                    ).onSuccess {
+                        successCount += 1
+                    }.onFailure {
+                        failureCount += 1
+                        lastErrorMessage = it.message
+                    }
                 }
-            }
 
-            val folderName = knowledgeBaseRepository.getFolderName(currentFolderId.value)
-            snackbarMessage.value = when {
-                successCount > 0 && failureCount == 0 -> {
-                    if (successCount == 1) "已导入到 $folderName" else "已导入 $successCount 个文件到 $folderName"
+                val folderName = knowledgeBaseRepository.getFolderName(currentFolderId.value)
+                snackbarMessage.value = when {
+                    successCount > 0 && failureCount == 0 -> {
+                        if (successCount == 1) "已导入到 $folderName" else "已导入 $successCount 个文件到 $folderName"
+                    }
+                    successCount > 0 -> "成功导入 $successCount 个文件，$failureCount 个失败"
+                    else -> lastErrorMessage ?: "导入失败"
                 }
-                successCount > 0 -> "成功导入 $successCount 个文件，$failureCount 个失败"
-                else -> lastErrorMessage ?: "导入失败"
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                snackbarMessage.value = e.message ?: "导入失败"
+            } finally {
+                isImportingLocalFile.value = false
             }
-            isImportingLocalFile.value = false
         }
     }
 
