@@ -1,5 +1,6 @@
 package com.github.garynasser.correction_notebook.ui.screens.profile
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -13,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -61,12 +63,12 @@ fun ProfileScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
             // 用户信息卡片
             item {
                 FreshCard(
@@ -83,12 +85,12 @@ fun ProfileScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(14.dp),
+                            .padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Surface(
-                            modifier = Modifier.size(52.dp),
-                            shape = MaterialTheme.shapes.large,
+                            modifier = Modifier.size(44.dp),
+                            shape = MaterialTheme.shapes.medium,
                             color = if (authState is AuthState.Authenticated)
                                 MaterialTheme.colorScheme.primaryContainer
                             else
@@ -101,7 +103,7 @@ fun ProfileScreen(
                                     else
                                         Icons.Default.Person,
                                     contentDescription = null,
-                                    modifier = Modifier.size(32.dp),
+                                    modifier = Modifier.size(28.dp),
                                     tint = if (authState is AuthState.Authenticated)
                                         MaterialTheme.colorScheme.onPrimaryContainer
                                     else
@@ -144,35 +146,21 @@ fun ProfileScreen(
                 FreshCard(
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    ListItem(
-                        headlineContent = { Text("AI导师功能") },
-                        supportingContent = {
-                            Text(
-                                if (aiEnabled) {
-                                    activeProvider?.let { "已启用 - ${it.defaultModel}" } ?: "已启用 - 请配置 Provider"
-                                } else "已关闭"
-                            )
+                    SettingsSwitchItem(
+                        icon = Icons.Default.SmartToy,
+                        title = "AI导师功能",
+                        subtitle = if (aiEnabled) {
+                            activeProvider?.let { "已启用 - ${it.defaultModel}" } ?: "已启用 - 请配置 Provider"
+                        } else {
+                            "已关闭"
                         },
-                        leadingContent = {
-                            Icon(
-                                Icons.Default.SmartToy,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        },
-                        trailingContent = {
-                            Switch(
-                                checked = aiEnabled,
-                                onCheckedChange = { enabled ->
-                                    if (enabled) {
-                                        // 开启时打开设置对话框
-                                        showAiSettingsDialog = true
-                                    } else {
-                                        // 关闭时直接禁用
-                                        viewModel.setAiEnabled(false)
-                                    }
-                                }
-                            )
+                        checked = aiEnabled,
+                        onCheckedChange = { enabled ->
+                            if (enabled) {
+                                showAiSettingsDialog = true
+                            } else {
+                                viewModel.setAiEnabled(false)
+                            }
                         }
                     )
                 }
@@ -297,41 +285,109 @@ fun ProfileScreen(
 }
 
 @Composable
+private fun SettingsSwitchItem(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Surface(
+            modifier = Modifier.size(34.dp),
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.62f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.32f))
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(19.dp)
+                )
+            }
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange
+        )
+    }
+}
+
+@Composable
 fun SettingsItem(
     icon: ImageVector,
     title: String,
     subtitle: String,
     onClick: () -> Unit
 ) {
-    ListItem(
-        headlineContent = {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Surface(
+            modifier = Modifier.size(34.dp),
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.62f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.32f))
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(19.dp)
+                )
+            }
+        }
+        Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
                 style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
-        },
-        supportingContent = {
             Text(
                 text = subtitle,
-                style = MaterialTheme.typography.bodySmall
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
-        },
-        leadingContent = {
-            Icon(
-                icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(22.dp)
-            )
-        },
-        trailingContent = {
-            Icon(
-                Icons.Default.ChevronRight,
-                contentDescription = null,
-                modifier = Modifier.size(22.dp)
-            )
-        },
-        modifier = Modifier.clickable(onClick = onClick)
-    )
+        }
+        Icon(
+            Icons.Default.ChevronRight,
+            contentDescription = null,
+            modifier = Modifier.size(20.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
 }

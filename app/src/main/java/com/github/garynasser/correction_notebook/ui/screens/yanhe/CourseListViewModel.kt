@@ -144,8 +144,8 @@ class CourseListViewModel @Inject constructor(
 
     fun refreshMySchedule() {
         if (isRefreshingSchedule) return
+        isRefreshingSchedule = true
         viewModelScope.launch {
-            isRefreshingSchedule = true
             uiState = CourseUiState.Loading
             isPersonalCoursesMode = true
             isLoadingMore = false
