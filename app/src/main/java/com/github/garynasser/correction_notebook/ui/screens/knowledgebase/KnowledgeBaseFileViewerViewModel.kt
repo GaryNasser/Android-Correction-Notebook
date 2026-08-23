@@ -18,7 +18,10 @@ import com.github.garynasser.correction_notebook.domain.usecase.AiStudyUseCase
 import com.github.garynasser.correction_notebook.domain.usecase.KnowledgeAiMode
 import com.github.garynasser.correction_notebook.ui.navigation.KnowledgeBaseFileViewer
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -47,6 +50,7 @@ data class KnowledgeBaseFileViewerUiState(
     val aiResult: String? = null,
     val studySetDraft: StudySetDraft? = null,
     val isAiLoading: Boolean = false,
+    val isSavingStudySetDraft: Boolean = false,
     val errorMessage: String? = null
 )
 
@@ -65,6 +69,12 @@ class KnowledgeBaseFileViewerViewModel @Inject constructor(
     var uiState = androidx.compose.runtime.mutableStateOf(KnowledgeBaseFileViewerUiState())
         private set
 
+    private var loadJob: Job? = null
+    private var aiJob: Job? = null
+    private var studySetJob: Job? = null
+    private var saveDraftJob: Job? = null
+    private var indexJob: Job? = null
+
     init {
         loadFile()
     }
@@ -74,90 +84,139 @@ class KnowledgeBaseFileViewerViewModel @Inject constructor(
     }
 
     fun runAiAction(mode: KnowledgeAiMode) {
+        if (uiState.value.isAiLoading || aiJob?.isActive == true) return
         val fileId = uiState.value.file?.id ?: return
         val fileName = uiState.value.file?.displayName ?: "资料"
-        viewModelScope.launch {
+        aiJob = viewModelScope.launch {
             uiState.value = uiState.value.copy(isAiLoading = true, aiResult = null, errorMessage = null)
-            val cached = studySetRepository.getCachedAiResult(fileId, mode.name)
-            if (!cached.isNullOrBlank()) {
-                uiState.value = uiState.value.copy(isAiLoading = false, aiResult = cached)
-                return@launch
+            try {
+                val cached = studySetRepository.getCachedAiResult(fileId, mode.name)
+                if (!cached.isNullOrBlank()) {
+                    uiState.value = uiState.value.copy(isAiLoading = false, aiResult = cached)
+                    return@launch
+                }
+                aiStudyUseCase.summarizeKnowledgeFile(fileId, mode)
+                    .onSuccess { result ->
+                        studySetRepository.saveAiResult(
+                            fileId = fileId,
+                            mode = mode.name,
+                            title = "${fileName} · ${mode.displayName()}",
+                            content = result
+                        )
+                        uiState.value = uiState.value.copy(isAiLoading = false, aiResult = result)
+                    }
+                    .onFailure { throwable ->
+                        if (throwable is CancellationException) throw throwable
+                        uiState.value = uiState.value.copy(
+                            isAiLoading = false,
+                            errorMessage = throwable.message ?: "AI 处理失败"
+                        )
+                    }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                uiState.value = uiState.value.copy(
+                    isAiLoading = false,
+                    errorMessage = e.message ?: "AI 处理失败"
+                )
             }
-            aiStudyUseCase.summarizeKnowledgeFile(fileId, mode)
-                .onSuccess { result ->
-                    studySetRepository.saveAiResult(
-                        fileId = fileId,
-                        mode = mode.name,
-                        title = "${fileName} · ${mode.displayName()}",
-                        content = result
-                    )
-                    uiState.value = uiState.value.copy(isAiLoading = false, aiResult = result)
-                }
-                .onFailure { throwable ->
-                    uiState.value = uiState.value.copy(
-                        isAiLoading = false,
-                        errorMessage = throwable.message ?: "AI 处理失败"
-                    )
-                }
         }
     }
 
     fun generateStudySet() {
+        if (uiState.value.isAiLoading || studySetJob?.isActive == true) return
         val fileId = uiState.value.file?.id ?: return
-        viewModelScope.launch {
+        studySetJob = viewModelScope.launch {
             uiState.value = uiState.value.copy(
                 isAiLoading = true,
                 aiResult = null,
                 studySetDraft = null,
                 errorMessage = null
             )
-            aiStudyUseCase.generateStudySetFromKnowledgeFile(fileId)
-                .onSuccess { draft ->
-                    uiState.value = uiState.value.copy(
-                        isAiLoading = false,
-                        studySetDraft = draft
-                    )
-                }
-                .onFailure { throwable ->
-                    uiState.value = uiState.value.copy(
-                        isAiLoading = false,
-                        errorMessage = throwable.message ?: "学习集生成失败"
-                    )
-                }
+            try {
+                aiStudyUseCase.generateStudySetFromKnowledgeFile(fileId)
+                    .onSuccess { draft ->
+                        uiState.value = uiState.value.copy(
+                            isAiLoading = false,
+                            studySetDraft = draft
+                        )
+                    }
+                    .onFailure { throwable ->
+                        if (throwable is CancellationException) throw throwable
+                        uiState.value = uiState.value.copy(
+                            isAiLoading = false,
+                            errorMessage = throwable.message ?: "学习集生成失败"
+                        )
+                    }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                uiState.value = uiState.value.copy(
+                    isAiLoading = false,
+                    errorMessage = e.message ?: "学习集生成失败"
+                )
+            }
         }
     }
 
     fun saveStudySetDraft() {
+        if (uiState.value.isSavingStudySetDraft || saveDraftJob?.isActive == true) return
         val file = uiState.value.file ?: return
         val draft = uiState.value.studySetDraft ?: return
-        viewModelScope.launch {
-            studySetRepository.saveDraftFromFile(file, draft)
-                .onSuccess {
-                    uiState.value = uiState.value.copy(
-                        studySetDraft = null,
-                        errorMessage = null
-                    )
-                }
-                .onFailure { throwable ->
-                    uiState.value = uiState.value.copy(errorMessage = throwable.message ?: "学习集保存失败")
-                }
+        saveDraftJob = viewModelScope.launch {
+            uiState.value = uiState.value.copy(isSavingStudySetDraft = true, errorMessage = null)
+            try {
+                studySetRepository.saveDraftFromFile(file, draft)
+                    .onSuccess {
+                        uiState.value = uiState.value.copy(
+                            studySetDraft = null,
+                            isSavingStudySetDraft = false,
+                            errorMessage = null
+                        )
+                    }
+                    .onFailure { throwable ->
+                        if (throwable is CancellationException) throw throwable
+                        uiState.value = uiState.value.copy(
+                            isSavingStudySetDraft = false,
+                            errorMessage = throwable.message ?: "学习集保存失败"
+                        )
+                    }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                uiState.value = uiState.value.copy(
+                    isSavingStudySetDraft = false,
+                    errorMessage = e.message ?: "学习集保存失败"
+                )
+            }
         }
     }
 
     fun rebuildIndex() {
+        if (uiState.value.isIndexing || indexJob?.isActive == true) return
         val fileId = uiState.value.file?.id ?: return
-        viewModelScope.launch {
+        indexJob = viewModelScope.launch {
             uiState.value = uiState.value.copy(isIndexing = true, errorMessage = null)
-            knowledgeBaseAiRepository.rebuildIndexForFile(fileId)
-                .onSuccess { count ->
-                    uiState.value = uiState.value.copy(isIndexing = false, indexChunkCount = count)
-                }
-                .onFailure { throwable ->
-                    uiState.value = uiState.value.copy(
-                        isIndexing = false,
-                        errorMessage = throwable.message ?: "索引重建失败"
-                    )
-                }
+            try {
+                knowledgeBaseAiRepository.rebuildIndexForFile(fileId)
+                    .onSuccess { count ->
+                        uiState.value = uiState.value.copy(isIndexing = false, indexChunkCount = count)
+                    }
+                    .onFailure { throwable ->
+                        if (throwable is CancellationException) throw throwable
+                        uiState.value = uiState.value.copy(
+                            isIndexing = false,
+                            errorMessage = throwable.message ?: "索引重建失败"
+                        )
+                    }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                uiState.value = uiState.value.copy(
+                    isIndexing = false,
+                    errorMessage = e.message ?: "索引重建失败"
+                )
+            }
         }
     }
 
@@ -166,7 +225,8 @@ class KnowledgeBaseFileViewerViewModel @Inject constructor(
     }
 
     private fun loadFile() {
-        viewModelScope.launch {
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
             uiState.value = KnowledgeBaseFileViewerUiState(isLoading = true)
 
             val file = knowledgeBaseRepository.getFileSummary(args.fileId)
@@ -211,8 +271,8 @@ class KnowledgeBaseFileViewerViewModel @Inject constructor(
         file: KnowledgeBaseFileSummary,
         previewType: KnowledgeBasePreviewType
     ) {
-        val previewResult = withContext(Dispatchers.IO) {
-            runCatching {
+        val previewResult = try {
+            val preview = withContext(Dispatchers.IO) {
                 val content = File(file.localPath).reader().use { reader ->
                     val buffer = CharArray(TEXT_PREVIEW_LIMIT + 1)
                     val read = reader.read(buffer)
@@ -225,6 +285,11 @@ class KnowledgeBaseFileViewerViewModel @Inject constructor(
                 }
                 content
             }
+            Result.success(preview)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
         }
 
         uiState.value = previewResult.fold(
@@ -277,12 +342,13 @@ class KnowledgeBaseFileViewerViewModel @Inject constructor(
         file: KnowledgeBaseFileSummary,
         previewType: KnowledgeBasePreviewType
     ) {
-        val previewResult = withContext(Dispatchers.IO) {
-            runCatching {
+        val previewResult = try {
+            val pages = withContext(Dispatchers.IO) {
                 ParcelFileDescriptor.open(File(file.localPath), ParcelFileDescriptor.MODE_READ_ONLY).use { descriptor ->
                     PdfRenderer(descriptor).use { renderer ->
                         buildList {
                             for (pageIndex in 0 until renderer.pageCount) {
+                                ensureActive()
                                 renderer.openPage(pageIndex).use { page ->
                                     val scale = PDF_RENDER_WIDTH.toFloat() / page.width.toFloat()
                                     val bitmap = createBitmap(
@@ -297,6 +363,11 @@ class KnowledgeBaseFileViewerViewModel @Inject constructor(
                     }
                 }
             }
+            Result.success(pages)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
         }
 
         uiState.value = previewResult.fold(
@@ -331,6 +402,19 @@ class KnowledgeBaseFileViewerViewModel @Inject constructor(
             extension in HTML_PREVIEW_EXTENSIONS -> KnowledgeBasePreviewType.HTML
             mimeType.startsWith("text/") || extension in TEXT_EXTENSIONS -> KnowledgeBasePreviewType.TEXT
             else -> KnowledgeBasePreviewType.FALLBACK
+        }
+    }
+
+    override fun onCleared() {
+        recyclePdfPages(uiState.value.pdfPages)
+        super.onCleared()
+    }
+
+    private fun recyclePdfPages(pages: List<Bitmap>) {
+        pages.forEach { page ->
+            if (!page.isRecycled) {
+                page.recycle()
+            }
         }
     }
 
