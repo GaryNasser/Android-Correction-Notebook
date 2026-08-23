@@ -13,6 +13,7 @@ import com.github.garynasser.correction_notebook.data.repository.CourseLearningR
 import com.github.garynasser.correction_notebook.data.repository.VideoRepository
 import com.github.garynasser.correction_notebook.ui.navigation.VideoList
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import javax.inject.Inject
@@ -67,6 +68,8 @@ class VideoListViewModel @Inject constructor(
 
                 uiState = VideoUIState.Success(results)
                 progress = courseLearningRepository.getProgressForCourse(courseId)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 uiState = VideoUIState.Error("加载失败: ${e.message ?: "延河课堂课程资源请求超时"}")
             }
@@ -97,6 +100,8 @@ class VideoListViewModel @Inject constructor(
                 recordWatchInternal(playableSection, videoUrl)
                 loadProgress()
                 playState = PlayState.Success(videoUrl)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 playState = PlayState.Error("播放失败: ${e.message ?: "延河课堂视频地址获取失败"}")
             }

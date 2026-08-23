@@ -4,6 +4,7 @@ import com.github.garynasser.correction_notebook.data.local.CredentialManager
 import com.github.garynasser.correction_notebook.data.local.TokenManager
 import com.github.garynasser.correction_notebook.data.model.auth.UserCredential
 import com.github.garynasser.correction_notebook.data.remote.cas.BitCasClient
+import kotlinx.coroutines.CancellationException
 import javax.inject.Inject
 
 class YanheRepository @Inject constructor(
@@ -39,6 +40,8 @@ class YanheRepository @Inject constructor(
             )
             tokenManager.saveYanheLoginTokens(token)
             Result.success(token)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             tokenManager.removeYanheLoginToken()
             Result.failure(e)

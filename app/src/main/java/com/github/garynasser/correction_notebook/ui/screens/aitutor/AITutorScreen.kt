@@ -1134,6 +1134,7 @@ fun ProviderDialog(
     var modelExpanded by remember { mutableStateOf(false) }
     var showAdvanced by remember { mutableStateOf(false) }
     var fetchedModelsScopeKey by remember { mutableStateOf<String?>(null) }
+    var providerToDelete by remember { mutableStateOf<ProviderRecord?>(null) }
     val formScopeKey = form.modelScopeKey()
     val fetchedModelOptions = if (fetchedModelsScopeKey == formScopeKey) {
         uiState.fetchedModels.map { it.id }
@@ -1400,7 +1401,7 @@ fun ProviderDialog(
                             TextButton(onClick = { onActivate(provider.id) }) {
                                 Text(if (provider.isActive) "已启用" else "启用")
                             }
-                            IconButton(onClick = { onDelete(provider.id) }) {
+                            IconButton(onClick = { providerToDelete = provider }) {
                                 Icon(Icons.Default.Delete, contentDescription = "删除")
                             }
                         }
@@ -1415,6 +1416,25 @@ fun ProviderDialog(
             TextButton(onClick = onDismiss) { Text("取消") }
         }
     )
+
+    providerToDelete?.let { provider ->
+        AlertDialog(
+            onDismissRequest = { providerToDelete = null },
+            title = { Text("删除 Provider") },
+            text = { Text("确定删除“${provider.name}”吗？API Key 和模型配置会一起移除。") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDelete(provider.id)
+                        providerToDelete = null
+                    }
+                ) { Text("删除") }
+            },
+            dismissButton = {
+                TextButton(onClick = { providerToDelete = null }) { Text("取消") }
+            }
+        )
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -1427,6 +1447,7 @@ private fun MemoryDialog(
 ) {
     var category by remember { mutableStateOf(MemoryCategory.LEARNING_PREFERENCE.label) }
     var content by remember { mutableStateOf("") }
+    var memoryToDelete by remember { mutableStateOf<Long?>(null) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("AI 记忆") },
@@ -1472,7 +1493,7 @@ private fun MemoryDialog(
                         Column(modifier = Modifier.weight(1f)) {
                             Text("[${memory.category}] ${memory.content}")
                         }
-                        IconButton(onClick = { onDelete(memory.id) }) {
+                        IconButton(onClick = { memoryToDelete = memory.id }) {
                             Icon(Icons.Default.Delete, contentDescription = "删除")
                         }
                     }
@@ -1483,6 +1504,25 @@ private fun MemoryDialog(
             TextButton(onClick = onDismiss) { Text("完成") }
         }
     )
+
+    memoryToDelete?.let { memoryId ->
+        AlertDialog(
+            onDismissRequest = { memoryToDelete = null },
+            title = { Text("删除记忆") },
+            text = { Text("确定删除这条 AI 记忆吗？之后生成建议时不会再使用它。") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDelete(memoryId)
+                        memoryToDelete = null
+                    }
+                ) { Text("删除") }
+            },
+            dismissButton = {
+                TextButton(onClick = { memoryToDelete = null }) { Text("取消") }
+            }
+        )
+    }
 }
 
 private fun ProviderRecord.toForm(): AiProviderForm =

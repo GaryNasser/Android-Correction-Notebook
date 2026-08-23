@@ -9,14 +9,17 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Camera
@@ -53,6 +56,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -212,7 +216,13 @@ fun CourseVideoListScreen(
             },
             title = { Text("课程助手") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                     Text(section.title, style = MaterialTheme.typography.titleSmall)
                     OutlinedTextField(
                         value = noteInput,
@@ -330,7 +340,7 @@ fun VideoCard(
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 6.dp),
+            .padding(vertical = 4.dp),
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)
@@ -338,61 +348,83 @@ fun VideoCard(
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Row(
+        Column(
             modifier = Modifier
-                .padding(16.dp)
+                .padding(14.dp)
                 .fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text(
-                text = timeInfo,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-            )
-
-            Spacer(modifier = Modifier.width(16.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    Text(
+                        text = section.title.ifBlank { timeInfo },
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = timeInfo,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Checkbox(
+                    checked = isCompleted,
+                    onCheckedChange = onCompletedChange
+                )
+            }
 
             val canResolveVideo = section.videos.isNotEmpty() || section.id > 0
 
-            Checkbox(
-                checked = isCompleted,
-                onCheckedChange = onCompletedChange
-            )
-
-            FilledIconButton(
-                onClick = { onAiAssistantClick(timeInfo) },
-                modifier = Modifier.size(48.dp),
-                shape = RoundedCornerShape(12.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.Default.Psychology,
-                    contentDescription = "课程助手"
-                )
-            }
+                FilledIconButton(
+                    onClick = { onAiAssistantClick(timeInfo) },
+                    modifier = Modifier.size(40.dp),
+                    shape = RoundedCornerShape(11.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Psychology,
+                        contentDescription = "课程助手",
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
 
-            FilledIconButton(
-                onClick = onCameraPlayClick,
-                enabled = canResolveVideo,
-                modifier = Modifier.size(48.dp),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Camera,
-                    contentDescription = "播放摄像头视频"
-                )
-            }
+                FilledIconButton(
+                    onClick = onCameraPlayClick,
+                    enabled = canResolveVideo,
+                    modifier = Modifier.size(40.dp),
+                    shape = RoundedCornerShape(11.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Camera,
+                        contentDescription = "播放摄像头视频",
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
 
-            FilledIconButton(
-                onClick = onScreenPlayClick,
-                enabled = canResolveVideo,
-                modifier = Modifier.size(48.dp),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.PlayArrow,
-                    contentDescription = "播放屏幕录像"
-                )
+                FilledIconButton(
+                    onClick = onScreenPlayClick,
+                    enabled = canResolveVideo,
+                    modifier = Modifier.size(40.dp),
+                    shape = RoundedCornerShape(11.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = "播放屏幕录像",
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
         }
     }

@@ -10,6 +10,7 @@ import com.github.garynasser.correction_notebook.utils.SignatureUtils
 import com.google.gson.Gson
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
+import kotlinx.coroutines.CancellationException
 import javax.inject.Inject
 import javax.inject.Singleton
 import androidx.core.net.toUri
@@ -82,6 +83,8 @@ class VideoRepository @Inject constructor(
                 if (it.code != 0 && it.code != 200) return emptyList()
                 parseCourseResult(it.data, it.message, it.code, page).courses
             } ?: emptyList()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e("VIDEO_REPO", "获取全校课程列表失败", e)
             emptyList()
@@ -112,6 +115,8 @@ class VideoRepository @Inject constructor(
                     course.nameEn.contains(keyword, ignoreCase = true) ||
                     course.professors.any { it.contains(keyword, ignoreCase = true) }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e("VIDEO_REPO", "获取个人课程列表失败", e)
             emptyList()

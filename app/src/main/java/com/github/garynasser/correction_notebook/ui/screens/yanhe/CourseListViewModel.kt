@@ -14,6 +14,7 @@ import com.github.garynasser.correction_notebook.data.repository.CourseLearningR
 import com.github.garynasser.correction_notebook.data.repository.VideoRepository
 import com.github.garynasser.correction_notebook.data.repository.YanheRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import javax.inject.Inject
@@ -122,6 +123,8 @@ class CourseListViewModel @Inject constructor(
                 }
 
                 uiState = CourseUiState.Success(courses.toList())
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 if (!isNextPage) {
                     uiState = CourseUiState.Error("加载失败: ${e.message}")
@@ -171,6 +174,7 @@ class CourseListViewModel @Inject constructor(
                         applyPersonalCourseFilters()
                     }
                 }.onFailure { throwable ->
+                    if (throwable is CancellationException) throw throwable
                     personalCourses = emptyList()
                     semesters = listOf("全部学期")
                     selectedSemester = "全部学期"
