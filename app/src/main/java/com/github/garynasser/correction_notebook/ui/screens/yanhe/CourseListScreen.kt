@@ -1,6 +1,7 @@
 package com.github.garynasser.correction_notebook.ui.screens.yanhe
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.*
@@ -92,18 +93,20 @@ fun CourseListScreen(
                             CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
                         }
                         is CourseUiState.Error -> {
-                            Column(
-                                modifier = Modifier.align(Alignment.Center),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Text(state.message, color = MaterialTheme.colorScheme.error)
-                                Button(onClick = { viewModel.loadCourses(false) }) { Text("重试") }
-                            }
+                            CourseListMessageState(
+                                title = "课程加载失败",
+                                message = state.message,
+                                actionText = "重试",
+                                onAction = { viewModel.loadCourses(false) },
+                                modifier = Modifier
+                                    .align(Alignment.Center)
+                                    .padding(horizontal = 24.dp)
+                            )
                         }
                         is CourseUiState.Success -> {
                             LazyVerticalGrid(
                                 state = gridState,
-                                columns = GridCells.Fixed(2),
+                                columns = GridCells.Adaptive(minSize = 164.dp),
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                                 horizontalArrangement = Arrangement.spacedBy(7.dp),
                                 verticalArrangement = Arrangement.spacedBy(7.dp),
@@ -155,6 +158,54 @@ fun CourseListScreen(
 }
 
 @Composable
+private fun CourseListMessageState(
+    title: String,
+    message: String,
+    actionText: String,
+    onAction: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                Icons.Default.CloudOff,
+                contentDescription = null,
+                modifier = Modifier.size(26.dp),
+                tint = MaterialTheme.colorScheme.error
+            )
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Button(
+                onClick = onAction,
+                shape = RoundedCornerShape(8.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(actionText)
+            }
+        }
+    }
+}
+
+@Composable
 private fun EmptyCourseState(
     isPersonalMode: Boolean,
     onRefresh: () -> Unit
@@ -163,10 +214,7 @@ private fun EmptyCourseState(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(8.dp),
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f),
-        border = androidx.compose.foundation.BorderStroke(
-            1.dp,
-            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
-        )
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -176,6 +224,7 @@ private fun EmptyCourseState(
             Icon(
                 Icons.Default.CalendarMonth,
                 contentDescription = null,
+                modifier = Modifier.size(26.dp),
                 tint = MaterialTheme.colorScheme.primary
             )
             Text(
@@ -190,10 +239,14 @@ private fun EmptyCourseState(
                     "换个关键词或学期再试试。"
                 },
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.fillMaxWidth()
             )
             if (isPersonalMode) {
-                TextButton(onClick = onRefresh) {
+                TextButton(
+                    onClick = onRefresh,
+                    shape = RoundedCornerShape(8.dp)
+                ) {
                     Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
                     Text("刷新课表")
@@ -395,10 +448,7 @@ fun CourseCard(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)
         ),
-        border = androidx.compose.foundation.BorderStroke(
-            1.dp,
-            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
-        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         onClick = { onCourseCardClick(course.id, course.nameZh) }
     ) {
@@ -406,7 +456,7 @@ fun CourseCard(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(62.dp)
+                    .height(76.dp)
                     .background(
                         Brush.linearGradient(
                             listOf(
@@ -431,10 +481,7 @@ fun CourseCard(
                         Surface(
                             shape = RoundedCornerShape(8.dp),
                             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.48f),
-                            border = androidx.compose.foundation.BorderStroke(
-                                1.dp,
-                                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                            )
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                         ) {
                             Icon(
                                 Icons.Default.PlayCircleOutline,
@@ -448,8 +495,8 @@ fun CourseCard(
             }
 
             Column(
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 7.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
             ) {
                 Text(
                     text = course.nameZh,
@@ -466,8 +513,8 @@ fun CourseCard(
                 )
                 SuggestionChip(
                     onClick = { },
-                    label = { Text(course.semester, fontSize = 9.sp) },
-                    modifier = Modifier.height(19.dp)
+                    label = { Text(course.semester, fontSize = 10.sp) },
+                    modifier = Modifier.height(22.dp)
                 )
             }
         }

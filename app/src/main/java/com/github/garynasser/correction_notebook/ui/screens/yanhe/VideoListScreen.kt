@@ -3,6 +3,8 @@ package com.github.garynasser.correction_notebook.ui.screens.yanhe
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -27,6 +29,7 @@ import androidx.compose.material.icons.filled.AddTask
 import androidx.compose.material.icons.filled.NoteAlt
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
@@ -67,7 +70,7 @@ import com.github.garynasser.correction_notebook.ui.components.FreshScreen
 
 
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun CourseVideoListScreen(
     viewModel: VideoListViewModel = hiltViewModel(),
@@ -115,13 +118,14 @@ fun CourseVideoListScreen(
         ) {
             when (val state = viewModel.uiState) {
                 is VideoUIState.Error -> {
-                    Column(
+                    VideoListMessageState(
+                        title = "视频列表加载失败",
+                        message = state.message,
+                        actionText = "重试",
+                        onAction = { viewModel.getVideoList(viewModel.courseId) },
                         modifier = Modifier.align(Alignment.Center),
                         horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(state.message, color = MaterialTheme.colorScheme.error)
-                        Button(onClick = { viewModel.getVideoList(viewModel.courseId) }) { Text("重试") }
-                    }
+                    )
                 }
 
                 is VideoUIState.Loading -> {
@@ -132,7 +136,8 @@ fun CourseVideoListScreen(
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(1),
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxSize()
                     ) {
                         item {
                             CourseProgressHeader(
@@ -181,6 +186,11 @@ fun CourseVideoListScreen(
                             }
                             else -> Unit
                         }
+                        if (state.videos.isEmpty()) {
+                            item {
+                                EmptyVideoState(onRefresh = { viewModel.getVideoList(viewModel.courseId) })
+                            }
+                        }
                         items(state.videos) { video ->
                             val isCompleted = viewModel.progress?.completedSectionIds?.contains(video.id) == true
                             val isResolvingVideo = viewModel.playState is PlayState.Loading
@@ -216,14 +226,20 @@ fun CourseVideoListScreen(
                 selectedSection = null
                 assistantViewModel.clear()
             },
-            title = { Text("课程助手") },
+            shape = RoundedCornerShape(8.dp),
+            title = {
+                Text(
+                    text = "课程助手",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            },
             text = {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 420.dp)
+                        .heightIn(max = 460.dp)
                         .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Text(section.title, style = MaterialTheme.typography.titleSmall)
                     OutlinedTextField(
@@ -231,6 +247,7 @@ fun CourseVideoListScreen(
                         onValueChange = { noteInput = it },
                         label = { Text("补充课堂笔记，可留空") },
                         minLines = 3,
+                        shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.fillMaxWidth()
                     )
                     when {
@@ -281,19 +298,28 @@ fun CourseVideoListScreen(
                 }
             },
             confirmButton = {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     if (assistantState.result != null) {
-                        TextButton(onClick = {
-                            assistantViewModel.saveResultAsNote(
-                                viewModel.courseId,
-                                viewModel.courseName,
-                                section.id,
-                                section.title
-                            )
-                        }) { Text("存笔记") }
-                        TextButton(onClick = {
-                            assistantViewModel.saveResultAsTodo(viewModel.courseId, section.title)
-                        }) { Text("转待办") }
+                        TextButton(
+                            onClick = {
+                                assistantViewModel.saveResultAsNote(
+                                    viewModel.courseId,
+                                    viewModel.courseName,
+                                    section.id,
+                                    section.title
+                                )
+                            },
+                            shape = RoundedCornerShape(8.dp)
+                        ) { Text("存笔记") }
+                        TextButton(
+                            onClick = {
+                                assistantViewModel.saveResultAsTodo(viewModel.courseId, section.title)
+                            },
+                            shape = RoundedCornerShape(8.dp)
+                        ) { Text("转待办") }
                     }
                     TextButton(
                         onClick = {
@@ -305,7 +331,8 @@ fun CourseVideoListScreen(
                                 noteInput
                             )
                         },
-                        enabled = !assistantState.isLoading
+                        enabled = !assistantState.isLoading,
+                        shape = RoundedCornerShape(8.dp)
                     ) { Text(if (assistantState.result == null) "生成学习包" else "重新生成") }
                 }
             },
@@ -313,9 +340,104 @@ fun CourseVideoListScreen(
                 TextButton(onClick = {
                     selectedSection = null
                     assistantViewModel.clear()
-                }) { Text("关闭") }
+                }, shape = RoundedCornerShape(8.dp)) { Text("关闭") }
             }
         )
+    }
+}
+
+@Composable
+private fun VideoListMessageState(
+    title: String,
+    message: String,
+    actionText: String,
+    onAction: () -> Unit,
+    modifier: Modifier = Modifier,
+    horizontalAlignment: Alignment.Horizontal = Alignment.CenterHorizontally
+) {
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp)
+            .heightIn(min = 132.dp),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            horizontalAlignment = horizontalAlignment,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                Icons.Default.Refresh,
+                contentDescription = null,
+                modifier = Modifier.size(26.dp),
+                tint = MaterialTheme.colorScheme.error
+            )
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Button(
+                onClick = onAction,
+                shape = RoundedCornerShape(8.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(actionText)
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyVideoState(
+    onRefresh: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                Icons.Default.School,
+                contentDescription = null,
+                modifier = Modifier.size(26.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = "暂无课程视频",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = "这个课程暂时没有可播放章节，稍后刷新或换一门课程试试。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            TextButton(
+                onClick = onRefresh,
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("刷新")
+            }
+        }
     }
 }
 
