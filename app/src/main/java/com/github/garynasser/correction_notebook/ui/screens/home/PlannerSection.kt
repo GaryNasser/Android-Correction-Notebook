@@ -643,6 +643,7 @@ fun AddScheduleDialog(
     var allDay by remember { mutableStateOf(false) }
     var selectedDate by remember { mutableStateOf(LocalDate.now()) }
     var showDatePicker by remember { mutableStateOf(false) }
+    var validationMessage by remember { mutableStateOf<String?>(null) }
     val startTimeState = rememberTimePickerState(initialHour = 9, initialMinute = 0, is24Hour = true)
     val endTimeState = rememberTimePickerState(initialHour = 10, initialMinute = 0, is24Hour = true)
 
@@ -653,14 +654,20 @@ fun AddScheduleDialog(
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = title,
-                    onValueChange = { title = it },
+                    onValueChange = {
+                        title = it
+                        validationMessage = null
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("活动标题") },
                     singleLine = true
                 )
                 OutlinedTextField(
                     value = location,
-                    onValueChange = { location = it },
+                    onValueChange = {
+                        location = it
+                        validationMessage = null
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("地点") },
                     singleLine = true
@@ -689,6 +696,13 @@ fun AddScheduleDialog(
                     Text("结束时间", style = MaterialTheme.typography.labelMedium)
                     CompactTimeInput(state = endTimeState)
                 }
+                validationMessage?.let { message ->
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
             }
         },
         confirmButton = {
@@ -700,17 +714,21 @@ fun AddScheduleDialog(
                     } else {
                         LocalDateTime.of(selectedDate, LocalTime.of(endTimeState.hour, endTimeState.minute))
                     }
-                    if (title.isNotBlank() && (allDay || end.isAfter(start))) {
-                        onAdd(
-                            ScheduleEvent(
-                                title = title.trim(),
-                                description = description.trim(),
-                                location = location.trim(),
-                                startAt = if (allDay) LocalDateTime.of(selectedDate, LocalTime.MIDNIGHT) else start,
-                                endAt = end,
-                                allDay = allDay
+                    when {
+                        title.isBlank() -> validationMessage = "请填写活动标题"
+                        !allDay && !end.isAfter(start) -> validationMessage = "结束时间需要晚于开始时间"
+                        else -> {
+                            onAdd(
+                                ScheduleEvent(
+                                    title = title.trim(),
+                                    description = description.trim(),
+                                    location = location.trim(),
+                                    startAt = if (allDay) LocalDateTime.of(selectedDate, LocalTime.MIDNIGHT) else start,
+                                    endAt = end,
+                                    allDay = allDay
+                                )
                             )
-                        )
+                        }
                     }
                 },
                 enabled = title.isNotBlank()
@@ -722,6 +740,10 @@ fun AddScheduleDialog(
             TextButton(onClick = onDismiss) { Text("取消") }
         }
     )
+
+    LaunchedEffect(startTimeState.hour, startTimeState.minute, endTimeState.hour, endTimeState.minute, allDay) {
+        validationMessage = null
+    }
 
     if (showDatePicker) {
         val datePickerState = rememberDatePickerState(
@@ -739,6 +761,7 @@ fun AddScheduleDialog(
                             selectedDate = Instant.ofEpochMilli(millis)
                                 .atZone(ZoneId.systemDefault())
                                 .toLocalDate()
+                            validationMessage = null
                         }
                         showDatePicker = false
                     }
