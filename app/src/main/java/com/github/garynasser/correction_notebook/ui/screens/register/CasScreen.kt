@@ -1,6 +1,7 @@
 package com.github.garynasser.correction_notebook.ui.screens.register
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -12,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
@@ -34,7 +36,10 @@ fun CasScreen(
                 title = { },
                 windowInsets = WindowInsets(0, 0, 0, 0),
                 navigationIcon = {
-                    IconButton(onClick = onBackButtonClick) {
+                    IconButton(
+                        onClick = onBackButtonClick,
+                        enabled = !viewModel.isCasLoading
+                    ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回"
@@ -64,18 +69,28 @@ fun CasScreen(
                 inputFields = {
                     OutlinedTextField(
                         value = viewModel.studentId,
-                        onValueChange = { viewModel.studentId = it },
+                        onValueChange = {
+                            viewModel.studentId = it
+                            viewModel.clearError()
+                        },
                         label = { Text("学号") },
                         placeholder = { Text("学号") },
                         enabled = !viewModel.isCasLoading,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(8.dp),
                         singleLine = true,
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Number,
+                            imeAction = ImeAction.Next
+                        )
                     )
 
                     OutlinedTextField(
                         value = viewModel.casPassword,
-                        onValueChange = { viewModel.casPassword = it },
+                        onValueChange = {
+                            viewModel.casPassword = it
+                            viewModel.clearError()
+                        },
                         label = { Text("统一验证密码") },
                         placeholder = { Text("统一验证密码") },
                         enabled = !viewModel.isCasLoading,
@@ -87,11 +102,24 @@ fun CasScreen(
                             PasswordVisualTransformation()
                         },
                         singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Password,
+                            imeAction = ImeAction.Done
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onDone = {
+                                if (viewModel.isCasEnabled) {
+                                    onConfirm()
+                                }
+                            }
+                        ),
                         trailingIcon = {
-                            IconButton(onClick = {
-                                viewModel.isCasPasswordVisible = !viewModel.isCasPasswordVisible
-                            }) {
+                            IconButton(
+                                onClick = {
+                                    viewModel.isCasPasswordVisible = !viewModel.isCasPasswordVisible
+                                },
+                                enabled = !viewModel.isCasLoading
+                            ) {
                                 val icon = if (viewModel.isCasPasswordVisible) {
                                     Icons.Default.Visibility
                                 } else {

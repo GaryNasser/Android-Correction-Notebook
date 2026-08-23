@@ -40,7 +40,7 @@ class RegistrationViewModel @Inject constructor(
         get() = !isOnNextLoading && username.isNotBlank() && password.length >= 6
 
     val isCasEnabled: Boolean
-        get() = !isCasLoading && casPassword.isNotBlank() && studentId.isNotBlank()
+        get() = !isCasLoading && casPassword.isNotBlank() && studentId.trim().isNotBlank()
 
     fun proceedToCasAuth(onSuccess: () -> Unit) {
         if (!isOnNextEnabled) return
@@ -86,5 +86,9 @@ class RegistrationViewModel @Inject constructor(
                 isCasLoading = false
             }
         }
+    }
+
+    fun clearError() {
+        errorMessage = null
     }
 }

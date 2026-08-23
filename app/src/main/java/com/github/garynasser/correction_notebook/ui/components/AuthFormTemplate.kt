@@ -162,6 +162,7 @@ fun AuthMessageCard(
             )
             Text(
                 text = message,
+                modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.bodySmall,
                 color = if (isError) {
                     MaterialTheme.colorScheme.onErrorContainer
