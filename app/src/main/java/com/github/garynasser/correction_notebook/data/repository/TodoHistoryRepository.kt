@@ -8,12 +8,10 @@ import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import com.github.garynasser.correction_notebook.data.model.home.Priority
 import com.github.garynasser.correction_notebook.data.model.home.TodoHistoryItem
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
-import java.time.LocalDate
 import java.util.UUID
 
 private val Context.todoHistoryDataStore: DataStore<Preferences> by preferencesDataStore("todo_history_prefs")
@@ -26,32 +24,32 @@ class TodoHistoryRepository(private val context: Context) {
         .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
         .map { prefs ->
             prefs[historyItemsKey]?.let { json ->
-                normalizeHistoryItems(parseHistoryItems(json))
+                normalizeHistoryItems(TodoPreferenceCodec.parseHistoryItems(json))
             } ?: emptyList()
         }
 
     suspend fun addHistoryItem(item: TodoHistoryItem) {
         context.todoHistoryDataStore.edit { prefs ->
-            val current = prefs[historyItemsKey]?.let { parseHistoryItems(it) } ?: emptyList()
+            val current = prefs[historyItemsKey]?.let(TodoPreferenceCodec::parseHistoryItems) ?: emptyList()
             val updated = normalizeHistoryItems(current + item)
-            prefs[historyItemsKey] = serializeHistoryItems(updated)
+            prefs[historyItemsKey] = TodoPreferenceCodec.serializeHistoryItems(updated)
         }
     }
 
     suspend fun deleteHistoryItem(itemId: String) {
         context.todoHistoryDataStore.edit { prefs ->
-            val current = prefs[historyItemsKey]?.let { parseHistoryItems(it) } ?: emptyList()
+            val current = prefs[historyItemsKey]?.let(TodoPreferenceCodec::parseHistoryItems) ?: emptyList()
             val updated = current.filter { it.id != itemId }
-            prefs[historyItemsKey] = serializeHistoryItems(updated)
+            prefs[historyItemsKey] = TodoPreferenceCodec.serializeHistoryItems(updated)
         }
     }
 
     suspend fun repairDuplicateIds() {
         context.todoHistoryDataStore.edit { prefs ->
-            val current = prefs[historyItemsKey]?.let { parseHistoryItems(it) } ?: emptyList()
+            val current = prefs[historyItemsKey]?.let(TodoPreferenceCodec::parseHistoryItems) ?: emptyList()
             val normalized = normalizeHistoryItems(current)
             if (normalized != current) {
-                prefs[historyItemsKey] = serializeHistoryItems(normalized)
+                prefs[historyItemsKey] = TodoPreferenceCodec.serializeHistoryItems(normalized)
             }
         }
     }
@@ -59,40 +57,6 @@ class TodoHistoryRepository(private val context: Context) {
     suspend fun clearAllHistory() {
         context.todoHistoryDataStore.edit { prefs ->
             prefs.remove(historyItemsKey)
-        }
-    }
-
-    private fun serializeHistoryItems(items: List<TodoHistoryItem>): String {
-        return items.joinToString("|||") { item ->
-            listOf(
-                item.id,
-                item.title,
-                item.description,
-                item.priority.name,
-                item.dueDate?.toString() ?: "",
-                item.createdAt.toString(),
-                item.completedAt.toString(),
-                item.completedDate.toString()
-            ).joinToString(":::")
-        }
-    }
-
-    private fun parseHistoryItems(json: String): List<TodoHistoryItem> {
-        if (json.isBlank()) return emptyList()
-        return json.split("|||").mapNotNull { itemStr ->
-            val parts = itemStr.split(":::")
-            if (parts.size >= 8) {
-                TodoHistoryItem(
-                    id = parts[0],
-                    title = parts[1],
-                    description = parts[2],
-                    priority = try { Priority.valueOf(parts[3]) } catch (e: Exception) { Priority.MEDIUM },
-                    dueDate = if (parts[4].isNotBlank()) LocalDate.parse(parts[4]) else null,
-                    createdAt = parts[5].toLongOrNull() ?: System.currentTimeMillis(),
-                    completedAt = parts[6].toLongOrNull() ?: System.currentTimeMillis(),
-                    completedDate = try { LocalDate.parse(parts[7]) } catch (e: Exception) { LocalDate.now() }
-                )
-            } else null
         }
     }
 
