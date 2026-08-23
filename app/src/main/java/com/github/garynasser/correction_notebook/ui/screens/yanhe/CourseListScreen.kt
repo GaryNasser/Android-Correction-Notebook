@@ -104,9 +104,9 @@ fun CourseListScreen(
                             LazyVerticalGrid(
                                 state = gridState,
                                 columns = GridCells.Fixed(2),
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                                horizontalArrangement = Arrangement.spacedBy(7.dp),
+                                verticalArrangement = Arrangement.spacedBy(7.dp),
                                 modifier = Modifier.fillMaxSize()
                             ) {
                                 if (viewModel.recentProgress.isNotEmpty()) {
@@ -258,7 +258,7 @@ private fun RecentLearningRow(
         shape = RoundedCornerShape(8.dp)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
@@ -305,7 +305,7 @@ fun SearchAndFilterSection(viewModel: CourseListViewModel) {
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
         tonalElevation = 1.dp
     ) {
-        Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -406,7 +406,7 @@ fun CourseCard(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(72.dp)
+                    .height(62.dp)
                     .background(
                         Brush.linearGradient(
                             listOf(
@@ -439,7 +439,7 @@ fun CourseCard(
                             Icon(
                                 Icons.Default.PlayCircleOutline,
                                 contentDescription = null,
-                                modifier = Modifier.padding(16.dp),
+                                modifier = Modifier.padding(14.dp),
                                 tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.62f)
                             )
                         }
@@ -447,25 +447,27 @@ fun CourseCard(
                 )
             }
 
-            Column(modifier = Modifier.padding(8.dp)) {
+            Column(
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 7.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
                 Text(
                     text = course.nameZh,
-                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                    maxLines = 1,
+                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = course.professors.joinToString(", ").ifEmpty { "未知讲师" },
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.outline,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Spacer(modifier = Modifier.height(3.dp))
                 SuggestionChip(
                     onClick = { },
                     label = { Text(course.semester, fontSize = 9.sp) },
-                    modifier = Modifier.height(20.dp)
+                    modifier = Modifier.height(19.dp)
                 )
             }
         }

@@ -15,6 +15,7 @@ import com.github.garynasser.correction_notebook.data.repository.VideoRepository
 import com.github.garynasser.correction_notebook.data.repository.YanheRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import javax.inject.Inject
@@ -49,6 +50,7 @@ class CourseListViewModel @Inject constructor(
     val courses = mutableStateListOf<Course>()
     private var personalCourses: List<Course> = emptyList()
     private var isRefreshingSchedule = false
+    private var courseLoadJob: Job? = null
 
     // UI 状态
     var uiState: CourseUiState by mutableStateOf(CourseUiState.Loading)
@@ -87,7 +89,7 @@ class CourseListViewModel @Inject constructor(
     }
 
     fun loadCourses(isNextPage: Boolean = false) {
-        if (isNextPage && (isLoadingMore || isEndReached)) return
+        if (isNextPage && (isLoadingMore || isEndReached || courseLoadJob?.isActive == true)) return
         if (isPersonalCoursesMode) {
             if (!isNextPage) {
                 applyPersonalCourseFilters()
@@ -95,7 +97,11 @@ class CourseListViewModel @Inject constructor(
             return
         }
 
-        viewModelScope.launch {
+        if (!isNextPage) {
+            courseLoadJob?.cancel()
+        }
+
+        courseLoadJob = viewModelScope.launch {
             if (!isNextPage) {
                 currentPage = 1
                 isEndReached = false
@@ -145,6 +151,7 @@ class CourseListViewModel @Inject constructor(
     fun refreshMySchedule() {
         if (isRefreshingSchedule) return
         isRefreshingSchedule = true
+        courseLoadJob?.cancel()
         viewModelScope.launch {
             uiState = CourseUiState.Loading
             isPersonalCoursesMode = true
