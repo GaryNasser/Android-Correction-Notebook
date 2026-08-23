@@ -228,6 +228,7 @@ fun MainContainer(
                         appUpdateViewModel.checkForUpdates(silent = false)
                     },
                     currentVersionName = appUpdateUiState.currentVersionName,
+                    isCheckingForUpdates = appUpdateUiState.isChecking,
                     onNavigateToLogin = {
                         outerNavController?.navigate(CasAuth)
                     }
