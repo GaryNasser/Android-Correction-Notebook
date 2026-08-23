@@ -324,10 +324,13 @@ class StudyTimerManager(
         return when (val state = _timerState.value) {
             is TimerState.Pomodoro -> {
                 val settings = state.state.settings
-                val focusTime = settings.focusMinutes * 60
-                val remaining = state.state.timeRemainingSeconds
-                val elapsed = focusTime - remaining
-                (state.state.completedPomodoros * settings.focusMinutes * 60) + maxOf(0, elapsed)
+                val completedFocusSeconds = state.state.totalFocusTimeMinutes * 60
+                val currentFocusSeconds = if (state.state.phase == PomodoroPhase.FOCUS) {
+                    settings.focusMinutes * 60 - state.state.timeRemainingSeconds
+                } else {
+                    0
+                }
+                completedFocusSeconds + maxOf(0, currentFocusSeconds)
             }
             is TimerState.Stopwatch -> state.elapsedSeconds
             is TimerState.StopwatchFinished -> state.elapsedSeconds
