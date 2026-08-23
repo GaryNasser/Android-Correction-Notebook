@@ -18,6 +18,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -34,9 +35,17 @@ fun TodoHistoryScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showClearHistoryDialog by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(uiState.message) {
+        val message = uiState.message ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(message)
+        viewModel.consumeMessage()
+    }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("完成历史") },
@@ -48,7 +57,10 @@ fun TodoHistoryScreen(
                 },
                 actions = {
                     if (uiState.historyItems.isNotEmpty()) {
-                        IconButton(onClick = { showClearHistoryDialog = true }) {
+                        IconButton(
+                            onClick = { showClearHistoryDialog = true },
+                            enabled = !uiState.isMutating
+                        ) {
                             Icon(Icons.Default.Delete, contentDescription = "清除历史")
                         }
                     }
@@ -78,13 +90,13 @@ fun TodoHistoryScreen(
                     Icon(
                         Icons.Default.Check,
                         contentDescription = null,
-                        modifier = Modifier.size(48.dp),
+                        modifier = Modifier.size(40.dp),
                         tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = "暂无完成记录",
-                        style = MaterialTheme.typography.bodyLarge,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                     )
                 }
@@ -94,10 +106,10 @@ fun TodoHistoryScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
-                    .padding(horizontal = 14.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                    .padding(horizontal = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                item { Spacer(modifier = Modifier.height(8.dp)) }
+                item { Spacer(modifier = Modifier.height(6.dp)) }
 
                 uiState.groupedByDate.forEach { (date, items) ->
                     item {
@@ -106,12 +118,13 @@ fun TodoHistoryScreen(
                     items(items, key = { "${it.id}_${it.completedAt}" }) { historyItem ->
                         TodoHistoryItemCard(
                             item = historyItem,
+                            enabled = !uiState.isMutating,
                             onDelete = { viewModel.deleteHistoryItem(historyItem.id) }
                         )
                     }
                 }
 
-                item { Spacer(modifier = Modifier.height(24.dp)) }
+                item { Spacer(modifier = Modifier.height(16.dp)) }
             }
         }
     }
@@ -119,14 +132,27 @@ fun TodoHistoryScreen(
     if (showClearHistoryDialog) {
         AlertDialog(
             onDismissRequest = { showClearHistoryDialog = false },
-            title = { Text("清除完成历史") },
-            text = { Text("确定要清空所有完成记录吗？此操作无法撤销。") },
+            shape = RoundedCornerShape(8.dp),
+            title = {
+                Text(
+                    text = "清除完成历史",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            },
+            text = {
+                Text(
+                    text = "确定要清空所有完成记录吗？此操作无法撤销。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
             confirmButton = {
                 TextButton(
                     onClick = {
                         viewModel.clearAllHistory()
                         showClearHistoryDialog = false
-                    }
+                    },
+                    enabled = !uiState.isMutating
                 ) {
                     Text("清除")
                 }
@@ -162,6 +188,7 @@ private fun DateHeader(date: LocalDate) {
 @Composable
 private fun TodoHistoryItemCard(
     item: TodoHistoryItem,
+    enabled: Boolean,
     onDelete: () -> Unit
 ) {
     val priorityColor = when (item.priority) {
@@ -179,7 +206,7 @@ private fun TodoHistoryItemCard(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
         )
@@ -187,7 +214,7 @@ private fun TodoHistoryItemCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(horizontal = 10.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Green check icon
@@ -206,7 +233,7 @@ private fun TodoHistoryItemCard(
                 )
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(10.dp))
 
             Column(
                 modifier = Modifier.weight(1f)
@@ -226,7 +253,9 @@ private fun TodoHistoryItemCard(
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Medium,
                         textDecoration = TextDecoration.LineThrough,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
 
@@ -235,7 +264,8 @@ private fun TodoHistoryItemCard(
                         text = item.description,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-                        maxLines = 1
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
@@ -251,6 +281,7 @@ private fun TodoHistoryItemCard(
 
             IconButton(
                 onClick = onDelete,
+                enabled = enabled,
                 modifier = Modifier.size(28.dp)
             ) {
                 Icon(

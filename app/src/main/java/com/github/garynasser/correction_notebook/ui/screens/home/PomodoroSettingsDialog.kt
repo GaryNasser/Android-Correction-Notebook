@@ -1,6 +1,9 @@
 package com.github.garynasser.correction_notebook.ui.screens.home
 
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,13 +25,21 @@ fun PomodoroSettingsDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("番茄钟设置") },
+        shape = RoundedCornerShape(8.dp),
+        title = {
+            Text(
+                text = "番茄钟设置",
+                style = MaterialTheme.typography.titleMedium
+            )
+        },
         text = {
             Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(20.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Focus Minutes
                 SettingSlider(
                     label = "学习时长",
                     value = focusMinutes,
@@ -37,7 +48,6 @@ fun PomodoroSettingsDialog(
                     valueDisplay = "${focusMinutes.toInt()} 分钟"
                 )
 
-                // Short Break Minutes
                 SettingSlider(
                     label = "短休息",
                     value = shortBreakMinutes,
@@ -46,7 +56,6 @@ fun PomodoroSettingsDialog(
                     valueDisplay = "${shortBreakMinutes.toInt()} 分钟"
                 )
 
-                // Long Break Minutes
                 SettingSlider(
                     label = "长休息",
                     value = longBreakMinutes,
@@ -55,7 +64,6 @@ fun PomodoroSettingsDialog(
                     valueDisplay = "${longBreakMinutes.toInt()} 分钟"
                 )
 
-                // Pomodoros Before Long Break
                 SettingSlider(
                     label = "循环轮数",
                     value = pomodorosBeforeLongBreak,
@@ -76,7 +84,8 @@ fun PomodoroSettingsDialog(
                             pomodorosBeforeLongBreak = pomodorosBeforeLongBreak.toInt()
                         )
                     )
-                }
+                },
+                shape = RoundedCornerShape(8.dp)
             ) {
                 Text("保存")
             }
@@ -97,7 +106,7 @@ private fun SettingSlider(
     valueRange: ClosedFloatingPointRange<Float>,
     valueDisplay: String
 ) {
-    Column {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -110,7 +119,7 @@ private fun SettingSlider(
             )
             Text(
                 text = valueDisplay,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.Bold
             )
