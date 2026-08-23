@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -69,6 +70,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -111,6 +113,14 @@ fun AITutorScreen(
     var showClearChatConfirm by remember { mutableStateOf(false) }
     var showDeleteChatConfirm by remember { mutableStateOf(false) }
     var menuExpanded by remember { mutableStateOf(false) }
+    val chatListState = rememberLazyListState()
+    val hasCurrentSession = uiState.selectedSessionId != null
+
+    LaunchedEffect(uiState.messages.size) {
+        if (uiState.messages.isNotEmpty()) {
+            chatListState.animateScrollToItem(uiState.messages.lastIndex)
+        }
+    }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -123,7 +133,10 @@ fun AITutorScreen(
                     scrolledContainerColor = MaterialTheme.colorScheme.surface
                 ),
                 actions = {
-                    IconButton(onClick = { viewModel.newSession() }) {
+                    IconButton(
+                        onClick = { viewModel.newSession() },
+                        enabled = uiState.isConfigured
+                    ) {
                         Icon(Icons.Default.Add, contentDescription = "新建对话")
                     }
                     IconButton(onClick = { showMemoryDialog = true }) {
@@ -139,6 +152,7 @@ fun AITutorScreen(
                         DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
                             DropdownMenuItem(
                                 text = { Text("重命名当前对话") },
+                                enabled = hasCurrentSession,
                                 onClick = {
                                     menuExpanded = false
                                     showRenameDialog = true
@@ -146,6 +160,7 @@ fun AITutorScreen(
                             )
                             DropdownMenuItem(
                                 text = { Text("清空当前对话") },
+                                enabled = hasCurrentSession && uiState.messages.isNotEmpty(),
                                 onClick = {
                                     menuExpanded = false
                                     showClearChatConfirm = true
@@ -153,6 +168,7 @@ fun AITutorScreen(
                             )
                             DropdownMenuItem(
                                 text = { Text("删除当前对话") },
+                                enabled = hasCurrentSession,
                                 onClick = {
                                     menuExpanded = false
                                     showDeleteChatConfirm = true
@@ -189,6 +205,7 @@ fun AITutorScreen(
                     )
                 } else {
                     LazyColumn(
+                        state = chatListState,
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth(),
@@ -1177,6 +1194,12 @@ fun ProviderDialog(
         emptyList()
     }
     val modelOptions = (fetchedModelOptions + modelOptionsFor(form.type)).distinct()
+    val isFormReady = form.baseUrl.trim().let { it.startsWith("http://") || it.startsWith("https://") } &&
+        form.model.trim().isNotEmpty() &&
+        (form.type != AIProviderType.ANTHROPIC_COMPATIBLE || form.apiKey.trim().isNotEmpty())
+    val statusMessageIsError = uiState.providerStatusMessage?.let { message ->
+        listOf("失败", "错误", "不能为空", "必须", "需要").any { marker -> marker in message }
+    } == true
     fun updateForm(next: AiProviderForm) {
         if (next.modelScopeKey() != form.modelScopeKey()) {
             fetchedModelsScopeKey = null
@@ -1197,7 +1220,7 @@ fun ProviderDialog(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 520.dp),
+                    .heightIn(max = 500.dp),
                 contentPadding = PaddingValues(vertical = 2.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -1344,8 +1367,10 @@ fun ProviderDialog(
                                 fetchedModelsScopeKey = formScopeKey
                                 onFetchModels(form)
                             },
-                            enabled = !uiState.isProviderBusy,
-                            modifier = Modifier.weight(1f),
+                            enabled = !uiState.isProviderBusy && isFormReady,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(42.dp),
                             shape = RoundedCornerShape(8.dp)
                         ) {
                             if (uiState.isProviderBusy) {
@@ -1359,8 +1384,10 @@ fun ProviderDialog(
                                 onClearProviderStatus()
                                 onTestProvider(form)
                             },
-                            enabled = !uiState.isProviderBusy,
-                            modifier = Modifier.weight(1f),
+                            enabled = !uiState.isProviderBusy && isFormReady,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(42.dp),
                             shape = RoundedCornerShape(8.dp)
                         ) {
                             Text("测试连接")
@@ -1370,14 +1397,23 @@ fun ProviderDialog(
                 uiState.providerStatusMessage?.let { message ->
                     item {
                         Surface(
-                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            color = if (statusMessageIsError) {
+                                MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.72f)
+                            } else {
+                                MaterialTheme.colorScheme.surfaceVariant
+                            },
                             shape = MaterialTheme.shapes.small,
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
                                 text = message,
                                 modifier = Modifier.padding(12.dp),
-                                style = MaterialTheme.typography.bodySmall
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (statusMessageIsError) {
+                                    MaterialTheme.colorScheme.onErrorContainer
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                }
                             )
                         }
                     }
@@ -1514,7 +1550,10 @@ fun ProviderDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSave(form) }) { Text("保存") }
+            TextButton(
+                onClick = { onSave(form) },
+                enabled = !uiState.isProviderBusy && isFormReady
+            ) { Text("保存") }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("取消") }

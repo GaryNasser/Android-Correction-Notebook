@@ -149,6 +149,7 @@ class AITutorViewModel @Inject constructor(
     }
 
     fun sendMessage(content: String) {
+        if (loading.value) return
         val text = content.trim()
         if (text.isBlank()) return
         viewModelScope.launch {
@@ -306,6 +307,7 @@ class AITutorViewModel @Inject constructor(
         viewModelScope.launch {
             providerRepository.activateProvider(providerId)
             selectedSessionId.value = null
+            providerStatus.value = "已切换默认 Provider"
         }
     }
 
@@ -318,6 +320,9 @@ class AITutorViewModel @Inject constructor(
             }
             if (providerRepository.countProviders() == 0) {
                 aiSettingsManager.setAiEnabled(false)
+                providerStatus.value = "Provider 已删除，AI 导师已关闭"
+            } else {
+                providerStatus.value = "Provider 已删除"
             }
         }
     }
