@@ -24,7 +24,7 @@ class OpenAiCompatibleAdapter @Inject constructor(
         config: AIProviderConfig,
         request: NormalizedChatRequest
     ): Result<NormalizedChatResponse> {
-        return runCatching {
+        return runCatchingCancellable {
             val payload = ChatCompletionRequest(
                 model = request.model,
                 messages = buildMessages(request),
@@ -70,13 +70,13 @@ class OpenAiCompatibleAdapter @Inject constructor(
                 providerMessageId = parsed.get("id")?.takeIf { it.isJsonPrimitive }?.asString,
                 finishReason = firstChoice?.get("finish_reason")?.takeIf { it.isJsonPrimitive }?.asString
             )
-        }.recoverCatching { throwable ->
+        }.recoverCancellable { throwable ->
             throw IllegalStateException(errorMapper.mapThrowable(throwable), throwable)
         }
     }
 
     suspend fun listModels(config: AIProviderConfig): Result<List<String>> {
-        return runCatching {
+        return runCatchingCancellable {
             val response = aiApiService.getJson(
                 url = resolveUrl(config.baseUrl, "models"),
                 headers = buildHeaders(config)
@@ -89,7 +89,7 @@ class OpenAiCompatibleAdapter @Inject constructor(
                 )
             }
             AiResponseParser.extractModelIds(body, "OpenAI 兼容")
-        }.recoverCatching { throwable ->
+        }.recoverCancellable { throwable ->
             throw IllegalStateException(errorMapper.mapThrowable(throwable), throwable)
         }
     }

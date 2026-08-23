@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardActions
@@ -1153,7 +1154,7 @@ fun ProviderDialog(
         onDismissRequest = onDismiss,
         title = { Text("AI Provider 配置") },
         text = {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 item {
                     ExposedDropdownMenuBox(
                         expanded = presetExpanded,
@@ -1163,10 +1164,11 @@ fun ProviderDialog(
                             value = "选择常用服务商预设",
                             onValueChange = {},
                             readOnly = true,
-                            label = { Text("服务商预设") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(presetExpanded) },
-                            modifier = Modifier
-                                .fillMaxWidth()
+	                            label = { Text("服务商预设") },
+	                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(presetExpanded) },
+	                            shape = RoundedCornerShape(8.dp),
+	                            modifier = Modifier
+	                                .fillMaxWidth()
                                 .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, enabled = true)
                         )
                         ExposedDropdownMenu(presetExpanded, { presetExpanded = false }) {
@@ -1192,9 +1194,10 @@ fun ProviderDialog(
                     OutlinedTextField(
                         value = form.name,
                         onValueChange = { updateForm(form.copy(name = it)) },
-                        label = { Text("名称") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
+	                        label = { Text("名称") },
+	                        singleLine = true,
+	                        shape = RoundedCornerShape(8.dp),
+	                        modifier = Modifier.fillMaxWidth()
                     )
                 }
                 item {
@@ -1209,9 +1212,10 @@ fun ProviderDialog(
                             },
                             onValueChange = {},
                             readOnly = true,
-                            label = { Text("接口类型") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(typeExpanded) },
-                            modifier = Modifier
+	                            label = { Text("接口类型") },
+	                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(typeExpanded) },
+	                            shape = RoundedCornerShape(8.dp),
+	                            modifier = Modifier
                                 .fillMaxWidth()
                                 .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, enabled = true)
                         )
@@ -1233,9 +1237,10 @@ fun ProviderDialog(
                         value = form.baseUrl,
                         onValueChange = { updateForm(form.copy(baseUrl = it)) },
                         label = { Text("Base URL") },
-                        supportingText = { Text(if (form.type == AIProviderType.OPENAI_COMPATIBLE) "示例：https://api.openai.com/v1 或兼容服务 /v1" else "示例：https://api.anthropic.com/v1") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
+	                        supportingText = { Text(if (form.type == AIProviderType.OPENAI_COMPATIBLE) "示例：https://api.openai.com/v1 或兼容服务 /v1" else "示例：https://api.anthropic.com/v1") },
+	                        singleLine = true,
+	                        shape = RoundedCornerShape(8.dp),
+	                        modifier = Modifier.fillMaxWidth()
                     )
                 }
                 item {
@@ -1243,9 +1248,10 @@ fun ProviderDialog(
                         value = form.apiKey,
                         onValueChange = { updateForm(form.copy(apiKey = it)) },
                         label = { Text("API Key") },
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth()
+	                        singleLine = true,
+	                        visualTransformation = PasswordVisualTransformation(),
+	                        shape = RoundedCornerShape(8.dp),
+	                        modifier = Modifier.fillMaxWidth()
                     )
                 }
                 item {
@@ -1253,10 +1259,11 @@ fun ProviderDialog(
                         OutlinedTextField(
                             value = form.model,
                             onValueChange = { updateForm(form.copy(model = it)) },
-                            label = { Text("默认模型") },
-                            supportingText = { Text("可直接输入任意模型名，例如 gpt-4o-mini、deepseek-chat、claude-3-5-sonnet-20241022") },
-                            singleLine = true,
-                            modifier = Modifier
+	                            label = { Text("默认模型") },
+	                            supportingText = { Text("可直接输入任意模型名，例如 gpt-4o-mini、deepseek-chat、claude-3-5-sonnet-20241022") },
+	                            singleLine = true,
+	                            shape = RoundedCornerShape(8.dp),
+	                            modifier = Modifier
                                 .fillMaxWidth(),
                             trailingIcon = {
                                 TextButton(onClick = { modelExpanded = true }) {
@@ -1282,29 +1289,31 @@ fun ProviderDialog(
                 }
                 item {
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Button(
+	                        Button(
                             onClick = {
                                 onClearProviderStatus()
                                 fetchedModelsScopeKey = formScopeKey
                                 onFetchModels(form)
                             },
-                            enabled = !uiState.isProviderBusy,
-                            modifier = Modifier.weight(1f)
-                        ) {
+	                            enabled = !uiState.isProviderBusy,
+	                            modifier = Modifier.weight(1f),
+	                            shape = RoundedCornerShape(8.dp)
+	                        ) {
                             if (uiState.isProviderBusy) {
                                 CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                             } else {
                                 Text("获取模型")
                             }
                         }
-                        Button(
+	                        Button(
                             onClick = {
                                 onClearProviderStatus()
                                 onTestProvider(form)
                             },
-                            enabled = !uiState.isProviderBusy,
-                            modifier = Modifier.weight(1f)
-                        ) {
+	                            enabled = !uiState.isProviderBusy,
+	                            modifier = Modifier.weight(1f),
+	                            shape = RoundedCornerShape(8.dp)
+	                        ) {
                             Text("测试连接")
                         }
                     }
@@ -1344,12 +1353,13 @@ fun ProviderDialog(
                 if (showAdvanced) {
                     item {
                         OutlinedTextField(
-                            value = form.customHeaders,
+	                            value = form.customHeaders,
                             onValueChange = { updateForm(form.copy(customHeaders = it)) },
                             label = { Text("自定义 Headers") },
-                            supportingText = { Text("支持 JSON：{\"HTTP-Referer\":\"...\"}，或每行 Key: Value") },
-                            minLines = 3,
-                            modifier = Modifier.fillMaxWidth()
+	                            supportingText = { Text("支持 JSON：{\"HTTP-Referer\":\"...\"}，或每行 Key: Value") },
+	                            minLines = 3,
+	                            shape = RoundedCornerShape(8.dp),
+	                            modifier = Modifier.fillMaxWidth()
                         )
                     }
                     item {
@@ -1357,18 +1367,20 @@ fun ProviderDialog(
                             OutlinedTextField(
                                 value = form.temperature,
                                 onValueChange = { updateForm(form.copy(temperature = it)) },
-                                label = { Text("Temperature") },
-                                placeholder = { Text("0.7") },
-                                singleLine = true,
-                                modifier = Modifier.weight(1f)
+	                                label = { Text("Temperature") },
+	                                placeholder = { Text("0.7") },
+	                                singleLine = true,
+	                                shape = RoundedCornerShape(8.dp),
+	                                modifier = Modifier.weight(1f)
                             )
                             OutlinedTextField(
                                 value = form.maxTokens,
                                 onValueChange = { updateForm(form.copy(maxTokens = it)) },
-                                label = { Text("Max Tokens") },
-                                placeholder = { Text("2048") },
-                                singleLine = true,
-                                modifier = Modifier.weight(1f)
+	                                label = { Text("Max Tokens") },
+	                                placeholder = { Text("2048") },
+	                                singleLine = true,
+	                                shape = RoundedCornerShape(8.dp),
+	                                modifier = Modifier.weight(1f)
                             )
                         }
                     }
@@ -1376,10 +1388,11 @@ fun ProviderDialog(
                         OutlinedTextField(
                             value = form.contextMessageLimit,
                             onValueChange = { updateForm(form.copy(contextMessageLimit = it)) },
-                            label = { Text("上下文消息数") },
-                            supportingText = { Text("建议 8-20，较大值会增加费用和上下文长度") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
+	                            label = { Text("上下文消息数") },
+	                            supportingText = { Text("建议 8-20，较大值会增加费用和上下文长度") },
+	                            singleLine = true,
+	                            shape = RoundedCornerShape(8.dp),
+	                            modifier = Modifier.fillMaxWidth()
                         )
                     }
                 }

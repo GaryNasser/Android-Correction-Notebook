@@ -24,7 +24,7 @@ class AnthropicCompatibleAdapter @Inject constructor(
         config: AIProviderConfig,
         request: NormalizedChatRequest
     ): Result<NormalizedChatResponse> {
-        return runCatching {
+        return runCatchingCancellable {
             val payload = AnthropicMessageRequest(
                 model = request.model,
                 max_tokens = request.maxTokens ?: config.maxTokens ?: DEFAULT_MAX_TOKENS,
@@ -82,16 +82,17 @@ class AnthropicCompatibleAdapter @Inject constructor(
                 providerMessageId = parsed.get("id")?.takeIf { it.isJsonPrimitive }?.asString,
                 finishReason = parsed.get("stop_reason")?.takeIf { it.isJsonPrimitive }?.asString
             )
-        }.recoverCatching { throwable ->
+        }.recoverCancellable { throwable ->
             throw IllegalStateException(errorMapper.mapThrowable(throwable), throwable)
         }
     }
 
     suspend fun listModels(config: AIProviderConfig): Result<List<String>> {
-        return runCatching {
+        return runCatchingCancellable {
             var lastError: Throwable? = null
-            resolveAnthropicModelUrls(config.baseUrl).forEach { url ->
-                val models = runCatching {
+            var resolvedModels: List<String>? = null
+            for (url in resolveAnthropicModelUrls(config.baseUrl)) {
+                val models = runCatchingCancellable {
                     val response = aiApiService.getJson(
                         url = url,
                         headers = buildHeaders(config)
@@ -109,18 +110,19 @@ class AnthropicCompatibleAdapter @Inject constructor(
                 }.getOrNull()
 
                 if (!models.isNullOrEmpty()) {
-                    return@runCatching models
+                    resolvedModels = models
+                    break
                 }
             }
 
-            if (shouldUseKnownModelFallback(config.baseUrl, lastError)) {
-                return@runCatching knownProviderModels(config.baseUrl).orEmpty()
+            resolvedModels ?: if (shouldUseKnownModelFallback(config.baseUrl, lastError)) {
+                knownProviderModels(config.baseUrl).orEmpty()
+            } else {
+                throw IllegalStateException(
+                    lastError?.message ?: "Anthropic 兼容接口未返回可用模型列表，请检查 Base URL、API Key 和服务商是否开放模型列表接口"
+                )
             }
-
-            throw IllegalStateException(
-                lastError?.message ?: "Anthropic 兼容接口未返回可用模型列表，请检查 Base URL、API Key 和服务商是否开放模型列表接口"
-            )
-        }.recoverCatching { throwable ->
+        }.recoverCancellable { throwable ->
             val fallbackModels = knownProviderModels(config.baseUrl).takeIf {
                 shouldUseKnownModelFallback(config.baseUrl, throwable)
             }

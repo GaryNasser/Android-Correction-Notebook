@@ -12,6 +12,7 @@ import com.github.garynasser.correction_notebook.data.repository.ProviderRecord
 import com.github.garynasser.correction_notebook.data.repository.ProviderRepository
 import com.github.garynasser.correction_notebook.data.repository.YanheRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -90,38 +91,48 @@ class ProfileViewModel @Inject constructor(
     }
 
     fun fetchModels(form: AiProviderForm) {
+        if (_isProviderBusy.value) return
+        _isProviderBusy.value = true
         viewModelScope.launch {
-            _isProviderBusy.value = true
-            _providerStatusMessage.value = null
-            aiRepository.listModels(form)
-                .onSuccess { models ->
-                    _fetchedModels.value = models
-                    _providerStatusMessage.value = if (models.isEmpty()) {
-                        "接口可访问，但没有返回模型列表；你仍然可以手动填写模型名"
-                    } else {
-                        "已获取 ${models.size} 个模型"
+            try {
+                _providerStatusMessage.value = null
+                aiRepository.listModels(form)
+                    .onSuccess { models ->
+                        _fetchedModels.value = models
+                        _providerStatusMessage.value = if (models.isEmpty()) {
+                            "接口可访问，但没有返回模型列表；你仍然可以手动填写模型名"
+                        } else {
+                            "已获取 ${models.size} 个模型"
+                        }
                     }
-                }
-                .onFailure { throwable ->
-                    _providerStatusMessage.value = throwable.message ?: "获取模型列表失败"
-                }
-            _isProviderBusy.value = false
+                    .onFailure { throwable ->
+                        if (throwable is CancellationException) throw throwable
+                        _providerStatusMessage.value = throwable.message ?: "获取模型列表失败"
+                    }
+            } finally {
+                _isProviderBusy.value = false
+            }
         }
     }
 
     fun testProvider(form: AiProviderForm) {
+        if (_isProviderBusy.value) return
+        _isProviderBusy.value = true
         viewModelScope.launch {
-            _isProviderBusy.value = true
-            _providerStatusMessage.value = null
-            aiRepository.testProvider(form)
-                .onSuccess { result ->
-                    if (result.models.isNotEmpty()) _fetchedModels.value = result.models
-                    _providerStatusMessage.value = result.message
-                }
-                .onFailure { throwable ->
-                    _providerStatusMessage.value = throwable.message ?: "连接测试失败"
-                }
-            _isProviderBusy.value = false
+            try {
+                _providerStatusMessage.value = null
+                aiRepository.testProvider(form)
+                    .onSuccess { result ->
+                        if (result.models.isNotEmpty()) _fetchedModels.value = result.models
+                        _providerStatusMessage.value = result.message
+                    }
+                    .onFailure { throwable ->
+                        if (throwable is CancellationException) throw throwable
+                        _providerStatusMessage.value = throwable.message ?: "连接测试失败"
+                    }
+            } finally {
+                _isProviderBusy.value = false
+            }
         }
     }
 

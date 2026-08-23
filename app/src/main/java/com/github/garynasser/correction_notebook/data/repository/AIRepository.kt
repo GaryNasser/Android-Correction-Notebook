@@ -11,6 +11,7 @@ import com.github.garynasser.correction_notebook.data.model.ai.NormalizedChatMes
 import com.github.garynasser.correction_notebook.data.model.ai.NormalizedChatRequest
 import com.github.garynasser.correction_notebook.data.remote.ai.AnthropicCompatibleAdapter
 import com.github.garynasser.correction_notebook.data.remote.ai.OpenAiCompatibleAdapter
+import com.github.garynasser.correction_notebook.data.remote.ai.runCatchingCancellable
 import com.google.gson.Gson
 import com.google.gson.JsonParser
 import kotlinx.coroutines.flow.first
@@ -76,7 +77,7 @@ class AIRepository @Inject constructor(
             return Result.failure(IllegalStateException(validationError))
         }
 
-        return runCatching {
+        return runCatchingCancellable {
             val models = listModels(config).getOrDefault(emptyList())
             val probeModel = form.model.trim().ifBlank { models.firstOrNull()?.id ?: config.defaultModel }
             val modelIds = models.map { it.id }.toSet()
