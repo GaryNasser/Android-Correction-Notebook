@@ -92,6 +92,7 @@ private data class RemoteUiSnapshot(
 private data class RemoteLoadingSnapshot(
     val isRemoteSearching: Boolean,
     val isRemoteDetailLoading: Boolean,
+    val isRemoteFolderLoading: Boolean,
     val isImportingLocalFile: Boolean,
     val remoteErrorMessage: String?
 )
@@ -123,6 +124,7 @@ class KnowledgeBaseViewModel @Inject constructor(
     private val selectedRemoteFolderDetail = MutableStateFlow<BitShareFolderDetail?>(null)
     private val isRemoteSearching = MutableStateFlow(false)
     private val isRemoteDetailLoading = MutableStateFlow(false)
+    private val isRemoteFolderLoading = MutableStateFlow(false)
     private val isImportingLocalFile = MutableStateFlow(false)
     private val remoteErrorMessage = MutableStateFlow<String?>(null)
     private val isLocalBusy = MutableStateFlow(false)
@@ -207,10 +209,17 @@ class KnowledgeBaseViewModel @Inject constructor(
         combine(selectedRemoteDetail, selectedRemoteFolderDetail) { detail, folderDetail ->
             Pair(detail, folderDetail)
         },
-        combine(isRemoteSearching, isRemoteDetailLoading, isImportingLocalFile, remoteErrorMessage) { searching, detailLoading, importing, error ->
+        combine(
+            isRemoteSearching,
+            isRemoteDetailLoading,
+            isRemoteFolderLoading,
+            isImportingLocalFile,
+            remoteErrorMessage
+        ) { searching, detailLoading, folderLoading, importing, error ->
             RemoteLoadingSnapshot(
                 isRemoteSearching = searching,
                 isRemoteDetailLoading = detailLoading,
+                isRemoteFolderLoading = folderLoading,
                 isImportingLocalFile = importing,
                 remoteErrorMessage = error
             )
@@ -227,7 +236,7 @@ class KnowledgeBaseViewModel @Inject constructor(
             selectedRemoteFolderDetail = detailMeta.second,
             isRemoteSearching = loadingMeta.isRemoteSearching,
             isRemoteDetailLoading = loadingMeta.isRemoteDetailLoading,
-            isRemoteFolderLoading = false,
+            isRemoteFolderLoading = loadingMeta.isRemoteFolderLoading,
             isImportingLocalFile = loadingMeta.isImportingLocalFile,
             remoteErrorMessage = loadingMeta.remoteErrorMessage,
             isLocalBusy = localMeta.first,
@@ -257,6 +266,7 @@ class KnowledgeBaseViewModel @Inject constructor(
             selectedRemoteFolderDetail = remote.selectedRemoteFolderDetail,
             isRemoteSearching = remote.isRemoteSearching,
             isRemoteDetailLoading = remote.isRemoteDetailLoading,
+            isRemoteFolderLoading = remote.isRemoteFolderLoading,
             isImportingLocalFile = remote.isImportingLocalFile,
             remoteErrorMessage = remote.remoteErrorMessage,
             studySets = study.studySets,
@@ -315,29 +325,44 @@ class KnowledgeBaseViewModel @Inject constructor(
         viewModelScope.launch {
             isRemoteSearching.value = true
             remoteErrorMessage.value = null
-            bitShareRepository.searchFiles(remoteQuery.value, remoteSort.value)
-                .onSuccess {
-                    remoteResults.value = it
-                }
-                .onFailure {
-                    remoteErrorMessage.value = it.message ?: "搜索失败"
-                }
-            isRemoteSearching.value = false
+            try {
+                bitShareRepository.searchFiles(remoteQuery.value, remoteSort.value)
+                    .onSuccess {
+                        remoteResults.value = it
+                    }
+                    .onFailure {
+                        remoteErrorMessage.value = it.message ?: "搜索失败"
+                    }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                remoteErrorMessage.value = e.message ?: "搜索失败"
+            } finally {
+                isRemoteSearching.value = false
+            }
         }
     }
 
     fun loadRemoteDetail(fileId: String) {
         viewModelScope.launch {
             isRemoteDetailLoading.value = true
-            bitShareRepository.getFileDetail(fileId)
-                .onSuccess {
-                    selectedRemoteDetail.value = it
-                    remoteErrorMessage.value = null
-                }
-                .onFailure {
-                    remoteErrorMessage.value = it.message ?: "加载详情失败"
-                }
-            isRemoteDetailLoading.value = false
+            remoteErrorMessage.value = null
+            try {
+                bitShareRepository.getFileDetail(fileId)
+                    .onSuccess {
+                        selectedRemoteDetail.value = it
+                        remoteErrorMessage.value = null
+                    }
+                    .onFailure {
+                        remoteErrorMessage.value = it.message ?: "加载详情失败"
+                    }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                remoteErrorMessage.value = e.message ?: "加载详情失败"
+            } finally {
+                isRemoteDetailLoading.value = false
+            }
         }
     }
 
@@ -348,16 +373,24 @@ class KnowledgeBaseViewModel @Inject constructor(
      */
     fun loadRemoteFolderDetail(folderId: String) {
         viewModelScope.launch {
-            isRemoteDetailLoading.value = true
-            bitShareRepository.getFolderDetail(folderId)
-                .onSuccess {
-                    selectedRemoteFolderDetail.value = it
-                    remoteErrorMessage.value = null
-                }
-                .onFailure {
-                    remoteErrorMessage.value = it.message ?: "加载目录详情失败"
-                }
-            isRemoteDetailLoading.value = false
+            isRemoteFolderLoading.value = true
+            remoteErrorMessage.value = null
+            try {
+                bitShareRepository.getFolderDetail(folderId)
+                    .onSuccess {
+                        selectedRemoteFolderDetail.value = it
+                        remoteErrorMessage.value = null
+                    }
+                    .onFailure {
+                        remoteErrorMessage.value = it.message ?: "加载目录详情失败"
+                    }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                remoteErrorMessage.value = e.message ?: "加载目录详情失败"
+            } finally {
+                isRemoteFolderLoading.value = false
+            }
         }
     }
 
