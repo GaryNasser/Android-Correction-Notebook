@@ -9,6 +9,7 @@ import com.github.garynasser.correction_notebook.data.model.auth.RegisterRequest
 import com.github.garynasser.correction_notebook.data.model.auth.UserCredential
 import com.github.garynasser.correction_notebook.data.remote.api.AuthApiService
 import com.github.garynasser.correction_notebook.utils.RSAUtils
+import kotlinx.coroutines.CancellationException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -40,6 +41,8 @@ class AuthRepository @Inject constructor(
             } else {
                 AuthState.Unauthenticated
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             AuthState.Unauthenticated
         }
@@ -67,6 +70,8 @@ class AuthRepository @Inject constructor(
             } else {
                 Result.failure(Exception(response.message))
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -107,6 +112,8 @@ class AuthRepository @Inject constructor(
             } else {
                 Result.failure(Exception("BIT cas failed"))
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(Exception("BIT cas failed"))
         }
