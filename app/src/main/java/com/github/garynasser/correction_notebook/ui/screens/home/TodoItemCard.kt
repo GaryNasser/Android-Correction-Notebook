@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.github.garynasser.correction_notebook.data.model.home.TodoItem
 import java.time.format.DateTimeFormatter
@@ -103,7 +104,9 @@ fun TodoItemCard(
                         MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                     } else {
                         MaterialTheme.colorScheme.onSurface
-                    }
+                    },
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
 
                 if (todo.description.isNotBlank()) {
@@ -112,7 +115,8 @@ fun TodoItemCard(
                         text = todo.description,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                        maxLines = 2
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
 

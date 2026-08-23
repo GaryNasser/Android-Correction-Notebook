@@ -84,6 +84,7 @@ class TodoHistoryViewModel(application: Application) : AndroidViewModel(applicat
             _uiState.update { it.copy(isMutating = true, message = null) }
             try {
                 todoHistoryRepository.deleteHistoryItem(itemId)
+                _uiState.update { it.copy(message = "已删除完成记录") }
             } catch (error: CancellationException) {
                 throw error
             } catch (_: Exception) {
@@ -100,6 +101,7 @@ class TodoHistoryViewModel(application: Application) : AndroidViewModel(applicat
             _uiState.update { it.copy(isMutating = true, message = null) }
             try {
                 todoHistoryRepository.clearAllHistory()
+                _uiState.update { it.copy(message = "已清空完成历史") }
             } catch (error: CancellationException) {
                 throw error
             } catch (_: Exception) {

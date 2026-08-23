@@ -61,6 +61,8 @@ data class HomeUiState(
     val articles: List<Article> = emptyList(),
     val isArticlesLoading: Boolean = false,
     val articleErrorMessage: String? = null,
+    val todoActionMessage: String? = null,
+    val todoActionError: String? = null,
     val todayStudyMinutes: Int = 0,
     val completedPomodoros: Int = 0,
     val recentCourseProgress: List<CourseProgress> = emptyList(),
@@ -338,8 +340,21 @@ class HomeViewModel @Inject constructor(
 
     fun addTodo(todo: TodoItem) {
         viewModelScope.launch {
-            todoRepository.addTodo(todo)
-            hideAddTodoDialog()
+            try {
+                todoRepository.addTodo(todo)
+                _uiState.value = _uiState.value.copy(
+                    showAddTodoDialog = false,
+                    todoActionMessage = "已添加待办",
+                    todoActionError = null
+                )
+            } catch (throwable: CancellationException) {
+                throw throwable
+            } catch (_: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    todoActionMessage = null,
+                    todoActionError = "待办添加失败，请稍后再试"
+                )
+            }
         }
     }
 
@@ -678,34 +693,79 @@ class HomeViewModel @Inject constructor(
 
     fun toggleTodoComplete(todoId: String) {
         viewModelScope.launch {
-            // Get the todo before toggling to add to history if completing
-            val todo = todoRepository.getTodoById(todoId)
-            val wasCompleted = todo?.isCompleted ?: false
+            try {
+                val todo = todoRepository.getTodoById(todoId)
+                val wasCompleted = todo?.isCompleted ?: false
 
-            todoRepository.toggleComplete(todoId)
+                todoRepository.toggleComplete(todoId)
 
-            // If we just completed this todo (was not completed, now is), add to history
-            if (!wasCompleted && todo != null) {
-                val completedAt = System.currentTimeMillis()
-                val historyItem = TodoHistoryItem(
-                    id = java.util.UUID.randomUUID().toString(),
-                    title = todo.title,
-                    description = todo.description,
-                    priority = todo.priority,
-                    dueDate = todo.dueDate,
-                    createdAt = todo.createdAt,
-                    completedAt = completedAt,
-                    completedDate = java.time.LocalDate.now()
+                if (!wasCompleted && todo != null) {
+                    val completedAt = System.currentTimeMillis()
+                    val historyItem = TodoHistoryItem(
+                        id = java.util.UUID.randomUUID().toString(),
+                        title = todo.title,
+                        description = todo.description,
+                        priority = todo.priority,
+                        dueDate = todo.dueDate,
+                        createdAt = todo.createdAt,
+                        completedAt = completedAt,
+                        completedDate = java.time.LocalDate.now()
+                    )
+                    try {
+                        todoHistoryRepository.addHistoryItem(historyItem)
+                        _uiState.value = _uiState.value.copy(
+                            todoActionMessage = "已完成待办",
+                            todoActionError = null
+                        )
+                    } catch (throwable: CancellationException) {
+                        throw throwable
+                    } catch (_: Exception) {
+                        _uiState.value = _uiState.value.copy(
+                            todoActionMessage = null,
+                            todoActionError = "待办已完成，但完成历史保存失败"
+                        )
+                    }
+                } else {
+                    _uiState.value = _uiState.value.copy(
+                        todoActionMessage = if (wasCompleted) "已恢复待办" else "待办状态已更新",
+                        todoActionError = null
+                    )
+                }
+            } catch (throwable: CancellationException) {
+                throw throwable
+            } catch (_: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    todoActionMessage = null,
+                    todoActionError = "待办状态更新失败，请稍后再试"
                 )
-                todoHistoryRepository.addHistoryItem(historyItem)
             }
         }
     }
 
     fun deleteTodo(todoId: String) {
         viewModelScope.launch {
-            todoRepository.deleteTodo(todoId)
+            try {
+                todoRepository.deleteTodo(todoId)
+                _uiState.value = _uiState.value.copy(
+                    todoActionMessage = "已删除待办",
+                    todoActionError = null
+                )
+            } catch (throwable: CancellationException) {
+                throw throwable
+            } catch (_: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    todoActionMessage = null,
+                    todoActionError = "待办删除失败，请稍后再试"
+                )
+            }
         }
+    }
+
+    fun consumeTodoActionMessage() {
+        _uiState.value = _uiState.value.copy(
+            todoActionMessage = null,
+            todoActionError = null
+        )
     }
 
     fun showModeSelector() {

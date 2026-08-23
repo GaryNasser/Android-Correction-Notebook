@@ -129,6 +129,12 @@ fun HomeScreen(
         }
     }
 
+    LaunchedEffect(uiState.todoActionMessage, uiState.todoActionError) {
+        val message = uiState.todoActionMessage ?: uiState.todoActionError ?: return@LaunchedEffect
+        showHomeMessage(message)
+        homeViewModel.consumeTodoActionMessage()
+    }
+
     // Handle immersive mode
     if (uiState.selectedMode == StudyMode.IMMERSIVE) {
         LaunchedEffect(Unit) {
