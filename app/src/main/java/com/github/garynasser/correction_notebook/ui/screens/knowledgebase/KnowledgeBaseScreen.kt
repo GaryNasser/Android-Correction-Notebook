@@ -100,6 +100,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
@@ -1004,7 +1005,15 @@ private fun KnowledgeSpacePage(
         }
 
         if (studySets.isEmpty()) {
-            item { EmptyStateCard("暂无学习集", "从资料页生成学习集，或手动添加第一组知识点。") }
+            item {
+                EmptyStateCard(
+                    title = "暂无学习集",
+                    description = "从资料页生成学习集，或手动添加第一组知识点。",
+                    icon = Icons.Default.Style,
+                    primaryActionText = "手动添加",
+                    onPrimaryAction = onAddManualCard
+                )
+            }
         } else {
             items(studySets, key = { it.id }) { set ->
                 StudySetRow(
@@ -1146,8 +1155,11 @@ private fun StudySetDetailPage(
         if (visibleCards.isEmpty() && visibleQuizzes.isEmpty()) {
             item {
                 EmptyStateCard(
-                    if (filter == "QUIZ") "这里还没有测验" else "这里还没有内容",
-                    "可以从资料生成学习集，或手动添加知识点。"
+                    title = if (filter == "QUIZ") "这里还没有测验" else "这里还没有内容",
+                    description = "可以从资料生成学习集，或手动添加知识点。",
+                    icon = if (filter == "QUIZ") Icons.Default.Description else Icons.Default.Style,
+                    primaryActionText = "添加知识点",
+                    onPrimaryAction = onAddCard
                 )
             }
         } else {
@@ -1245,7 +1257,7 @@ private fun KnowledgeCardRow(
                         }
                     )
                         .joinToString(" · "),
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
             },
@@ -1368,11 +1380,12 @@ private fun StudySetRow(
                         "${set.flashcardCount} 张卡",
                         "${set.quizCount} 道测验",
                         if (set.dueFlashcardCount > 0) "${set.dueFlashcardCount} 张待复习" else null
-                    ).joinToString(" · ")
+                    ).joinToString(" · "),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
             },
-            leadingContent = { Icon(Icons.Default.History, contentDescription = null) }
-            ,
+            leadingContent = { Icon(Icons.Default.History, contentDescription = null) },
             trailingContent = {
                 Box {
                     IconButton(onClick = { menuExpanded = true }) {
@@ -1937,10 +1950,10 @@ private fun StudySetQuizPage(
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             TextButton(
+                                modifier = Modifier.weight(1f),
                                 onClick = {
                                     selectedOption = null
                                     showAnswer = false
@@ -1950,10 +1963,15 @@ private fun StudySetQuizPage(
                             ) { Text("上一题") }
                             Text(
                                 selectedOption?.let { "已选择" } ?: if (showAnswer) "已显示答案" else "作答后显示答案",
+                                modifier = Modifier.weight(1.25f),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                             TextButton(
+                                modifier = Modifier.weight(1f),
                                 onClick = {
                                     selectedOption = null
                                     showAnswer = false
@@ -2103,26 +2121,33 @@ private fun StudySetLearningPage(
                         }
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            TextButton(onClick = {
-                                onReview(current, false)
-                                if (safeIndex < cards.lastIndex) index = safeIndex + 1
-                            }) {
+                            TextButton(
+                                modifier = Modifier.weight(1f),
+                                onClick = {
+                                    onReview(current, false)
+                                    if (safeIndex < cards.lastIndex) index = safeIndex + 1
+                                }
+                            ) {
                                 Text("没记清")
                             }
                             Text(
                                 current.tags.take(2).joinToString(" ") { "#$it" },
+                                modifier = Modifier.weight(1.25f),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Center
                             )
-                            TextButton(onClick = {
-                                onReview(current, true)
-                                if (safeIndex < cards.lastIndex) index = safeIndex + 1
-                            }) {
+                            TextButton(
+                                modifier = Modifier.weight(1f),
+                                onClick = {
+                                    onReview(current, true)
+                                    if (safeIndex < cards.lastIndex) index = safeIndex + 1
+                                }
+                            ) {
                                 Text("记住了")
                             }
                         }
@@ -2132,21 +2157,24 @@ private fun StudySetLearningPage(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 TextButton(
+                    modifier = Modifier.weight(1f),
                     onClick = { index = (safeIndex - 1).coerceAtLeast(0) },
                     enabled = safeIndex > 0
                 ) { Text("上一张") }
                 Text(
-                    "左滑没记清 · 右滑记住 · 上下切换",
+                    "滑动复习 · 上下切换",
+                    modifier = Modifier.weight(1.25f),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center
                 )
                 TextButton(
+                    modifier = Modifier.weight(1f),
                     onClick = { index = (safeIndex + 1).coerceAtMost(cards.lastIndex) },
                     enabled = current != null && safeIndex < cards.lastIndex
                 ) { Text("下一张") }

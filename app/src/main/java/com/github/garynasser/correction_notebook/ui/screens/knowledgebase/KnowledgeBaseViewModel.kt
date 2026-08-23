@@ -535,23 +535,30 @@ class KnowledgeBaseViewModel @Inject constructor(
     ) {
         viewModelScope.launch {
             isLocalBusy.value = true
-            studySetRepository.saveManualCard(
-                title = title,
-                type = type,
-                front = front,
-                back = back,
-                hint = hint,
-                courseName = courseName,
-                explanation = explanation,
-                example = example,
-                pitfall = pitfall,
-                formula = formula,
-                tags = tags,
-                studySetId = studySetId
-            )
-                .onSuccess { snackbarMessage.value = "知识点已保存" }
-                .onFailure { snackbarMessage.value = it.message ?: "保存知识点失败" }
-            isLocalBusy.value = false
+            try {
+                studySetRepository.saveManualCard(
+                    title = title,
+                    type = type,
+                    front = front,
+                    back = back,
+                    hint = hint,
+                    courseName = courseName,
+                    explanation = explanation,
+                    example = example,
+                    pitfall = pitfall,
+                    formula = formula,
+                    tags = tags,
+                    studySetId = studySetId
+                )
+                    .onSuccess { snackbarMessage.value = "知识点已保存" }
+                    .onFailure { snackbarMessage.value = it.message ?: "保存知识点失败" }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                snackbarMessage.value = e.message ?: "保存知识点失败"
+            } finally {
+                isLocalBusy.value = false
+            }
         }
     }
 
