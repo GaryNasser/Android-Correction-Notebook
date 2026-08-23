@@ -2,7 +2,6 @@ package com.github.garynasser.correction_notebook.ui.screens.yanhe
 
 import android.app.Application
 import android.content.ComponentName
-import android.net.Uri
 import androidx.annotation.OptIn
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -16,12 +15,14 @@ import androidx.media3.session.SessionToken
 import androidx.navigation.toRoute
 import com.github.garynasser.correction_notebook.service.VideoPlaybackService
 import com.github.garynasser.correction_notebook.ui.navigation.VideoPlayer
-import com.google.common.util.concurrent.ListenableFuture // 修正包名
-import com.google.common.util.concurrent.MoreExecutors // 修正包名
+import com.google.common.util.concurrent.ListenableFuture
+import com.google.common.util.concurrent.MoreExecutors
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import androidx.core.net.toUri
 import androidx.media3.common.util.UnstableApi
+import java.util.concurrent.CancellationException
+import java.util.concurrent.ExecutionException
 
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
@@ -36,6 +37,7 @@ class PlayerViewModel @Inject constructor(
     private var browserFuture: ListenableFuture<MediaController>? = null
     var controller = mutableStateOf<MediaController?>(null)
     var playState by mutableStateOf<PlayState>(PlayState.Idle)
+        private set
 
     init {
         setupController()
@@ -43,21 +45,32 @@ class PlayerViewModel @Inject constructor(
 
     @OptIn(UnstableApi::class)
     private fun setupController() {
+        if (videoUrl.isBlank()) {
+            playState = PlayState.Error("视频地址为空，请返回后重新选择课程视频")
+            return
+        }
+        playState = PlayState.Loading
         val sessionToken = SessionToken(
             application,
             ComponentName(application, VideoPlaybackService::class.java)
         )
 
-        // 修正点 1：这里应该是 Builder，不是 equals
+        browserFuture?.let(MediaController::releaseFuture)
         val future = MediaController.Builder(application, sessionToken).buildAsync()
         browserFuture = future
 
         future.addListener({
             try {
-                // 修正点 2：从 future 中获取真正的 controller
                 val mediaController = future.get()
                 controller.value = mediaController
                 startPlay(mediaController)
+            } catch (e: InterruptedException) {
+                Thread.currentThread().interrupt()
+                playState = PlayState.Error("播放器连接被中断，请返回后重试")
+            } catch (e: CancellationException) {
+                playState = PlayState.Error("播放器连接已取消，请重试")
+            } catch (e: ExecutionException) {
+                playState = PlayState.Error("控制器连接失败: ${e.cause?.message ?: e.message}")
             } catch (e: Exception) {
                 playState = PlayState.Error("控制器连接失败: ${e.message}")
             }
@@ -67,7 +80,7 @@ class PlayerViewModel @Inject constructor(
     private fun startPlay(mediaController: MediaController?) {
         mediaController?.let {
             val mediaItem = MediaItem.Builder()
-                .setUri(videoUrl.toUri()) // 确保 Uri 转换正确
+                .setUri(videoUrl.toUri())
                 .setMimeType(MimeTypes.APPLICATION_M3U8)
                 .build()
 
@@ -78,8 +91,19 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
+    fun retryPlayback() {
+        val currentController = controller.value
+        if (currentController != null) {
+            playState = PlayState.Loading
+            runCatching { startPlay(currentController) }
+                .onFailure { playState = PlayState.Error("播放失败: ${it.message ?: "视频流加载失败"}") }
+        } else {
+            setupController()
+        }
+    }
+
     override fun onCleared() {
-        // 修正点 3：MediaController.releaseFuture 是 Media3 专有的静态方法
+        controller.value?.pause()
         browserFuture?.let {
             MediaController.releaseFuture(it)
         }
