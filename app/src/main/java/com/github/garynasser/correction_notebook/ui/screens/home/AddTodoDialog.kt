@@ -1,9 +1,9 @@
 package com.github.garynasser.correction_notebook.ui.screens.home
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -30,30 +30,33 @@ fun AddTodoDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(8.dp),
         title = {
             Text(
                 text = "添加待办",
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
         },
         text = {
-            Column {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
                     label = { Text("标题") },
                     placeholder = { Text("输入待办事项标题") },
                     modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp),
                     singleLine = true
                 )
-                androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(16.dp))
                 OutlinedTextField(
                     value = description,
                     onValueChange = { description = it },
                     label = { Text("备注（可选）") },
                     placeholder = { Text("把要记的小事、提醒或补充信息写在这里") },
                     modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp),
+                    minLines = 2,
                     maxLines = 3
                 )
             }
@@ -65,7 +68,8 @@ fun AddTodoDialog(
                         onAdd(TodoItem(title = title.trim(), description = description.trim()))
                     }
                 },
-                enabled = title.isNotBlank()
+                enabled = title.isNotBlank(),
+                shape = RoundedCornerShape(8.dp)
             ) {
                 Text("添加")
             }
