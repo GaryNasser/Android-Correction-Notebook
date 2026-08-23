@@ -181,7 +181,9 @@ class ScheduleRepository(private val context: Context) {
         val freq = ruleParts["FREQ"] ?: return emptyList()
         val interval = ruleParts["INTERVAL"]?.toLongOrNull()?.coerceAtLeast(1) ?: 1L
         val countLimit = ruleParts["COUNT"]?.toIntOrNull()
-        val until = ruleParts["UNTIL"]?.let { parseIcsDateTime(it, null).first }
+        val until = ruleParts["UNTIL"]?.let { raw ->
+            runCatching { parseIcsDateTime(raw, null).first }.getOrNull()
+        }
         val byDays = ruleParts["BYDAY"]
             ?.split(",")
             ?.mapNotNull(::parseDayOfWeek)
@@ -364,8 +366,15 @@ class ScheduleRepository(private val context: Context) {
         if (raw.isBlank()) return emptyList()
         return raw.split("|||").mapNotNull { itemStr ->
             val parts = itemStr.split(":::")
-            if (parts.size < 16) return@mapNotNull null
-            val sourceType = runCatching { ScheduleSourceType.valueOf(parts[8]) }.getOrDefault(ScheduleSourceType.MANUAL)
+            parseScheduleEventParts(parts)
+        }
+    }
+
+    private fun parseScheduleEventParts(parts: List<String>): ScheduleEvent? {
+        if (parts.size < 16) return null
+        return runCatching {
+            val sourceType = runCatching { ScheduleSourceType.valueOf(parts[8]) }
+                .getOrDefault(ScheduleSourceType.MANUAL)
             fun decodeText(index: Int): String {
                 val decoded = Uri.decode(parts[index])
                 return if (sourceType == ScheduleSourceType.ICS_IMPORT) unescapeIcsText(decoded) else decoded
@@ -391,7 +400,7 @@ class ScheduleRepository(private val context: Context) {
                 lastImportedAt = parts[14].ifBlank { null }?.toLongOrNull(),
                 updatedAt = parts[15].toLongOrNull() ?: System.currentTimeMillis()
             )
-        }
+        }.getOrNull()
     }
 
     companion object {
