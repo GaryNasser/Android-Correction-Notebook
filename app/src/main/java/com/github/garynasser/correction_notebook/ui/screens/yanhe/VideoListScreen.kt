@@ -26,6 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Camera
 import androidx.compose.material.icons.filled.AddTask
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.NoteAlt
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Psychology
@@ -173,14 +174,39 @@ fun CourseVideoListScreen(
                                 item {
                                     Surface(
                                         modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(12.dp),
-                                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.62f)
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.62f),
+                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.16f))
                                     ) {
-                                        Text(
-                                            text = playState.message,
-                                            modifier = Modifier.padding(12.dp),
-                                            color = MaterialTheme.colorScheme.onErrorContainer
-                                        )
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 11.dp, vertical = 9.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Refresh,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(18.dp),
+                                                tint = MaterialTheme.colorScheme.error
+                                            )
+                                            Text(
+                                                text = playState.message,
+                                                modifier = Modifier.weight(1f),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onErrorContainer
+                                            )
+                                            IconButton(
+                                                onClick = { viewModel.resetPlayState() },
+                                                modifier = Modifier.size(32.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.Close,
+                                                    contentDescription = "关闭播放错误",
+                                                    modifier = Modifier.size(18.dp),
+                                                    tint = MaterialTheme.colorScheme.onErrorContainer
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             }

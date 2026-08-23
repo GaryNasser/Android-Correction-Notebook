@@ -21,7 +21,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.SubcomposeAsyncImage
 import com.github.garynasser.correction_notebook.data.model.yanhe.Course
@@ -454,6 +453,35 @@ fun SearchAndFilterSection(viewModel: CourseListViewModel) {
                 modifier = Modifier.fillMaxWidth(),
                 placeholder = { Text("搜索课程名称或老师") },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                trailingIcon = {
+                    Row {
+                        if (viewModel.searchQuery.isNotBlank()) {
+                            IconButton(
+                                onClick = {
+                                    viewModel.updateSearchQuery("")
+                                    if (!viewModel.isPersonalCoursesMode) {
+                                        viewModel.loadCourses(false)
+                                    }
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "清空搜索"
+                                )
+                            }
+                        }
+                        IconButton(
+                            onClick = {
+                                viewModel.loadCourses(false)
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = "搜索课程"
+                            )
+                        }
+                    }
+                },
                 shape = RoundedCornerShape(8.dp),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
@@ -568,11 +596,20 @@ fun CourseCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                SuggestionChip(
-                    onClick = { },
-                    label = { Text(course.semester, fontSize = 10.sp) },
-                    modifier = Modifier.height(22.dp)
-                )
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.42f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.32f))
+                ) {
+                    Text(
+                        text = course.semester.ifBlank { "学期未知" },
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
     }

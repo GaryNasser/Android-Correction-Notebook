@@ -66,6 +66,7 @@ class VideoListViewModel @Inject constructor(
         videoListJob?.cancel()
         videoListJob = viewModelScope.launch {
             uiState = VideoUIState.Loading
+            playState = PlayState.Idle
             try {
                 val results = withTimeout(20_000) {
                     videoRepository.getCourseSession(courseId)
