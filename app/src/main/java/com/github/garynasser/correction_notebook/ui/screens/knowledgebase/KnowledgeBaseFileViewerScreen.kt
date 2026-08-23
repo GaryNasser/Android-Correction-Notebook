@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -145,7 +146,7 @@ fun KnowledgeBaseFileViewerScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = viewModel::refresh) {
+                    IconButton(onClick = viewModel::refresh, enabled = !uiState.isLoading) {
                         Icon(Icons.Default.Refresh, contentDescription = "刷新")
                     }
                     Box {
@@ -160,6 +161,7 @@ fun KnowledgeBaseFileViewerScreen(
                                 DropdownMenuItem(
                                     text = { Text("AI 生成学习集") },
                                     leadingIcon = { Icon(Icons.Default.Style, contentDescription = null) },
+                                    enabled = !uiState.isAiLoading,
                                     onClick = {
                                         menuExpanded = false
                                         viewModel.generateStudySet()
@@ -168,6 +170,7 @@ fun KnowledgeBaseFileViewerScreen(
                                 DropdownMenuItem(
                                     text = { Text("AI 总结") },
                                     leadingIcon = { Icon(Icons.Default.Psychology, contentDescription = null) },
+                                    enabled = !uiState.isAiLoading,
                                     onClick = {
                                         menuExpanded = false
                                         viewModel.runAiAction(KnowledgeAiMode.SUMMARY)
@@ -176,6 +179,7 @@ fun KnowledgeBaseFileViewerScreen(
                                 DropdownMenuItem(
                                     text = { Text("AI 提取重点") },
                                     leadingIcon = { Icon(Icons.Default.Lightbulb, contentDescription = null) },
+                                    enabled = !uiState.isAiLoading,
                                     onClick = {
                                         menuExpanded = false
                                         viewModel.runAiAction(KnowledgeAiMode.KEY_POINTS)
@@ -184,6 +188,7 @@ fun KnowledgeBaseFileViewerScreen(
                                 DropdownMenuItem(
                                     text = { Text("AI 生成复习题") },
                                     leadingIcon = { Icon(Icons.Default.Quiz, contentDescription = null) },
+                                    enabled = !uiState.isAiLoading,
                                     onClick = {
                                         menuExpanded = false
                                         viewModel.runAiAction(KnowledgeAiMode.QUIZ)
@@ -192,6 +197,7 @@ fun KnowledgeBaseFileViewerScreen(
                                 DropdownMenuItem(
                                     text = { Text("AI 术语表") },
                                     leadingIcon = { Icon(Icons.Default.Description, contentDescription = null) },
+                                    enabled = !uiState.isAiLoading,
                                     onClick = {
                                         menuExpanded = false
                                         viewModel.runAiAction(KnowledgeAiMode.GLOSSARY)
@@ -200,6 +206,7 @@ fun KnowledgeBaseFileViewerScreen(
                                 DropdownMenuItem(
                                     text = { Text("AI 公式表") },
                                     leadingIcon = { Icon(Icons.Default.Lightbulb, contentDescription = null) },
+                                    enabled = !uiState.isAiLoading,
                                     onClick = {
                                         menuExpanded = false
                                         viewModel.runAiAction(KnowledgeAiMode.FORMULA_SHEET)
@@ -208,6 +215,7 @@ fun KnowledgeBaseFileViewerScreen(
                                 DropdownMenuItem(
                                     text = { Text("AI 复习清单") },
                                     leadingIcon = { Icon(Icons.Default.Quiz, contentDescription = null) },
+                                    enabled = !uiState.isAiLoading,
                                     onClick = {
                                         menuExpanded = false
                                         viewModel.runAiAction(KnowledgeAiMode.REVIEW_CHECKLIST)
@@ -216,6 +224,7 @@ fun KnowledgeBaseFileViewerScreen(
                                 DropdownMenuItem(
                                     text = { Text("重建 AI 索引") },
                                     leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) },
+                                    enabled = !uiState.isIndexing,
                                     onClick = {
                                         menuExpanded = false
                                         viewModel.rebuildIndex()
@@ -286,11 +295,13 @@ fun KnowledgeBaseFileViewerScreen(
                         ElevatedCard(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                            shape = RoundedCornerShape(8.dp)
                         ) {
                             Text(
                                 text = message,
-                                modifier = Modifier.padding(16.dp),
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                                style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.error
                             )
                         }
@@ -300,15 +311,16 @@ fun KnowledgeBaseFileViewerScreen(
                         ElevatedCard(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                            shape = RoundedCornerShape(8.dp)
                         ) {
                             Row(
-                                modifier = Modifier.padding(16.dp),
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                                Spacer(modifier = Modifier.size(12.dp))
-                                Text("AI 正在阅读这份资料...")
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text("AI 正在阅读这份资料...", style = MaterialTheme.typography.bodySmall)
                             }
                         }
                     }
@@ -316,14 +328,15 @@ fun KnowledgeBaseFileViewerScreen(
                     ElevatedCard(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        shape = RoundedCornerShape(8.dp)
                     ) {
                         Row(
-                            modifier = Modifier.padding(14.dp),
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(Icons.Default.Psychology, contentDescription = null)
-                            Spacer(modifier = Modifier.width(10.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = when {
                                     uiState.isIndexing -> "AI 索引正在重建..."
@@ -379,6 +392,7 @@ fun KnowledgeBaseFileViewerScreen(
     uiState.studySetDraft?.let { draft ->
         StudySetDraftDialog(
             draft = draft,
+            isSaving = uiState.isSavingStudySetDraft,
             onDismiss = viewModel::clearAiResult,
             onSave = viewModel::saveStudySetDraft
         )
@@ -388,6 +402,7 @@ fun KnowledgeBaseFileViewerScreen(
 @Composable
 private fun StudySetDraftDialog(
     draft: StudySetDraft,
+    isSaving: Boolean,
     onDismiss: () -> Unit,
     onSave: () -> Unit
 ) {
@@ -437,10 +452,12 @@ private fun StudySetDraftDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onSave) { Text("保存") }
+            TextButton(onClick = onSave, enabled = !isSaving) {
+                Text(if (isSaving) "保存中..." else "保存")
+            }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
+            TextButton(onClick = onDismiss, enabled = !isSaving) { Text("取消") }
         }
     )
 }
@@ -477,9 +494,12 @@ private fun MediaPreview(file: KnowledgeBaseFileSummary, isVideo: Boolean) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .padding(12.dp)
     ) {
-        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(8.dp)
+        ) {
             AndroidView(
                 factory = { ctx ->
                     PlayerView(ctx).apply {
@@ -489,16 +509,16 @@ private fun MediaPreview(file: KnowledgeBaseFileSummary, isVideo: Boolean) {
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(if (isVideo) 240.dp else 120.dp),
+                    .height(if (isVideo) 210.dp else 96.dp),
                 update = { view ->
                     view.player = player
                 }
             )
         }
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(8.dp))
         Text(
             text = if (isVideo) "可在应用内直接播放视频，也可以切换到其他应用打开。" else "可在应用内直接播放音频，也可以切换到其他应用打开。",
-            style = MaterialTheme.typography.bodyMedium
+            style = MaterialTheme.typography.bodySmall
         )
     }
 }
@@ -559,11 +579,14 @@ private fun ViewerError(
         modifier = modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
-        ElevatedCard(modifier = Modifier.padding(24.dp)) {
-            Column(modifier = Modifier.padding(20.dp)) {
+        ElevatedCard(
+            modifier = Modifier.padding(16.dp),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
                 Text(title, style = MaterialTheme.typography.titleMedium)
                 Spacer(modifier = Modifier.height(8.dp))
-                Text(message)
+                Text(message, style = MaterialTheme.typography.bodySmall)
             }
         }
     }
@@ -619,16 +642,20 @@ private fun TextPreview(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp)
+            .padding(12.dp)
     ) {
         if (truncated) {
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(8.dp)
+            ) {
                 Text(
                     text = "当前仅预览文件前一部分内容，完整内容可通过“其他应用打开”或“导出副本”查看。",
-                    modifier = Modifier.padding(16.dp)
+                    modifier = Modifier.padding(12.dp),
+                    style = MaterialTheme.typography.bodySmall
                 )
             }
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
         }
         Text(
             text = content.ifBlank { "文件内容为空" },
@@ -646,18 +673,19 @@ private fun PdfPreview(pages: List<Bitmap>) {
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         itemsIndexed(pages) { index, bitmap ->
             ElevatedCard(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
+                    .padding(horizontal = 10.dp),
+                shape = RoundedCornerShape(8.dp)
             ) {
-                Column(modifier = Modifier.padding(8.dp)) {
+                Column(modifier = Modifier.padding(6.dp)) {
                     Text(
                         text = "第 ${index + 1} 页",
-                        modifier = Modifier.padding(8.dp),
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
                         style = MaterialTheme.typography.labelMedium
                     )
                     Image(
@@ -681,14 +709,18 @@ private fun FallbackPreview(file: KnowledgeBaseFileSummary) {
         ElevatedCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(24.dp)
+                .padding(16.dp),
+            shape = RoundedCornerShape(8.dp)
         ) {
-            Column(modifier = Modifier.padding(20.dp)) {
+            Column(modifier = Modifier.padding(16.dp)) {
                 Icon(Icons.Default.Description, contentDescription = null)
-                Spacer(modifier = Modifier.height(12.dp))
-                Text("当前格式暂不支持应用内深度预览", style = MaterialTheme.typography.titleMedium)
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("你仍然可以使用“其他应用打开”、“分享”或“导出副本”处理 ${file.displayName}。")
+                Text("当前格式暂不支持应用内深度预览", style = MaterialTheme.typography.titleMedium)
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    "你仍然可以使用“其他应用打开”、“分享”或“导出副本”处理 ${file.displayName}。",
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
         }
     }
