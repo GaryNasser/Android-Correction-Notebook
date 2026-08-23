@@ -148,7 +148,7 @@ fun MainContainer(
             composable<Home> {
                 HomeScreen(
                     onOpenArticle = { article ->
-                        navController.navigate(ArticleDetailRoute(article.id))
+                        navController.navigate(ArticleDetailRoute(article.id, article.url))
                     },
                     onNavigateToCourses = { progress ->
                         if (progress != null) {
