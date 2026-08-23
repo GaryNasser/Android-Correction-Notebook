@@ -8,6 +8,7 @@ import com.github.garynasser.correction_notebook.data.model.home.ArticleDetail
 import com.github.garynasser.correction_notebook.data.repository.ArticleRepository
 import com.github.garynasser.correction_notebook.ui.navigation.ArticleDetailRoute
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -18,7 +19,8 @@ data class ArticleDetailUiState(
     val isLoading: Boolean = true,
     val isRefreshing: Boolean = false,
     val articleDetail: ArticleDetail? = null,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val fallbackUrl: String? = null
 )
 
 @HiltViewModel
@@ -29,7 +31,9 @@ class ArticleDetailViewModel @Inject constructor(
 
     private val args = savedStateHandle.toRoute<ArticleDetailRoute>()
 
-    private val _uiState = MutableStateFlow(ArticleDetailUiState())
+    private val _uiState = MutableStateFlow(
+        ArticleDetailUiState(fallbackUrl = args.fallbackUrl)
+    )
     val uiState: StateFlow<ArticleDetailUiState> = _uiState.asStateFlow()
 
     init {
@@ -48,23 +52,26 @@ class ArticleDetailViewModel @Inject constructor(
                 isRefreshing = currentDetail != null,
                 errorMessage = null
             )
-            runCatching {
-                articleRepository.getArticleDetail(
+            try {
+                val detail = articleRepository.getArticleDetail(
                     articleId = args.articleId,
                     forceRefresh = forceRefresh
                 )
-            }.onSuccess { detail ->
                 _uiState.value = ArticleDetailUiState(
                     isLoading = false,
                     isRefreshing = false,
-                    articleDetail = detail
+                    articleDetail = detail,
+                    fallbackUrl = detail.url ?: args.fallbackUrl
                 )
-            }.onFailure { throwable ->
+            } catch (throwable: CancellationException) {
+                throw throwable
+            } catch (throwable: Exception) {
                 _uiState.value = ArticleDetailUiState(
                     isLoading = false,
                     isRefreshing = false,
                     articleDetail = currentDetail,
-                    errorMessage = throwable.message?.takeIf { it.isNotBlank() } ?: "文章加载失败"
+                    errorMessage = throwable.message?.takeIf { it.isNotBlank() } ?: "文章加载失败",
+                    fallbackUrl = currentDetail?.url ?: args.fallbackUrl
                 )
             }
         }

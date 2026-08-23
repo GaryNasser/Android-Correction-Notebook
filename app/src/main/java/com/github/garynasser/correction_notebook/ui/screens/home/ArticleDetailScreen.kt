@@ -71,14 +71,15 @@ fun ArticleDetailScreen(
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
     var menuExpanded by remember { mutableStateOf(false) }
+    val fallbackUrl = uiState.articleDetail?.url ?: uiState.fallbackUrl
 
     fun openFallbackUrl() {
-        val url = uiState.articleDetail?.url ?: return
+        val url = fallbackUrl ?: return
         runCatching { uriHandler.openUri(url) }
     }
 
     fun shareArticle() {
-        val url = uiState.articleDetail?.url ?: return
+        val url = fallbackUrl ?: return
         val shareIntent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(Intent.EXTRA_TEXT, url)
@@ -124,7 +125,7 @@ fun ArticleDetailScreen(
                                     menuExpanded = false
                                     openFallbackUrl()
                                 },
-                                enabled = !uiState.articleDetail?.url.isNullOrBlank()
+                                enabled = !fallbackUrl.isNullOrBlank()
                             )
                             DropdownMenuItem(
                                 text = { Text("分享") },
@@ -135,7 +136,7 @@ fun ArticleDetailScreen(
                                     menuExpanded = false
                                     shareArticle()
                                 },
-                                enabled = !uiState.articleDetail?.url.isNullOrBlank()
+                                enabled = !fallbackUrl.isNullOrBlank()
                             )
                         }
                     }
@@ -292,7 +293,7 @@ fun ArticleDetailScreen(
                             ArticleFallbackState(
                                 title = "正文暂不可用",
                                 description = "这篇文章暂时没有可在应用内展示的正文内容。",
-                                showOpenOriginal = !article.url.isNullOrBlank(),
+                                showOpenOriginal = !fallbackUrl.isNullOrBlank(),
                                 onOpenOriginal = ::openFallbackUrl,
                                 actionLabel = "打开原文"
                             )
@@ -316,7 +317,7 @@ fun ArticleDetailScreen(
                     ArticleFallbackState(
                         title = "文章加载失败",
                         description = uiState.errorMessage ?: "稍后再试，或先打开原文查看。",
-                        showOpenOriginal = !uiState.articleDetail?.url.isNullOrBlank(),
+                        showOpenOriginal = !fallbackUrl.isNullOrBlank(),
                         onOpenOriginal = ::openFallbackUrl,
                         actionLabel = "打开原文",
                         secondaryActionLabel = "重试",

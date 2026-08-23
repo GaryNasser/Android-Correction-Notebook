@@ -43,8 +43,15 @@ fun ArticlesSection(
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
-            TextButton(onClick = onRefresh) {
-                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+            TextButton(
+                onClick = onRefresh,
+                enabled = !isLoading
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                } else {
+                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                }
                 Spacer(modifier = Modifier.width(4.dp))
                 Text("刷新")
             }
@@ -70,6 +77,17 @@ fun ArticlesSection(
                 )
             }
             else -> {
+                if (errorMessage != null) {
+                    ArticleMessageCard(
+                        title = "推荐内容刷新失败",
+                        description = errorMessage,
+                        actionLabel = "重试",
+                        onAction = onRefresh,
+                        compact = true,
+                        isError = true
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
@@ -131,18 +149,24 @@ private fun ArticleMessageCard(
     title: String,
     description: String,
     actionLabel: String? = null,
-    onAction: (() -> Unit)? = null
+    onAction: (() -> Unit)? = null,
+    compact: Boolean = false,
+    isError: Boolean = false
 ) {
     Card(
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            containerColor = if (isError) {
+                MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.68f)
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            }
         )
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(if (compact) 12.dp else 16.dp),
+            verticalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 8.dp)
         ) {
             Text(
                 text = title,
@@ -152,7 +176,11 @@ private fun ArticleMessageCard(
             Text(
                 text = description,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
+                color = if (isError) {
+                    MaterialTheme.colorScheme.onErrorContainer
+                } else {
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
+                }
             )
             if (actionLabel != null && onAction != null) {
                 TextButton(
@@ -253,7 +281,7 @@ fun ArticleCard(
 
 private fun formatTimeAgo(timestamp: Long): String {
     val now = System.currentTimeMillis()
-    val diff = now - timestamp
+    val diff = (now - timestamp).coerceAtLeast(0L)
     val minutes = diff / (1000 * 60)
     val hours = diff / (1000 * 60 * 60)
     val days = diff / (1000 * 60 * 60 * 24)

@@ -6,7 +6,10 @@ import kotlinx.serialization.Serializable
 object Home
 
 @Serializable
-data class ArticleDetailRoute(val articleId: String)
+data class ArticleDetailRoute(
+    val articleId: String,
+    val fallbackUrl: String? = null
+)
 
 @Serializable
 object Login
