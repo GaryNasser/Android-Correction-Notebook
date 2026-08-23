@@ -28,7 +28,11 @@ sealed interface VideoUIState {
 sealed class PlayState {
     object Idle : PlayState()
     object Loading : PlayState()
-    data class Success(val url: String) : PlayState()
+    data class Success(
+        val url: String,
+        val videoTitle: String = "",
+        val courseName: String = ""
+    ) : PlayState()
     data class Error(val message: String) : PlayState()
 }
 @HiltViewModel
@@ -106,7 +110,11 @@ class VideoListViewModel @Inject constructor(
                     ?: throw Exception("该节次没有可播放的视频")
                 recordWatchInternal(playableSection, videoUrl)
                 loadProgress()
-                playState = PlayState.Success(videoUrl)
+                playState = PlayState.Success(
+                    url = videoUrl,
+                    videoTitle = playableSection.displayTitle(),
+                    courseName = courseName
+                )
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -159,5 +167,15 @@ class VideoListViewModel @Inject constructor(
 
     private fun firstNonBlank(vararg values: String): String? {
         return values.firstOrNull { it.isNotBlank() }
+    }
+
+    private fun CourseSection.displayTitle(): String {
+        return title.ifBlank {
+            if (sectionBigStart == sectionBigEnd) {
+                "第 $sectionBigStart 大节"
+            } else {
+                "第 $sectionBigStart-$sectionBigEnd 大节"
+            }
+        }
     }
 }

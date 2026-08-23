@@ -212,8 +212,8 @@ fun MainContainer(
                     onBackButtonClick = {
                         navController.popBackStack()
                     },
-                    onNavigateToPlayer = { url ->
-                        navController.navigate(VideoPlayer(url))
+                    onNavigateToPlayer = { url, videoTitle, courseName ->
+                        navController.navigate(VideoPlayer(url, videoTitle, courseName))
                     }
                 )
             }

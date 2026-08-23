@@ -3,7 +3,6 @@ package com.github.garynasser.correction_notebook.ui.screens.yanhe
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -16,7 +15,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -33,6 +34,8 @@ fun PlayerScreen(
     val playState = viewModel.playState
     val controller by viewModel.controller // 监听 MediaController 的变化
     val lifecycleOwner = LocalLifecycleOwner.current
+    val videoTitle = viewModel.videoTitle.ifBlank { "延河课堂视频" }
+    val courseName = viewModel.courseName
 
     // 生命周期管理：当用户切离界面时自动暂停，回来时尝试播放
     DisposableEffect(lifecycleOwner) {
@@ -90,17 +93,45 @@ fun PlayerScreen(
         Surface(
             modifier = Modifier
                 .statusBarsPadding()
-                .padding(top = 8.dp, start = 8.dp)
-                .align(Alignment.TopStart),
-            shape = CircleShape,
+                .padding(horizontal = 8.dp, vertical = 8.dp)
+                .align(Alignment.TopStart)
+                .fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
             color = Color.Black.copy(alpha = 0.44f)
         ) {
-            IconButton(onClick = onBack) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "返回",
-                    tint = Color.White
-                )
+            Row(
+                modifier = Modifier.padding(end = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onBack) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "返回",
+                        tint = Color.White
+                    )
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = videoTitle,
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (courseName.isNotBlank()) {
+                        Text(
+                            text = courseName,
+                            color = Color.White.copy(alpha = 0.72f),
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
             }
         }
     }
