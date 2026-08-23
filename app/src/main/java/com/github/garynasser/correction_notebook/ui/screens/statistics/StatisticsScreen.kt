@@ -231,42 +231,23 @@ fun StatisticsScreen(
                 }
             }
 
-            // Summary cards
             item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    StatsSummaryCard(
-                        modifier = Modifier.weight(1f),
-                        title = "总学习时长",
-                        value = formatMinutesToHours(uiState.totalStudyMinutes),
-                        icon = Icons.Default.Timer
-                    )
-                    StatsSummaryCard(
-                        modifier = Modifier.weight(1f),
-                        title = "日均学习",
-                        value = formatMinutesToHours(uiState.averageDailyMinutes),
-                        icon = Icons.AutoMirrored.Filled.TrendingUp
-                    )
-                }
-            }
-
-            item {
-                StatsSummaryCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    title = "完成番茄钟",
-                    value = "${uiState.completedPomodoros} 个",
-                    icon = Icons.Default.EmojiEvents
+                StatsSummaryStrip(
+                    totalMinutes = uiState.totalStudyMinutes,
+                    averageMinutes = uiState.averageDailyMinutes,
+                    completedPomodoros = uiState.completedPomodoros
                 )
             }
 
             if (uiState.aiInsight != null || uiState.aiInsightError != null || uiState.isAiInsightLoading) {
                 item {
-                    Card(modifier = Modifier.fillMaxWidth()) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
                         Column(
-                            modifier = Modifier.padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                            modifier = Modifier.padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Default.Psychology, contentDescription = null)
@@ -293,10 +274,11 @@ fun StatisticsScreen(
             // Bar chart
             item {
                 Card(
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp)
                 ) {
                     Column(
-                        modifier = Modifier.padding(16.dp)
+                        modifier = Modifier.padding(14.dp)
                     ) {
                         Text(
                             text = "学习时长趋势",
@@ -319,7 +301,7 @@ fun StatisticsScreen(
                             labels = uiState.chartLabels,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(220.dp)
+                                .height(180.dp)
                         )
                     }
                 }
@@ -329,10 +311,11 @@ fun StatisticsScreen(
             if (uiState.subjectDistribution.isNotEmpty()) {
                 item {
                     Card(
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp)
                     ) {
                         Column(
-                            modifier = Modifier.padding(16.dp)
+                            modifier = Modifier.padding(14.dp)
                         ) {
                             Text(
                                 text = "科目分布",
@@ -346,7 +329,7 @@ fun StatisticsScreen(
                             ) {
                                 PieChart(
                                     data = uiState.subjectDistribution.values.toList(),
-                                    modifier = Modifier.size(120.dp)
+                                    modifier = Modifier.size(96.dp)
                                 )
                                 Column(
                                     modifier = Modifier.weight(1f).padding(start = 16.dp),
@@ -366,50 +349,92 @@ fun StatisticsScreen(
                 }
             }
 
-            item { Spacer(modifier = Modifier.height(24.dp)) }
+            item { Spacer(modifier = Modifier.height(12.dp)) }
         }
     }
 }
 
 @Composable
-private fun StatsSummaryCard(
+private fun StatsSummaryStrip(
+    totalMinutes: Int,
+    averageMinutes: Int,
+    completedPomodoros: Int
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            CompactStatItem(
+                modifier = Modifier.weight(1f),
+                title = "总时长",
+                value = formatCompactMinutes(totalMinutes),
+                icon = Icons.Default.Timer
+            )
+            VerticalDivider(
+                modifier = Modifier.height(36.dp),
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.16f)
+            )
+            CompactStatItem(
+                modifier = Modifier.weight(1f),
+                title = "日均",
+                value = formatCompactMinutes(averageMinutes),
+                icon = Icons.AutoMirrored.Filled.TrendingUp
+            )
+            VerticalDivider(
+                modifier = Modifier.height(36.dp),
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.16f)
+            )
+            CompactStatItem(
+                modifier = Modifier.weight(1f),
+                title = "番茄钟",
+                value = "${completedPomodoros}个",
+                icon = Icons.Default.EmojiEvents
+            )
+        }
+    }
+}
+
+@Composable
+private fun CompactStatItem(
     modifier: Modifier = Modifier,
     title: String,
     value: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector
 ) {
-    Card(
+    Column(
         modifier = modifier,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer
-        )
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    icon,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                )
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = value,
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
-            )
-        }
+        Icon(
+            icon,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp),
+            tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f)
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            textAlign = TextAlign.Center,
+            maxLines = 1
+        )
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.62f),
+            textAlign = TextAlign.Center,
+            maxLines = 1
+        )
     }
 }
 
@@ -487,7 +512,7 @@ private fun BarChart(
                                     color = if (isPeak) chartColor else chartColor.copy(alpha = 0.78f),
                                     topLeft = Offset(0f, 0f),
                                     size = Size(size.width, size.height),
-                                    cornerRadius = CornerRadius(12.dp.toPx(), 12.dp.toPx())
+                                    cornerRadius = CornerRadius(6.dp.toPx(), 6.dp.toPx())
                                 )
                             }
                             if (value > 0 && data.size <= 7) {
@@ -532,7 +557,7 @@ private fun EmptyChartState(
 ) {
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(18.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f)),
         contentAlignment = Alignment.Center
     ) {
@@ -613,6 +638,16 @@ private fun formatMinutesToHours(minutes: Int): String {
         if (mins > 0) "${hours}小时${mins}分钟" else "${hours}小时"
     } else {
         "${minutes}分钟"
+    }
+}
+
+private fun formatCompactMinutes(minutes: Int): String {
+    return if (minutes >= 60) {
+        val hours = minutes / 60
+        val mins = minutes % 60
+        if (mins > 0) "${hours}h${mins}m" else "${hours}h"
+    } else {
+        "${minutes}m"
     }
 }
 
