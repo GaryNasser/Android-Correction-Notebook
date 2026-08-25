@@ -135,24 +135,30 @@ fun AITutorScreen(
                 actions = {
                     IconButton(
                         onClick = { viewModel.newSession() },
-                        enabled = uiState.isConfigured
+                        enabled = uiState.isConfigured && !uiState.isChatActionBusy && !uiState.isLoading
                     ) {
                         Icon(Icons.Default.Add, contentDescription = "新建对话")
                     }
-                    IconButton(onClick = { showMemoryDialog = true }) {
+                    IconButton(
+                        onClick = { showMemoryDialog = true },
+                        enabled = !uiState.isMemoryBusy
+                    ) {
                         Icon(Icons.Default.Memory, contentDescription = "记忆")
                     }
                     IconButton(onClick = { showProviderDialog = true }) {
                         Icon(Icons.Default.Settings, contentDescription = "设置")
                     }
                     Box {
-                        IconButton(onClick = { menuExpanded = true }) {
+                        IconButton(
+                            onClick = { menuExpanded = true },
+                            enabled = !uiState.isChatActionBusy && !uiState.isLoading
+                        ) {
                             Icon(Icons.Default.MoreVert, contentDescription = "更多")
                         }
                         DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
                             DropdownMenuItem(
                                 text = { Text("重命名当前对话") },
-                                enabled = hasCurrentSession,
+                                enabled = hasCurrentSession && !uiState.isChatActionBusy && !uiState.isLoading,
                                 onClick = {
                                     menuExpanded = false
                                     showRenameDialog = true
@@ -160,7 +166,8 @@ fun AITutorScreen(
                             )
                             DropdownMenuItem(
                                 text = { Text("清空当前对话") },
-                                enabled = hasCurrentSession && uiState.messages.isNotEmpty(),
+                                enabled = hasCurrentSession && uiState.messages.isNotEmpty() &&
+                                    !uiState.isChatActionBusy && !uiState.isLoading,
                                 onClick = {
                                     menuExpanded = false
                                     showClearChatConfirm = true
@@ -168,7 +175,7 @@ fun AITutorScreen(
                             )
                             DropdownMenuItem(
                                 text = { Text("删除当前对话") },
-                                enabled = hasCurrentSession,
+                                enabled = hasCurrentSession && !uiState.isChatActionBusy && !uiState.isLoading,
                                 onClick = {
                                     menuExpanded = false
                                     showDeleteChatConfirm = true
@@ -316,7 +323,9 @@ fun AITutorScreen(
 
     if (showClearChatConfirm) {
         AlertDialog(
-            onDismissRequest = { showClearChatConfirm = false },
+            onDismissRequest = {
+                if (!uiState.isChatActionBusy) showClearChatConfirm = false
+            },
             shape = RoundedCornerShape(8.dp),
             title = { Text("清空当前对话", style = MaterialTheme.typography.titleMedium) },
             text = { Text("当前对话里的消息会被清空，保留对话入口。") },
@@ -326,18 +335,25 @@ fun AITutorScreen(
                         viewModel.clearMessages()
                         showClearChatConfirm = false
                     },
+                    enabled = !uiState.isChatActionBusy,
                     shape = RoundedCornerShape(8.dp)
-                ) { Text("清空") }
+                ) { Text(if (uiState.isChatActionBusy) "清空中" else "清空") }
             },
             dismissButton = {
-                TextButton(onClick = { showClearChatConfirm = false }, shape = RoundedCornerShape(8.dp)) { Text("取消") }
+                TextButton(
+                    onClick = { showClearChatConfirm = false },
+                    enabled = !uiState.isChatActionBusy,
+                    shape = RoundedCornerShape(8.dp)
+                ) { Text("取消") }
             }
         )
     }
 
     if (showDeleteChatConfirm) {
         AlertDialog(
-            onDismissRequest = { showDeleteChatConfirm = false },
+            onDismissRequest = {
+                if (!uiState.isChatActionBusy) showDeleteChatConfirm = false
+            },
             shape = RoundedCornerShape(8.dp),
             title = { Text("删除当前对话", style = MaterialTheme.typography.titleMedium) },
             text = { Text("当前对话和其中的消息都会删除，之后会切换到其他对话或新建对话。") },
@@ -347,11 +363,16 @@ fun AITutorScreen(
                         viewModel.deleteCurrentSession()
                         showDeleteChatConfirm = false
                     },
+                    enabled = !uiState.isChatActionBusy,
                     shape = RoundedCornerShape(8.dp)
-                ) { Text("删除") }
+                ) { Text(if (uiState.isChatActionBusy) "删除中" else "删除") }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteChatConfirm = false }, shape = RoundedCornerShape(8.dp)) { Text("取消") }
+                TextButton(
+                    onClick = { showDeleteChatConfirm = false },
+                    enabled = !uiState.isChatActionBusy,
+                    shape = RoundedCornerShape(8.dp)
+                ) { Text("取消") }
             }
         )
     }
@@ -361,7 +382,9 @@ fun AITutorScreen(
             mutableStateOf(uiState.sessions.firstOrNull { it.id == uiState.selectedSessionId }?.title.orEmpty())
         }
         AlertDialog(
-            onDismissRequest = { showRenameDialog = false },
+            onDismissRequest = {
+                if (!uiState.isChatActionBusy) showRenameDialog = false
+            },
             shape = RoundedCornerShape(8.dp),
             title = { Text("重命名对话", style = MaterialTheme.typography.titleMedium) },
             text = {
@@ -370,6 +393,7 @@ fun AITutorScreen(
                     onValueChange = { title = it },
                     label = { Text("标题") },
                     singleLine = true,
+                    enabled = !uiState.isChatActionBusy,
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -380,12 +404,16 @@ fun AITutorScreen(
                         viewModel.renameCurrentSession(title)
                         showRenameDialog = false
                     },
-                    enabled = title.isNotBlank(),
+                    enabled = title.isNotBlank() && !uiState.isChatActionBusy,
                     shape = RoundedCornerShape(8.dp)
-                ) { Text("保存") }
+                ) { Text(if (uiState.isChatActionBusy) "保存中" else "保存") }
             },
             dismissButton = {
-                TextButton(onClick = { showRenameDialog = false }, shape = RoundedCornerShape(8.dp)) { Text("取消") }
+                TextButton(
+                    onClick = { showRenameDialog = false },
+                    enabled = !uiState.isChatActionBusy,
+                    shape = RoundedCornerShape(8.dp)
+                ) { Text("取消") }
             }
         )
     }
@@ -1609,7 +1637,9 @@ private fun MemoryDialog(
     var content by remember { mutableStateOf("") }
     var memoryToDelete by remember { mutableStateOf<Long?>(null) }
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = {
+            if (!uiState.isMemoryBusy) onDismiss()
+        },
         title = { Text("AI 记忆") },
         text = {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1624,6 +1654,7 @@ private fun MemoryDialog(
                                 FilterChip(
                                     selected = category == item.label,
                                     onClick = { category = item.label },
+                                    enabled = !uiState.isMemoryBusy,
                                     label = { Text(item.label) }
                                 )
                             }
@@ -1636,6 +1667,7 @@ private fun MemoryDialog(
                         onValueChange = { content = it },
                         label = { Text("记忆内容") },
                         modifier = Modifier.fillMaxWidth(),
+                        enabled = !uiState.isMemoryBusy,
                         minLines = 2
                     )
                 }
@@ -1645,15 +1677,18 @@ private fun MemoryDialog(
                             onSave(category, content)
                             content = ""
                         },
-                        enabled = content.isNotBlank()
-                    ) { Text("保存记忆") }
+                        enabled = content.isNotBlank() && !uiState.isMemoryBusy
+                    ) { Text(if (uiState.isMemoryBusy) "保存中" else "保存记忆") }
                 }
                 items(uiState.memories) { memory ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text("[${memory.category}] ${memory.content}")
                         }
-                        IconButton(onClick = { memoryToDelete = memory.id }) {
+                        IconButton(
+                            onClick = { memoryToDelete = memory.id },
+                            enabled = !uiState.isMemoryBusy
+                        ) {
                             Icon(Icons.Default.Delete, contentDescription = "删除")
                         }
                     }
@@ -1661,13 +1696,18 @@ private fun MemoryDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("完成") }
+            TextButton(
+                onClick = onDismiss,
+                enabled = !uiState.isMemoryBusy
+            ) { Text("完成") }
         }
     )
 
     memoryToDelete?.let { memoryId ->
         AlertDialog(
-            onDismissRequest = { memoryToDelete = null },
+            onDismissRequest = {
+                if (!uiState.isMemoryBusy) memoryToDelete = null
+            },
             title = { Text("删除记忆") },
             text = { Text("确定删除这条 AI 记忆吗？之后生成建议时不会再使用它。") },
             confirmButton = {
@@ -1675,11 +1715,15 @@ private fun MemoryDialog(
                     onClick = {
                         onDelete(memoryId)
                         memoryToDelete = null
-                    }
-                ) { Text("删除") }
+                    },
+                    enabled = !uiState.isMemoryBusy
+                ) { Text(if (uiState.isMemoryBusy) "删除中" else "删除") }
             },
             dismissButton = {
-                TextButton(onClick = { memoryToDelete = null }) { Text("取消") }
+                TextButton(
+                    onClick = { memoryToDelete = null },
+                    enabled = !uiState.isMemoryBusy
+                ) { Text("取消") }
             }
         )
     }

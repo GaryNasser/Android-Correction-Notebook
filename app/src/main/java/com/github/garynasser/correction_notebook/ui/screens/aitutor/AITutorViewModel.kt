@@ -45,6 +45,8 @@ data class AITutorUiState(
     val memories: List<UserMemoryEntity> = emptyList(),
     val fetchedModels: List<AiModelOption> = emptyList(),
     val isProviderBusy: Boolean = false,
+    val isChatActionBusy: Boolean = false,
+    val isMemoryBusy: Boolean = false,
     val providerStatusMessage: String? = null,
     val isLoading: Boolean = false,
     val isKnowledgeMode: Boolean = false,
@@ -67,6 +69,8 @@ class AITutorViewModel @Inject constructor(
     private val selectedSessionId = MutableStateFlow<Long?>(null)
     private val loading = MutableStateFlow(false)
     private val providerBusy = MutableStateFlow(false)
+    private val chatActionBusy = MutableStateFlow(false)
+    private val memoryBusy = MutableStateFlow(false)
     private val providerStatus = MutableStateFlow<String?>(null)
     private val fetchedModels = MutableStateFlow<List<AiModelOption>>(emptyList())
     private val knowledgeMode = MutableStateFlow(false)
@@ -83,6 +87,8 @@ class AITutorViewModel @Inject constructor(
         memoryRepository.observeMemories(),
         fetchedModels,
         providerBusy,
+        chatActionBusy,
+        memoryBusy,
         providerStatus,
         loading,
         knowledgeMode,
@@ -96,10 +102,12 @@ class AITutorViewModel @Inject constructor(
         val memories = values.typed<List<UserMemoryEntity>>(5)
         val currentFetchedModels = values.typed<List<AiModelOption>>(6)
         val isProviderBusy = values.typed<Boolean>(7)
-        val currentProviderStatus = values.typed<String?>(8)
-        val isLoading = values.typed<Boolean>(9)
-        val isKnowledgeMode = values.typed<Boolean>(10)
-        val currentError = values.typed<String?>(11)
+        val isChatActionBusy = values.typed<Boolean>(8)
+        val isMemoryBusy = values.typed<Boolean>(9)
+        val currentProviderStatus = values.typed<String?>(10)
+        val isLoading = values.typed<Boolean>(11)
+        val isKnowledgeMode = values.typed<Boolean>(12)
+        val currentError = values.typed<String?>(13)
 
         AITutorUiState(
             activeProvider = activeProvider,
@@ -117,6 +125,8 @@ class AITutorViewModel @Inject constructor(
             memories = memories,
             fetchedModels = currentFetchedModels,
             isProviderBusy = isProviderBusy,
+            isChatActionBusy = isChatActionBusy,
+            isMemoryBusy = isMemoryBusy,
             providerStatusMessage = currentProviderStatus,
             isLoading = isLoading,
             isKnowledgeMode = isKnowledgeMode,
@@ -193,10 +203,10 @@ class AITutorViewModel @Inject constructor(
     }
 
     fun newSession() {
-        viewModelScope.launch {
+        runChatAction("新建对话失败") {
             val provider = providerRepository.getActiveProvider() ?: run {
                 error.value = "请先配置 AI Provider"
-                return@launch
+                return@runChatAction
             }
             selectedSessionId.value = chatSessionRepository.createSession(
                 title = "新的学习对话",
@@ -211,18 +221,19 @@ class AITutorViewModel @Inject constructor(
     }
 
     fun clearMessages() {
-        selectedSessionId.value?.let { sessionId ->
-            viewModelScope.launch { chatSessionRepository.clearSessionMessages(sessionId) }
+        val sessionId = selectedSessionId.value ?: return
+        runChatAction("清空对话失败") {
+            chatSessionRepository.clearSessionMessages(sessionId)
         }
     }
 
     fun deleteCurrentSession() {
-        selectedSessionId.value?.let { sessionId ->
-            viewModelScope.launch {
-                chatSessionRepository.deleteSession(sessionId)
-                selectedSessionId.value = chatSessionRepository.getLatestSessionForProvider(
-                    providerRepository.getActiveProvider()?.id ?: return@launch
-                )?.id
+        val sessionId = selectedSessionId.value ?: return
+        runChatAction("删除对话失败") {
+            chatSessionRepository.deleteSession(sessionId)
+            val activeProvider = providerRepository.getActiveProvider()
+            selectedSessionId.value = activeProvider?.let {
+                chatSessionRepository.getLatestSessionForProvider(it.id)?.id
             }
         }
     }
@@ -230,8 +241,9 @@ class AITutorViewModel @Inject constructor(
     fun renameCurrentSession(title: String) {
         val trimmedTitle = title.trim()
         if (trimmedTitle.isBlank()) return
-        selectedSessionId.value?.let { sessionId ->
-            viewModelScope.launch { chatSessionRepository.renameSession(sessionId, trimmedTitle) }
+        val sessionId = selectedSessionId.value ?: return
+        runChatAction("重命名对话失败") {
+            chatSessionRepository.renameSession(sessionId, trimmedTitle)
         }
     }
 
@@ -328,16 +340,17 @@ class AITutorViewModel @Inject constructor(
     }
 
     fun saveMemory(category: String, content: String) {
-        if (content.isBlank()) return
-        viewModelScope.launch {
-            aiStudyUseCase.saveMemory(category, content).onFailure {
-                error.value = it.message ?: "保存记忆失败"
-            }
+        val trimmedContent = content.trim()
+        if (trimmedContent.isBlank()) return
+        runMemoryAction("保存记忆失败") {
+            aiStudyUseCase.saveMemory(category, trimmedContent).getOrThrow()
         }
     }
 
     fun deleteMemory(memoryId: Long) {
-        viewModelScope.launch { memoryRepository.deleteMemory(memoryId) }
+        runMemoryAction("删除记忆失败") {
+            memoryRepository.deleteMemory(memoryId)
+        }
     }
 
     fun clearError() {
@@ -363,6 +376,41 @@ class AITutorViewModel @Inject constructor(
                 providerStatus.value = error.message ?: failureMessage
             } finally {
                 providerBusy.value = false
+            }
+        }
+    }
+
+    private fun runChatAction(
+        failureMessage: String,
+        action: suspend () -> Unit
+    ) {
+        runBusyAction(chatActionBusy, failureMessage, action)
+    }
+
+    private fun runMemoryAction(
+        failureMessage: String,
+        action: suspend () -> Unit
+    ) {
+        runBusyAction(memoryBusy, failureMessage, action)
+    }
+
+    private fun runBusyAction(
+        busyState: MutableStateFlow<Boolean>,
+        failureMessage: String,
+        action: suspend () -> Unit
+    ) {
+        if (busyState.value) return
+        busyState.value = true
+        viewModelScope.launch {
+            try {
+                error.value = null
+                action()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                this@AITutorViewModel.error.value = error.message ?: failureMessage
+            } finally {
+                busyState.value = false
             }
         }
     }
