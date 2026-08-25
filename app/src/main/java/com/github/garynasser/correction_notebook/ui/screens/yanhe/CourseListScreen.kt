@@ -80,7 +80,7 @@ fun CourseListScreen(
                             )
                         }
                         Spacer(Modifier.width(6.dp))
-                        Text(if (viewModel.isRefreshingSchedule) "同步中" else "课表")
+                        Text(if (viewModel.isRefreshingSchedule) "同步中" else "同步")
                     }
                 }
             )
@@ -101,7 +101,7 @@ fun CourseListScreen(
                                 title = "课程加载失败",
                                 message = state.message,
                                 actionText = "重试",
-                                onAction = { viewModel.loadCourses(false) },
+                                onAction = viewModel::retryLoadCourses,
                                 modifier = Modifier
                                     .align(Alignment.Center)
                                     .padding(horizontal = 24.dp)
@@ -541,7 +541,7 @@ fun CourseCard(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(76.dp)
+                    .height(64.dp)
                     .background(
                         Brush.linearGradient(
                             listOf(
