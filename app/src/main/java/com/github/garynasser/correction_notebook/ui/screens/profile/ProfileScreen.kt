@@ -197,23 +197,36 @@ fun ProfileScreen(
     // Logout Dialog
     if (showLogoutDialog) {
         AlertDialog(
-            onDismissRequest = { showLogoutDialog = false },
-            shape = MaterialTheme.shapes.extraSmall,
-            title = { Text("退出延河课堂") },
-            text = { Text("确定要清除当前延河课堂登录吗？") },
+            onDismissRequest = {
+                if (!isLoading) showLogoutDialog = false
+            },
+            shape = RoundedCornerShape(8.dp),
+            title = { Text("退出延河课堂", style = MaterialTheme.typography.titleMedium) },
+            text = {
+                Text(
+                    text = "退出后会清除当前课程登录状态，已保存的学习数据和本地设置不会删除。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
             confirmButton = {
-                TextButton(
+                Button(
                     onClick = {
                         viewModel.logout()
                         showLogoutDialog = false
                     },
-                    enabled = !isLoading
+                    enabled = !isLoading,
+                    shape = RoundedCornerShape(8.dp)
                 ) {
-                    Text("确定")
+                    Text(if (isLoading) "退出中" else "退出")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showLogoutDialog = false }) {
+                TextButton(
+                    onClick = { showLogoutDialog = false },
+                    enabled = !isLoading,
+                    shape = RoundedCornerShape(8.dp)
+                ) {
                     Text("取消")
                 }
             }
@@ -224,25 +237,36 @@ fun ProfileScreen(
     if (showFeedbackDialog) {
         AlertDialog(
             onDismissRequest = { showFeedbackDialog = false },
-            shape = MaterialTheme.shapes.extraSmall,
-            title = { Text("帮助与反馈") },
+            shape = RoundedCornerShape(8.dp),
+            title = { Text("帮助与反馈", style = MaterialTheme.typography.titleMedium) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
                         text = "如有 bug 或功能建议，请联系开发者邮箱：",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Text(
-                        text = "fangmierui@gmail.com",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.42f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.14f))
+                    ) {
+                        Text(
+                            text = "fangmierui@gmail.com",
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showFeedbackDialog = false }) {
+                TextButton(
+                    onClick = { showFeedbackDialog = false },
+                    shape = RoundedCornerShape(8.dp)
+                ) {
                     Text("确定")
                 }
             }
