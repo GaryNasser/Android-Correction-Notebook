@@ -897,14 +897,12 @@ private fun CourseGridBlock(
     }
 }
 
-private fun String.toGridLocationText(): String {
+internal fun String.toGridLocationText(): String {
     return lineSequence()
         .map { it.trim() }
         .firstOrNull { it.isNotBlank() }
         .orEmpty()
-        .split(Regex("\\s+"))
-        .filter { it.isNotBlank() }
-        .joinToString("\n")
+        .replace(Regex("\\s+"), " ")
 }
 
 private data class CourseSectionSlot(
