@@ -131,6 +131,10 @@ class ProfileViewModel @Inject constructor(
                         if (throwable is CancellationException) throw throwable
                         _providerStatusMessage.value = throwable.message ?: "获取模型列表失败"
                     }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                _providerStatusMessage.value = error.message ?: "获取模型列表失败"
             } finally {
                 _isProviderBusy.value = false
             }
@@ -152,6 +156,10 @@ class ProfileViewModel @Inject constructor(
                         if (throwable is CancellationException) throw throwable
                         _providerStatusMessage.value = throwable.message ?: "连接测试失败"
                     }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                _providerStatusMessage.value = error.message ?: "连接测试失败"
             } finally {
                 _isProviderBusy.value = false
             }
