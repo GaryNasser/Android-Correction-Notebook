@@ -240,10 +240,10 @@ class AITutorViewModel @Inject constructor(
     }
 
     fun saveProvider(form: AiProviderForm) {
-        viewModelScope.launch {
+        runProviderAction("保存 Provider 失败") {
             aiRepository.validateProviderForm(form)?.let { message ->
                 providerStatus.value = message
-                return@launch
+                return@runProviderAction
             }
             providerRepository.saveProvider(aiRepository.normalizeProviderRecord(form))
             aiSettingsManager.setAiEnabled(true)
@@ -304,7 +304,7 @@ class AITutorViewModel @Inject constructor(
     }
 
     fun activateProvider(providerId: Long) {
-        viewModelScope.launch {
+        runProviderAction("切换 Provider 失败") {
             providerRepository.activateProvider(providerId)
             selectedSessionId.value = null
             providerStatus.value = "已切换默认 Provider"
@@ -312,7 +312,7 @@ class AITutorViewModel @Inject constructor(
     }
 
     fun deleteProvider(providerId: Long) {
-        viewModelScope.launch {
+        runProviderAction("删除 Provider 失败") {
             val wasActive = providerRepository.getProviderById(providerId)?.isActive == true
             providerRepository.deleteProvider(providerId)
             if (wasActive) {
@@ -346,5 +346,25 @@ class AITutorViewModel @Inject constructor(
 
     private fun titleFrom(text: String): String =
         text.take(18).ifBlank { "新的学习对话" }
+
+    private fun runProviderAction(
+        failureMessage: String,
+        action: suspend () -> Unit
+    ) {
+        if (providerBusy.value) return
+        providerBusy.value = true
+        viewModelScope.launch {
+            try {
+                providerStatus.value = null
+                action()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                providerStatus.value = error.message ?: failureMessage
+            } finally {
+                providerBusy.value = false
+            }
+        }
+    }
 
 }
