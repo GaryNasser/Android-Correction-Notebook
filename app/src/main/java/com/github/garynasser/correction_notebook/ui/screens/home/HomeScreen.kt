@@ -537,8 +537,8 @@ private fun WeeklyCourseGrid(
     val days = (0..6).map { selectedDate.plusDays(it.toLong()) }
     val weekdayLabels = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
     val itemsByDate = sections.associate { it.date to it.items }
-    val headerHeight = 50.dp
-    val leftColumnWidth = 42.dp
+    val headerHeight = 48.dp
+    val leftColumnWidth = 36.dp
 
     BoxWithConstraints(
         modifier = modifier.fillMaxSize()
@@ -618,14 +618,15 @@ private fun WeeklyCourseGrid(
                         ) {
                             Text(
                                 text = section.index.toString(),
-                                style = MaterialTheme.typography.labelLarge,
+                                fontSize = 13.sp,
+                                lineHeight = 14.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f)
                             )
                             Text(
                                 text = section.start.format(DateTimeFormatter.ofPattern("HH:mm")),
-                                fontSize = 10.sp,
-                                lineHeight = 11.sp,
+                                fontSize = 9.sp,
+                                lineHeight = 10.sp,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.58f)
                             )
                         }
@@ -660,11 +661,11 @@ private fun WeeklyCourseGrid(
                             item = item,
                             span = placement.span,
                             modifier = Modifier
-                                .width(dayColumnWidth - 3.dp)
-                                .height(rowHeight * placement.span.toFloat() - 3.dp)
+                                .width(dayColumnWidth - 2.dp)
+                                .height(rowHeight * placement.span.toFloat() - 2.dp)
                                 .offset(
-                                    x = leftColumnWidth + dayColumnWidth * dayIndex.toFloat() + 1.5.dp,
-                                    y = rowHeight * placement.startIndex.toFloat() + 1.5.dp
+                                    x = leftColumnWidth + dayColumnWidth * dayIndex.toFloat() + 1.dp,
+                                    y = rowHeight * placement.startIndex.toFloat() + 1.dp
                                 ),
                             onClick = { onItemClick(item) }
                         )
@@ -796,35 +797,41 @@ private fun CourseGridBlock(
     modifier: Modifier,
     onClick: () -> Unit
 ) {
-    val displayLocation = item.location.firstDisplayLine().asGridLocationText()
+    val displayLocation = item.location.toGridLocationText()
     val hasLocation = displayLocation.isNotBlank()
     val compactBlock = span <= 1
-    val longTitle = item.title.length >= 14
-    val longLocation = displayLocation.length >= 12
+    val titleLength = item.title.trim().length
+    val locationLength = displayLocation.replace("\n", "").length
+    val denseText = titleLength + locationLength >= 28
     val titleFontSize = when {
-        compactBlock -> if (longTitle) 8.sp else 9.sp
-        span == 2 -> if (longTitle) 9.sp else 10.sp
-        else -> if (longTitle) 10.sp else 11.sp
+        compactBlock -> if (denseText) 7.5.sp else 8.5.sp
+        span == 2 -> if (denseText) 8.5.sp else 9.5.sp
+        span == 3 -> if (denseText) 9.sp else 10.sp
+        else -> if (denseText) 9.5.sp else 10.5.sp
     }
     val locationFontSize = when {
-        compactBlock -> if (longLocation) 7.sp else 8.sp
-        span == 2 -> if (longLocation) 8.sp else 8.5.sp
-        else -> if (longLocation) 9.sp else 10.sp
+        compactBlock -> if (locationLength >= 10) 7.sp else 7.5.sp
+        span == 2 -> if (locationLength >= 10) 7.5.sp else 8.sp
+        span == 3 -> if (locationLength >= 10) 8.sp else 8.5.sp
+        else -> if (locationLength >= 10) 8.5.sp else 9.sp
     }
     val titleLineHeight = when {
-        compactBlock -> if (longTitle) 9.sp else 10.sp
-        span == 2 -> if (longTitle) 10.sp else 11.sp
-        else -> if (longTitle) 11.sp else 12.sp
+        compactBlock -> if (denseText) 8.5.sp else 9.5.sp
+        span == 2 -> if (denseText) 9.5.sp else 10.5.sp
+        span == 3 -> if (denseText) 10.sp else 11.sp
+        else -> if (denseText) 10.5.sp else 11.5.sp
     }
     val locationLineHeight = when {
-        compactBlock -> if (longLocation) 8.sp else 9.sp
-        span == 2 -> if (longLocation) 9.sp else 9.5.sp
-        else -> if (longLocation) 10.sp else 11.sp
+        compactBlock -> 8.sp
+        span == 2 -> 8.5.sp
+        span == 3 -> 9.sp
+        else -> 9.5.sp
     }
     val titleMaxLines = when {
-        compactBlock -> if (hasLocation) 1 else 3
-        span == 2 -> if (hasLocation) 3 else 7
-        else -> if (hasLocation) 5 else 10
+        compactBlock -> if (hasLocation) 2 else 3
+        span == 2 -> if (hasLocation) 4 else 6
+        span == 3 -> if (hasLocation) 7 else 9
+        else -> if (hasLocation) 9 else 12
     }
 
     Box(
@@ -832,11 +839,11 @@ private fun CourseGridBlock(
             .clip(RoundedCornerShape(8.dp))
             .background(scheduleSourceColor(item.sourceType))
             .clickable(onClick = onClick)
-            .padding(horizontal = 4.dp, vertical = if (compactBlock) 3.dp else 5.dp),
+            .padding(horizontal = 3.dp, vertical = if (compactBlock) 2.dp else 4.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
@@ -848,11 +855,11 @@ private fun CourseGridBlock(
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.84f),
                 textAlign = TextAlign.Center,
                 maxLines = titleMaxLines,
-                overflow = TextOverflow.Ellipsis,
+                overflow = TextOverflow.Clip,
                 softWrap = true
             )
             if (hasLocation) {
-                Spacer(modifier = Modifier.height(if (compactBlock) 1.dp else 3.dp))
+                Spacer(modifier = Modifier.height(if (compactBlock) 1.dp else 2.dp))
                 Text(
                     text = displayLocation,
                     fontSize = locationFontSize,
@@ -860,6 +867,7 @@ private fun CourseGridBlock(
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
                     textAlign = TextAlign.Center,
+                    overflow = TextOverflow.Clip,
                     softWrap = true
                 )
             }
@@ -867,18 +875,14 @@ private fun CourseGridBlock(
     }
 }
 
-private fun String.firstDisplayLine(): String {
+private fun String.toGridLocationText(): String {
     return lineSequence()
-        .firstOrNull()
+        .map { it.trim() }
+        .firstOrNull { it.isNotBlank() }
         .orEmpty()
-        .trim()
-}
-
-private fun String.asGridLocationText(): String {
-    return split(Regex("\\s+"))
+        .split(Regex("\\s+"))
         .filter { it.isNotBlank() }
         .joinToString("\n")
-        .ifBlank { this }
 }
 
 private data class CourseSectionSlot(
