@@ -53,6 +53,10 @@ class VideoListViewModel @Inject constructor(
 
     var progress by mutableStateOf<CourseProgress?>(null)
         private set
+    var sectionActionMessage by mutableStateOf<String?>(null)
+        private set
+    var updatingCompletionSectionIds by mutableStateOf<Set<Int>>(emptySet())
+        private set
 
     private var videoListJob: Job? = null
     private var playJob: Job? = null
@@ -64,6 +68,10 @@ class VideoListViewModel @Inject constructor(
 
     fun resetPlayState() {
         playState = PlayState.Idle
+    }
+
+    fun consumeSectionActionMessage() {
+        sectionActionMessage = null
     }
 
     fun getVideoList(courseId: Int) {
@@ -124,17 +132,28 @@ class VideoListViewModel @Inject constructor(
     }
 
     fun setSectionCompleted(section: CourseSection, completed: Boolean) {
+        if (section.id in updatingCompletionSectionIds) return
+        updatingCompletionSectionIds = updatingCompletionSectionIds + section.id
         viewModelScope.launch {
-            val total = (uiState as? VideoUIState.Success)?.videos?.size ?: 0
-            courseLearningRepository.setSectionCompleted(
-                courseId = courseId,
-                courseName = courseName,
-                sectionId = section.id,
-                sectionTitle = section.title,
-                totalSections = total,
-                completed = completed
-            )
-            loadProgress()
+            try {
+                val total = (uiState as? VideoUIState.Success)?.videos?.size ?: 0
+                courseLearningRepository.setSectionCompleted(
+                    courseId = courseId,
+                    courseName = courseName,
+                    sectionId = section.id,
+                    sectionTitle = section.title,
+                    totalSections = total,
+                    completed = completed
+                )
+                progress = courseLearningRepository.getProgressForCourse(courseId)
+                sectionActionMessage = if (completed) "已标记完成" else "已取消完成"
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                sectionActionMessage = "进度更新失败：${e.message ?: "请稍后再试"}"
+            } finally {
+                updatingCompletionSectionIds = updatingCompletionSectionIds - section.id
+            }
         }
     }
 

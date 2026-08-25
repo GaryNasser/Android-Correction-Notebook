@@ -46,6 +46,8 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -81,6 +83,7 @@ fun CourseVideoListScreen(
     val assistantState by assistantViewModel.uiState.collectAsStateWithLifecycle()
     var selectedSection by remember { mutableStateOf<CourseSection?>(null) }
     var noteInput by remember { mutableStateOf("") }
+    val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(viewModel.playState) {
         val state = viewModel.playState
@@ -90,8 +93,15 @@ fun CourseVideoListScreen(
         }
     }
 
+    LaunchedEffect(viewModel.sectionActionMessage) {
+        val message = viewModel.sectionActionMessage ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(message)
+        viewModel.consumeSectionActionMessage()
+    }
+
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
@@ -236,10 +246,12 @@ fun CourseVideoListScreen(
                         items(state.videos) { video ->
                             val isCompleted = viewModel.progress?.completedSectionIds?.contains(video.id) == true
                             val isResolvingVideo = viewModel.playState is PlayState.Loading
+                            val isUpdatingCompletion = video.id in viewModel.updatingCompletionSectionIds
                             VideoCard(
                                 section = video,
                                 isCompleted = isCompleted,
                                 isResolvingVideo = isResolvingVideo,
+                                isUpdatingCompletion = isUpdatingCompletion,
                                 onCompletedChange = { checked ->
                                     viewModel.setSectionCompleted(video, checked)
                                 },
@@ -488,6 +500,7 @@ fun VideoCard(
     section: CourseSection,
     isCompleted: Boolean,
     isResolvingVideo: Boolean,
+    isUpdatingCompletion: Boolean,
     onCompletedChange: (Boolean) -> Unit,
     onAiAssistantClick: () -> Unit,
     onCameraPlayClick: () -> Unit,
@@ -544,7 +557,8 @@ fun VideoCard(
                 Checkbox(
                     checked = isCompleted,
                     onCheckedChange = onCompletedChange,
-                    modifier = Modifier.size(40.dp)
+                    enabled = !isUpdatingCompletion,
+                    modifier = Modifier.size(36.dp)
                 )
             }
 

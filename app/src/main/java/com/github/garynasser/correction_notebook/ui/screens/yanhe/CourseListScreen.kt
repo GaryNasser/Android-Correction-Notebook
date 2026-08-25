@@ -18,6 +18,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -64,23 +65,23 @@ fun CourseListScreen(
                     scrolledContainerColor = MaterialTheme.colorScheme.surface
                 ),
                 actions = {
-                    FilledTonalButton(
+                    FilledIconButton(
                         onClick = { viewModel.refreshMySchedule() },
                         enabled = !viewModel.isRefreshingSchedule,
-                        modifier = Modifier.padding(end = 8.dp),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        modifier = Modifier
+                            .padding(end = 8.dp)
+                            .size(38.dp),
+                        shape = RoundedCornerShape(8.dp)
                     ) {
                         if (viewModel.isRefreshingSchedule) {
                             CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                         } else {
                             Icon(
                                 Icons.Default.CalendarMonth,
-                                contentDescription = null,
+                                contentDescription = "同步我的课程",
                                 modifier = Modifier.size(18.dp)
                             )
                         }
-                        Spacer(Modifier.width(6.dp))
-                        Text(if (viewModel.isRefreshingSchedule) "同步中" else "同步")
                     }
                 }
             )
@@ -110,10 +111,10 @@ fun CourseListScreen(
                         is CourseUiState.Success -> {
                             LazyVerticalGrid(
                                 state = gridState,
-                                columns = GridCells.Adaptive(minSize = 164.dp),
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
-                                horizontalArrangement = Arrangement.spacedBy(7.dp),
-                                verticalArrangement = Arrangement.spacedBy(7.dp),
+                                columns = GridCells.Adaptive(minSize = 152.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
                                 modifier = Modifier.fillMaxSize()
                             ) {
                                 if (viewModel.recentProgress.isNotEmpty()) {
@@ -290,13 +291,14 @@ private fun EmptyCourseState(
             )
             Text(
                 text = if (isPersonalMode) {
-                    "点击上方课表按钮登录并刷新延河课堂我的课程。"
+                    "点击右上角同步，登录并刷新延河课堂我的课程。"
                 } else {
                     "换个关键词或学期再试试。"
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center
             )
             if (isPersonalMode) {
                 TextButton(
@@ -409,15 +411,15 @@ fun SearchAndFilterSection(viewModel: CourseListViewModel) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 10.dp, vertical = 8.dp),
+            .padding(horizontal = 8.dp, vertical = 6.dp),
         shape = RoundedCornerShape(8.dp),
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
         tonalElevation = 1.dp
     ) {
-        Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        Column(modifier = Modifier.padding(7.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 FilterChip(
                     selected = viewModel.isPersonalCoursesMode,
@@ -428,9 +430,11 @@ fun SearchAndFilterSection(viewModel: CourseListViewModel) {
                     },
                     label = { Text("我的课程") },
                     leadingIcon = {
-                        Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(15.dp))
                     },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 34.dp)
                 )
                 FilterChip(
                     selected = !viewModel.isPersonalCoursesMode,
@@ -441,9 +445,11 @@ fun SearchAndFilterSection(viewModel: CourseListViewModel) {
                     },
                     label = { Text("全校课程") },
                     leadingIcon = {
-                        Icon(Icons.Default.Public, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.Public, contentDescription = null, modifier = Modifier.size(15.dp))
                     },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 34.dp)
                 )
             }
 
@@ -452,7 +458,7 @@ fun SearchAndFilterSection(viewModel: CourseListViewModel) {
                 onValueChange = { viewModel.updateSearchQuery(it) },
                 modifier = Modifier.fillMaxWidth(),
                 placeholder = { Text("搜索课程名称或老师") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
                 trailingIcon = {
                     Row {
                         if (viewModel.searchQuery.isNotBlank()) {
@@ -466,7 +472,8 @@ fun SearchAndFilterSection(viewModel: CourseListViewModel) {
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Close,
-                                    contentDescription = "清空搜索"
+                                    contentDescription = "清空搜索",
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
                         }
@@ -477,7 +484,8 @@ fun SearchAndFilterSection(viewModel: CourseListViewModel) {
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Search,
-                                contentDescription = "搜索课程"
+                                contentDescription = "搜索课程",
+                                modifier = Modifier.size(18.dp)
                             )
                         }
                     }
@@ -541,7 +549,7 @@ fun CourseCard(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(64.dp)
+                    .height(52.dp)
                     .background(
                         Brush.linearGradient(
                             listOf(
@@ -571,7 +579,9 @@ fun CourseCard(
                             Icon(
                                 Icons.Default.PlayCircleOutline,
                                 contentDescription = null,
-                                modifier = Modifier.padding(14.dp),
+                                modifier = Modifier
+                                    .padding(11.dp)
+                                    .size(24.dp),
                                 tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.62f)
                             )
                         }
@@ -580,12 +590,12 @@ fun CourseCard(
             }
 
             Column(
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(3.dp)
+                modifier = Modifier.padding(horizontal = 9.dp, vertical = 7.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 Text(
                     text = course.nameZh,
-                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -603,7 +613,7 @@ fun CourseCard(
                 ) {
                     Text(
                         text = course.semester.ifBlank { "学期未知" },
-                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                         maxLines = 1,
