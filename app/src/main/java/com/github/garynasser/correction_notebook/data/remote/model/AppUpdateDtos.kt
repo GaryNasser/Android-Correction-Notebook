@@ -1,6 +1,7 @@
 package com.github.garynasser.correction_notebook.data.remote.model
 
 import com.github.garynasser.correction_notebook.data.model.appupdate.AppVersionInfo
+import com.github.garynasser.correction_notebook.utils.versionNameToCode
 import com.google.gson.annotations.SerializedName
 import java.time.Instant
 
@@ -66,20 +67,4 @@ private fun String?.toEpochMillisOrZero(): Long {
     return runCatching { Instant.parse(this).toEpochMilli() }.getOrDefault(0L)
 }
 
-private fun String.toVersionCode(): Long {
-    val parts = trim()
-        .removePrefix("v")
-        .removePrefix("V")
-        .split('.', '-', '_')
-        .mapNotNull { it.takeWhile { char -> char.isDigit() }.toLongOrNull() }
-        .take(3)
-
-    return parts.foldIndexed(0L) { index, acc, value ->
-        val multiplier = when (index) {
-            0 -> 1_000_000L
-            1 -> 1_000L
-            else -> 1L
-        }
-        acc + value * multiplier
-    }
-}
+private fun String.toVersionCode(): Long = versionNameToCode(this)

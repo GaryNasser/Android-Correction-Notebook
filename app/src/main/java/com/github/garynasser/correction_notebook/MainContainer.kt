@@ -314,18 +314,18 @@ fun MainContainer(
                     }
                 },
                 confirmButton = {
-                    TextButton(
+                    Button(
                         onClick = {
                             val downloadUrl = update.downloadUrl.trim()
                             if (downloadUrl.isBlank()) {
                                 appUpdateViewModel.reportDownloadFailure("没有可用的下载地址")
-                                return@TextButton
+                                return@Button
                             }
                             try {
                                 val uri = downloadUrl.toUri()
                                 if (uri.scheme !in setOf("http", "https")) {
                                     appUpdateViewModel.reportDownloadFailure("下载链接格式不正确")
-                                    return@TextButton
+                                    return@Button
                                 }
                                 val intent = Intent(Intent.ACTION_VIEW, uri)
                                 context.startActivity(intent)
@@ -339,7 +339,8 @@ fun MainContainer(
                             } catch (_: SecurityException) {
                                 appUpdateViewModel.reportDownloadFailure("无法打开下载链接")
                             }
-                        }
+                        },
+                        shape = RoundedCornerShape(8.dp)
                     ) {
                         Text("立即更新")
                     }
