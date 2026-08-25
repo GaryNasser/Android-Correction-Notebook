@@ -190,6 +190,7 @@ class AITutorViewModel @Inject constructor(
                 result.onSuccess { answer ->
                     chatSessionRepository.saveMessage(sessionId, "assistant", answer)
                 }.onFailure { throwable ->
+                    if (throwable is CancellationException) throw throwable
                     error.value = throwable.message ?: "AI 请求失败"
                 }
             } catch (e: CancellationException) {
@@ -284,6 +285,10 @@ class AITutorViewModel @Inject constructor(
                         if (throwable is CancellationException) throw throwable
                         providerStatus.value = throwable.message ?: "获取模型列表失败"
                     }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                providerStatus.value = error.message ?: "获取模型列表失败"
             } finally {
                 providerBusy.value = false
             }
@@ -305,6 +310,10 @@ class AITutorViewModel @Inject constructor(
                         if (throwable is CancellationException) throw throwable
                         providerStatus.value = throwable.message ?: "连接测试失败"
                     }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                providerStatus.value = error.message ?: "连接测试失败"
             } finally {
                 providerBusy.value = false
             }

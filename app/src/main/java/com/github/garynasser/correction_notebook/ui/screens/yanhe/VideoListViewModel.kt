@@ -159,7 +159,13 @@ class VideoListViewModel @Inject constructor(
 
     private fun loadProgress() {
         viewModelScope.launch {
-            progress = courseLearningRepository.getProgressForCourse(courseId)
+            try {
+                progress = courseLearningRepository.getProgressForCourse(courseId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                sectionActionMessage = "学习进度加载失败：${e.message ?: "请稍后再试"}"
+            }
         }
     }
 
