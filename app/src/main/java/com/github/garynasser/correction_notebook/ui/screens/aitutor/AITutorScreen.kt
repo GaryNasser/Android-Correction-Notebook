@@ -1707,21 +1707,47 @@ private fun MemoryDialog(
         onDismissRequest = {
             if (!uiState.isMemoryBusy) onDismiss()
         },
-        title = { Text("AI 记忆") },
+        shape = RoundedCornerShape(8.dp),
+        title = { Text("AI 记忆", style = MaterialTheme.typography.titleMedium) },
         text = {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 460.dp),
+                contentPadding = PaddingValues(vertical = 2.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 item {
-                    Text("AI 会把这些信息作为长期学习偏好使用，你可以随时删除。")
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.34f),
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(
+                            1.dp,
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                        )
+                    ) {
+                        Text(
+                            text = "AI 会把这些信息作为长期学习偏好使用，你可以随时删除。",
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("分类", style = MaterialTheme.typography.labelLarge)
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
                             MemoryCategory.entries.forEach { item ->
                                 FilterChip(
                                     selected = category == item.label,
                                     onClick = { category = item.label },
                                     enabled = !uiState.isMemoryBusy,
+                                    shape = RoundedCornerShape(8.dp),
                                     label = { Text(item.label) }
                                 )
                             }
@@ -1735,7 +1761,9 @@ private fun MemoryDialog(
                         label = { Text("记忆内容") },
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !uiState.isMemoryBusy,
-                        minLines = 2
+                        minLines = 2,
+                        maxLines = 4,
+                        shape = RoundedCornerShape(8.dp)
                     )
                 }
                 item {
@@ -1744,19 +1772,75 @@ private fun MemoryDialog(
                             onSave(category, content)
                             content = ""
                         },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(40.dp),
+                        shape = RoundedCornerShape(8.dp),
                         enabled = content.isNotBlank() && !uiState.isMemoryBusy
                     ) { Text(if (uiState.isMemoryBusy) "保存中" else "保存记忆") }
                 }
-                items(uiState.memories) { memory ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("[${memory.category}] ${memory.content}")
-                        }
-                        IconButton(
-                            onClick = { memoryToDelete = memory.id },
-                            enabled = !uiState.isMemoryBusy
+                if (uiState.memories.isEmpty()) {
+                    item {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
+                            shape = RoundedCornerShape(8.dp)
                         ) {
-                            Icon(Icons.Default.Delete, contentDescription = "删除")
+                            Text(
+                                text = "还没有保存的记忆",
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 12.dp),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+                items(uiState.memories, key = { it.id }) { memory ->
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.48f),
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(
+                            1.dp,
+                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.28f)
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(start = 10.dp, top = 8.dp, end = 6.dp, bottom = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                Text(
+                                    text = memory.category,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = memory.content,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 3,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            IconButton(
+                                onClick = { memoryToDelete = memory.id },
+                                enabled = !uiState.isMemoryBusy,
+                                modifier = Modifier.size(34.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = "删除",
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -1765,7 +1849,8 @@ private fun MemoryDialog(
         confirmButton = {
             TextButton(
                 onClick = onDismiss,
-                enabled = !uiState.isMemoryBusy
+                enabled = !uiState.isMemoryBusy,
+                shape = RoundedCornerShape(8.dp)
             ) { Text("完成") }
         }
     )
@@ -1775,7 +1860,8 @@ private fun MemoryDialog(
             onDismissRequest = {
                 if (!uiState.isMemoryBusy) memoryToDelete = null
             },
-            title = { Text("删除记忆") },
+            shape = RoundedCornerShape(8.dp),
+            title = { Text("删除记忆", style = MaterialTheme.typography.titleMedium) },
             text = { Text("确定删除这条 AI 记忆吗？之后生成建议时不会再使用它。") },
             confirmButton = {
                 TextButton(
@@ -1783,13 +1869,15 @@ private fun MemoryDialog(
                         onDelete(memoryId)
                         memoryToDelete = null
                     },
-                    enabled = !uiState.isMemoryBusy
+                    enabled = !uiState.isMemoryBusy,
+                    shape = RoundedCornerShape(8.dp)
                 ) { Text(if (uiState.isMemoryBusy) "删除中" else "删除") }
             },
             dismissButton = {
                 TextButton(
                     onClick = { memoryToDelete = null },
-                    enabled = !uiState.isMemoryBusy
+                    enabled = !uiState.isMemoryBusy,
+                    shape = RoundedCornerShape(8.dp)
                 ) { Text("取消") }
             }
         )
