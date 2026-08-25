@@ -403,67 +403,48 @@ class KnowledgeBaseViewModel @Inject constructor(
     }
 
     fun createFolder(name: String) {
-        viewModelScope.launch {
-            isLocalBusy.value = true
+        runLocalBusyAction("创建文件夹失败") {
             knowledgeBaseRepository.createFolder(currentFolderId.value, name)
-                .onSuccess {
-                    snackbarMessage.value = "已创建文件夹"
-                }
-                .onFailure {
-                    snackbarMessage.value = it.message ?: "创建文件夹失败"
-                }
-            isLocalBusy.value = false
+                .onSuccess { snackbarMessage.value = "已创建文件夹" }
+                .onFailure { snackbarMessage.value = it.toUiMessage("创建文件夹失败") }
         }
     }
 
     fun renameFolder(folderId: String, newName: String) {
-        viewModelScope.launch {
-            isLocalBusy.value = true
+        runLocalBusyAction("重命名失败") {
             knowledgeBaseRepository.renameFolder(folderId, newName)
                 .onSuccess { snackbarMessage.value = "已重命名文件夹" }
-                .onFailure { snackbarMessage.value = it.message ?: "重命名失败" }
-            isLocalBusy.value = false
+                .onFailure { snackbarMessage.value = it.toUiMessage("重命名失败") }
         }
     }
 
     fun deleteFolder(folderId: String) {
-        viewModelScope.launch {
-            isLocalBusy.value = true
+        runLocalBusyAction("删除失败") {
             knowledgeBaseRepository.deleteFolder(folderId)
                 .onSuccess { snackbarMessage.value = "已删除文件夹" }
-                .onFailure { snackbarMessage.value = it.message ?: "删除失败" }
-            isLocalBusy.value = false
+                .onFailure { snackbarMessage.value = it.toUiMessage("删除失败") }
         }
     }
 
     fun renameFile(fileId: String, newName: String) {
-        viewModelScope.launch {
-            isLocalBusy.value = true
+        runLocalBusyAction("重命名失败") {
             knowledgeBaseRepository.renameFile(fileId, newName)
                 .onSuccess { snackbarMessage.value = "已重命名文件" }
-                .onFailure { snackbarMessage.value = it.message ?: "重命名失败" }
-            isLocalBusy.value = false
+                .onFailure { snackbarMessage.value = it.toUiMessage("重命名失败") }
         }
     }
 
     fun moveFile(fileId: String, targetFolderId: String?) {
-        viewModelScope.launch {
-            isLocalBusy.value = true
+        runLocalBusyAction("移动失败") {
             knowledgeBaseRepository.moveFile(fileId, targetFolderId)
-                .onSuccess {
-                    snackbarMessage.value = "文件已移动"
-                }
-                .onFailure {
-                    snackbarMessage.value = it.message ?: "移动失败"
-                }
-            isLocalBusy.value = false
+                .onSuccess { snackbarMessage.value = "文件已移动" }
+                .onFailure { snackbarMessage.value = it.toUiMessage("移动失败") }
         }
     }
 
     fun moveFiles(fileIds: Set<String>, targetFolderId: String?) {
         if (fileIds.isEmpty()) return
-        viewModelScope.launch {
-            isLocalBusy.value = true
+        runLocalBusyAction("移动失败") {
             var successCount = 0
             var failureCount = 0
             var lastErrorMessage: String? = null
@@ -473,7 +454,7 @@ class KnowledgeBaseViewModel @Inject constructor(
                     .onSuccess { successCount += 1 }
                     .onFailure {
                         failureCount += 1
-                        lastErrorMessage = it.message
+                        lastErrorMessage = it.toUiMessage("移动失败")
                     }
             }
 
@@ -482,17 +463,14 @@ class KnowledgeBaseViewModel @Inject constructor(
                 successCount > 0 -> "成功移动 $successCount 个文件，$failureCount 个失败"
                 else -> lastErrorMessage ?: "移动失败"
             }
-            isLocalBusy.value = false
         }
     }
 
     fun deleteFile(fileId: String) {
-        viewModelScope.launch {
-            isLocalBusy.value = true
+        runLocalBusyAction("删除失败") {
             knowledgeBaseRepository.deleteFile(fileId)
                 .onSuccess { snackbarMessage.value = "文件已删除" }
-                .onFailure { snackbarMessage.value = it.message ?: "删除失败" }
-            isLocalBusy.value = false
+                .onFailure { snackbarMessage.value = it.toUiMessage("删除失败") }
         }
     }
 
@@ -502,12 +480,10 @@ class KnowledgeBaseViewModel @Inject constructor(
         courseName: String?,
         tags: List<String>
     ) {
-        viewModelScope.launch {
-            isLocalBusy.value = true
+        runLocalBusyAction("更新失败") {
             knowledgeBaseRepository.updateFileLearningContext(fileId, courseId, courseName, tags)
                 .onSuccess { snackbarMessage.value = "已更新资料学习信息" }
-                .onFailure { snackbarMessage.value = it.message ?: "更新失败" }
-            isLocalBusy.value = false
+                .onFailure { snackbarMessage.value = it.toUiMessage("更新失败") }
         }
     }
 
@@ -612,8 +588,7 @@ class KnowledgeBaseViewModel @Inject constructor(
 
     fun deleteFiles(fileIds: Set<String>) {
         if (fileIds.isEmpty()) return
-        viewModelScope.launch {
-            isLocalBusy.value = true
+        runLocalBusyAction("删除失败") {
             var successCount = 0
             var failureCount = 0
             var lastErrorMessage: String? = null
@@ -623,7 +598,7 @@ class KnowledgeBaseViewModel @Inject constructor(
                     .onSuccess { successCount += 1 }
                     .onFailure {
                         failureCount += 1
-                        lastErrorMessage = it.message
+                        lastErrorMessage = it.toUiMessage("删除失败")
                     }
             }
 
@@ -632,7 +607,6 @@ class KnowledgeBaseViewModel @Inject constructor(
                 successCount > 0 -> "成功删除 $successCount 个文件，$failureCount 个失败"
                 else -> lastErrorMessage ?: "删除失败"
             }
-            isLocalBusy.value = false
         }
     }
 
@@ -684,22 +658,28 @@ class KnowledgeBaseViewModel @Inject constructor(
         folderId: String?
     ) {
         viewModelScope.launch {
-            val detail = bitShareRepository.getFileDetail(result.id).getOrElse {
-                BitShareFileDetail(
-                    id = result.id,
-                    title = result.title,
-                    originalName = result.originalName.ifBlank { result.title },
-                    extension = result.extension,
-                    path = null,
-                    description = null,
-                    mimeType = guessMimeType(result.extension),
-                    sizeBytes = result.sizeBytes,
-                    uploadedAt = result.uploadedAt,
-                    downloadCount = result.downloadCount
-                )
+            try {
+                val detail = bitShareRepository.getFileDetail(result.id).getOrElse {
+                    BitShareFileDetail(
+                        id = result.id,
+                        title = result.title,
+                        originalName = result.originalName.ifBlank { result.title },
+                        extension = result.extension,
+                        path = null,
+                        description = null,
+                        mimeType = guessMimeType(result.extension),
+                        sizeBytes = result.sizeBytes,
+                        uploadedAt = result.uploadedAt,
+                        downloadCount = result.downloadCount
+                    )
+                }
+                selectedRemoteDetail.value = detail
+                performRemoteDownload(folderId, detail)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                snackbarMessage.value = e.message ?: "下载失败"
             }
-            selectedRemoteDetail.value = detail
-            performRemoteDownload(folderId, detail)
         }
     }
 
@@ -716,31 +696,36 @@ class KnowledgeBaseViewModel @Inject constructor(
             activeDownloadId.value = detail.id
             snackbarMessage.value = "开始下载 ${detail.originalName}"
             remoteErrorMessage.value = null
-
-            val downloadResult = bitShareRepository.downloadFile(detail.id)
-            downloadResult
-                .mapCatching { body ->
-                    withContext(Dispatchers.IO) {
-                        body.use { responseBody ->
-                            knowledgeBaseRepository.importDownloadedFile(
-                                detail = detail,
-                                targetFolderId = folderId ?: KnowledgeBaseRepository.ROOT_FOLDER_ID,
-                                inputBytes = responseBody.bytes()
-                            ).getOrThrow()
+            try {
+                val downloadResult = bitShareRepository.downloadFile(detail.id)
+                downloadResult
+                    .mapCatching { body ->
+                        withContext(Dispatchers.IO) {
+                            body.use { responseBody ->
+                                knowledgeBaseRepository.importDownloadedFile(
+                                    detail = detail,
+                                    targetFolderId = folderId ?: KnowledgeBaseRepository.ROOT_FOLDER_ID,
+                                    inputBytes = responseBody.bytes()
+                                ).getOrThrow()
+                            }
                         }
                     }
-                }
-                .onSuccess {
-                    val folderName = knowledgeBaseRepository.getFolderName(folderId)
-                    snackbarMessage.value = "已保存到 $folderName"
-                    selectedTabIndex.value = 0
-                    selectedRemoteDetail.value = null
-                }
-                .onFailure {
-                    snackbarMessage.value = it.message ?: "下载失败"
-                }
-
-            activeDownloadId.value = null
+                    .onSuccess {
+                        val folderName = knowledgeBaseRepository.getFolderName(folderId)
+                        snackbarMessage.value = "已保存到 $folderName"
+                        selectedTabIndex.value = 0
+                        selectedRemoteDetail.value = null
+                    }
+                    .onFailure {
+                        snackbarMessage.value = it.toUiMessage("下载失败")
+                    }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                snackbarMessage.value = e.message ?: "下载失败"
+            } finally {
+                activeDownloadId.value = null
+            }
         }
     }
 
@@ -762,5 +747,29 @@ class KnowledgeBaseViewModel @Inject constructor(
 
     fun consumeSnackbarMessage() {
         snackbarMessage.value = null
+    }
+
+    private fun runLocalBusyAction(
+        failureMessage: String,
+        action: suspend () -> Unit
+    ) {
+        if (isLocalBusy.value) return
+        viewModelScope.launch {
+            isLocalBusy.value = true
+            try {
+                action()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                snackbarMessage.value = e.message ?: failureMessage
+            } finally {
+                isLocalBusy.value = false
+            }
+        }
+    }
+
+    private fun Throwable.toUiMessage(fallback: String): String {
+        if (this is CancellationException) throw this
+        return message ?: fallback
     }
 }
