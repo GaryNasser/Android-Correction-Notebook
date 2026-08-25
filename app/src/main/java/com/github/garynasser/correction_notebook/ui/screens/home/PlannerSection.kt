@@ -634,6 +634,7 @@ private fun formatScheduleTimeCompact(item: ScheduleOccurrence): String {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddScheduleDialog(
+    isSaving: Boolean = false,
     onDismiss: () -> Unit,
     onAdd: (ScheduleEvent) -> Unit
 ) {
@@ -648,7 +649,9 @@ fun AddScheduleDialog(
     val endTimeState = rememberTimePickerState(initialHour = 10, initialMinute = 0, is24Hour = true)
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = {
+            if (!isSaving) onDismiss()
+        },
         title = { Text("添加日程") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -660,6 +663,7 @@ fun AddScheduleDialog(
                     },
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("活动标题") },
+                    enabled = !isSaving,
                     singleLine = true
                 )
                 OutlinedTextField(
@@ -670,6 +674,7 @@ fun AddScheduleDialog(
                     },
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("地点") },
+                    enabled = !isSaving,
                     singleLine = true
                 )
                 OutlinedTextField(
@@ -677,6 +682,7 @@ fun AddScheduleDialog(
                     onValueChange = { description = it },
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("备注") },
+                    enabled = !isSaving,
                     maxLines = 3
                 )
                 Row(
@@ -685,9 +691,17 @@ fun AddScheduleDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("全天安排")
-                    androidx.compose.material3.Switch(checked = allDay, onCheckedChange = { allDay = it })
+                    androidx.compose.material3.Switch(
+                        checked = allDay,
+                        onCheckedChange = { allDay = it },
+                        enabled = !isSaving
+                    )
                 }
-                OutlinedButton(onClick = { showDatePicker = true }, modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(
+                    onClick = { showDatePicker = true },
+                    enabled = !isSaving,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Text("日期：${selectedDate.format(DateTimeFormatter.ofPattern("yyyy年MM月dd日"))}")
                 }
                 if (!allDay) {
@@ -731,13 +745,16 @@ fun AddScheduleDialog(
                         }
                     }
                 },
-                enabled = title.isNotBlank()
+                enabled = title.isNotBlank() && !isSaving
             ) {
-                Text("保存")
+                Text(if (isSaving) "保存中" else "保存")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
+            TextButton(
+                onClick = onDismiss,
+                enabled = !isSaving
+            ) { Text("取消") }
         }
     )
 
@@ -753,7 +770,9 @@ fun AddScheduleDialog(
                 .toEpochMilli()
         )
         DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
+            onDismissRequest = {
+                if (!isSaving) showDatePicker = false
+            },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -764,11 +783,15 @@ fun AddScheduleDialog(
                             validationMessage = null
                         }
                         showDatePicker = false
-                    }
+                    },
+                    enabled = !isSaving
                 ) { Text("确定") }
             },
             dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) { Text("取消") }
+                TextButton(
+                    onClick = { showDatePicker = false },
+                    enabled = !isSaving
+                ) { Text("取消") }
             }
         ) {
             DatePicker(state = datePickerState)
@@ -794,11 +817,14 @@ private fun CompactTimeInput(state: TimePickerState) {
 @Composable
 fun IcsImportPreviewDialog(
     preview: IcsImportPreview,
+    isApplying: Boolean = false,
     onDismiss: () -> Unit,
     onApply: (ImportDecision) -> Unit
 ) {
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = {
+            if (!isApplying) onDismiss()
+        },
         title = { Text("导入预览") },
         text = {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -828,16 +854,25 @@ fun IcsImportPreviewDialog(
         },
         confirmButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = { onApply(ImportDecision.MERGE) }) {
-                    Text("合并")
+                TextButton(
+                    onClick = { onApply(ImportDecision.MERGE) },
+                    enabled = !isApplying
+                ) {
+                    Text(if (isApplying) "导入中" else "合并")
                 }
-                TextButton(onClick = { onApply(ImportDecision.OVERWRITE) }) {
+                TextButton(
+                    onClick = { onApply(ImportDecision.OVERWRITE) },
+                    enabled = !isApplying
+                ) {
                     Text("覆盖")
                 }
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !isApplying
+            ) {
                 Text("取消")
             }
         }

@@ -73,6 +73,9 @@ data class HomeUiState(
     val scheduleSections: List<ScheduleSection> = emptyList(),
     val selectedScheduleEvent: ScheduleOccurrence? = null,
     val isLoading: Boolean = false,
+    val isEditingSchedule: Boolean = false,
+    val scheduleActionMessage: String? = null,
+    val scheduleActionError: String? = null,
     val isImportingSchedule: Boolean = false,
     val scheduleImportMessage: String? = null,
     val scheduleImportError: String? = null,
@@ -558,29 +561,43 @@ class HomeViewModel @Inject constructor(
     }
 
     fun hideAddScheduleDialog() {
+        if (_uiState.value.isEditingSchedule) return
         _uiState.value = _uiState.value.copy(showAddScheduleDialog = false)
     }
 
     fun addSchedule(event: ScheduleEvent) {
-        viewModelScope.launch {
+        runScheduleEditAction(
+            successMessage = "已添加日程",
+            failureMessage = "日程保存失败，请稍后再试",
+            closeAddDialogOnSuccess = true
+        ) {
             scheduleRepository.addEvent(event)
-            hideAddScheduleDialog()
-            refreshScheduleSections()
         }
     }
 
     fun deleteSchedule(eventId: String) {
-        viewModelScope.launch {
+        runScheduleEditAction(
+            successMessage = "已删除日程",
+            failureMessage = "日程删除失败，请稍后再试"
+        ) {
             scheduleRepository.deleteEvent(eventId)
-            refreshScheduleSections()
         }
     }
 
+    fun consumeScheduleActionMessage() {
+        _uiState.value = _uiState.value.copy(
+            scheduleActionMessage = null,
+            scheduleActionError = null
+        )
+    }
+
     fun importIcs(uri: android.net.Uri) {
-        if (_uiState.value.isImportingSchedule) return
+        if (_uiState.value.isAnyScheduleMutationBusy()) return
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
                 isImportingSchedule = true,
+                scheduleActionMessage = null,
+                scheduleActionError = null,
                 scheduleImportMessage = null,
                 scheduleImportError = null
             )
@@ -603,10 +620,12 @@ class HomeViewModel @Inject constructor(
     }
 
     fun syncSchoolSchedule() {
-        if (_uiState.value.isSyncingSchoolSchedule) return
+        if (_uiState.value.isAnyScheduleMutationBusy()) return
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
                 isSyncingSchoolSchedule = true,
+                scheduleActionMessage = null,
+                scheduleActionError = null,
                 schoolScheduleSyncMessage = null,
                 schoolScheduleSyncError = null,
                 plannerTab = PlannerTab.SCHEDULE
@@ -656,7 +675,7 @@ class HomeViewModel @Inject constructor(
     }
 
     fun applyIcsPreview(decision: ImportDecision) {
-        if (_uiState.value.isImportingSchedule) return
+        if (_uiState.value.isAnyScheduleMutationBusy()) return
         viewModelScope.launch {
             val preview = _uiState.value.pendingIcsPreview ?: return@launch
             _uiState.value = _uiState.value.copy(isImportingSchedule = true)
@@ -689,6 +708,46 @@ class HomeViewModel @Inject constructor(
             message.isNotBlank() -> message
             else -> "暂时无法连接学校系统，请稍后重试"
         }
+    }
+
+    private fun runScheduleEditAction(
+        successMessage: String,
+        failureMessage: String,
+        closeAddDialogOnSuccess: Boolean = false,
+        action: suspend () -> Unit
+    ) {
+        if (_uiState.value.isAnyScheduleMutationBusy()) return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                isEditingSchedule = true,
+                scheduleActionMessage = null,
+                scheduleActionError = null
+            )
+            try {
+                action()
+                refreshScheduleSections()
+                refreshLocalPlan()
+                _uiState.value = _uiState.value.copy(
+                    isEditingSchedule = false,
+                    showAddScheduleDialog = if (closeAddDialogOnSuccess) false else _uiState.value.showAddScheduleDialog,
+                    scheduleActionMessage = successMessage,
+                    scheduleActionError = null
+                )
+            } catch (throwable: CancellationException) {
+                _uiState.value = _uiState.value.copy(isEditingSchedule = false)
+                throw throwable
+            } catch (throwable: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isEditingSchedule = false,
+                    scheduleActionMessage = null,
+                    scheduleActionError = throwable.message?.takeIf { it.isNotBlank() } ?: failureMessage
+                )
+            }
+        }
+    }
+
+    private fun HomeUiState.isAnyScheduleMutationBusy(): Boolean {
+        return isEditingSchedule || isImportingSchedule || isSyncingSchoolSchedule
     }
 
     fun toggleTodoComplete(todoId: String) {
