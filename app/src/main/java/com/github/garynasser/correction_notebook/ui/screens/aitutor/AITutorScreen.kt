@@ -116,9 +116,14 @@ fun AITutorScreen(
     val chatListState = rememberLazyListState()
     val hasCurrentSession = uiState.selectedSessionId != null
 
-    LaunchedEffect(uiState.messages.size) {
-        if (uiState.messages.isNotEmpty()) {
-            chatListState.animateScrollToItem(uiState.messages.lastIndex)
+    LaunchedEffect(uiState.messages.size, uiState.isLoading) {
+        val targetIndex = when {
+            uiState.isLoading && uiState.messages.isNotEmpty() -> uiState.messages.size
+            uiState.messages.isNotEmpty() -> uiState.messages.lastIndex
+            else -> null
+        }
+        if (targetIndex != null) {
+            chatListState.animateScrollToItem(targetIndex)
         }
     }
 
@@ -216,11 +221,16 @@ fun AITutorScreen(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth(),
-                        contentPadding = PaddingValues(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         items(uiState.messages, key = { it.id }) { message ->
                             ChatMessageItem(message)
+                        }
+                        if (uiState.isLoading) {
+                            item(key = "ai_typing_indicator") {
+                                AiTypingIndicator()
+                            }
                         }
                     }
                 }
@@ -237,7 +247,7 @@ fun AITutorScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp),
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         OutlinedTextField(
@@ -256,7 +266,7 @@ fun AITutorScreen(
                                     }
                                 }
                             ),
-                            maxLines = 4,
+                            maxLines = 3,
                             enabled = !uiState.isLoading,
                             shape = RoundedCornerShape(8.dp)
                         )
@@ -267,12 +277,17 @@ fun AITutorScreen(
                                 inputText = ""
                             },
                             enabled = inputText.isNotBlank() && !uiState.isLoading,
+                            modifier = Modifier.size(42.dp),
                             shape = RoundedCornerShape(8.dp)
                         ) {
                             if (uiState.isLoading) {
-                                CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+                                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                             } else {
-                                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "发送")
+                                Icon(
+                                    Icons.AutoMirrored.Filled.Send,
+                                    contentDescription = "发送",
+                                    modifier = Modifier.size(19.dp)
+                                )
                             }
                         }
                     }
@@ -643,6 +658,37 @@ fun ChatMessageItem(message: ChatUiMessage) {
         if (message.isUser) {
             Spacer(modifier = Modifier.width(8.dp))
             Avatar(isUser = true)
+        }
+    }
+}
+
+@Composable
+private fun AiTypingIndicator() {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Start,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Avatar(isUser = false)
+        Spacer(modifier = Modifier.width(8.dp))
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.38f)),
+            tonalElevation = 1.dp
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 11.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(15.dp), strokeWidth = 2.dp)
+                Text(
+                    text = "正在回复",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }
@@ -1181,16 +1227,37 @@ private fun ErrorBanner(message: String, onDismiss: () -> Unit) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        color = MaterialTheme.colorScheme.errorContainer,
-        shape = MaterialTheme.shapes.small
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.78f),
+        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.18f))
     ) {
-        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.Error, contentDescription = null, tint = MaterialTheme.colorScheme.onErrorContainer)
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Default.Error,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.onErrorContainer
+            )
             Spacer(modifier = Modifier.width(8.dp))
-            Text(message, color = MaterialTheme.colorScheme.onErrorContainer, modifier = Modifier.weight(1f))
-            IconButton(onClick = onDismiss) {
-                Icon(Icons.Default.Close, contentDescription = "关闭", tint = MaterialTheme.colorScheme.onErrorContainer)
+            Text(
+                message,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            IconButton(onClick = onDismiss, modifier = Modifier.size(30.dp)) {
+                Icon(
+                    Icons.Default.Close,
+                    contentDescription = "关闭",
+                    modifier = Modifier.size(17.dp),
+                    tint = MaterialTheme.colorScheme.onErrorContainer
+                )
             }
         }
     }
