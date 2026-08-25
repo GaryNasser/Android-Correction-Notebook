@@ -122,7 +122,7 @@ class SchoolScheduleRemoteDataSource @Inject constructor(
         }
     }
 
-    private fun parseCourses(root: JsonObject): List<SchoolCourseRaw> {
+    internal fun parseCourses(root: JsonObject): List<SchoolCourseRaw> {
         val rows = findRows(root, listOf("cxxszhxqkb", "rows"))
         return rows.mapNotNull { element ->
             val item = element.asJsonObjectOrNull() ?: return@mapNotNull null
@@ -204,9 +204,9 @@ class SchoolScheduleRemoteDataSource @Inject constructor(
 
     private fun JsonObject.firstString(vararg keys: String): String? {
         keys.forEach { key ->
-            get(key)?.takeUnless { it.isJsonNull }?.let { element ->
-                return element.asString.trim().takeIf { it.isNotBlank() }
-            }
+            val element = get(key)?.takeUnless { it.isJsonNull } ?: return@forEach
+            if (!element.isJsonPrimitive) return@forEach
+            return element.asString.trim().takeIf { it.isNotBlank() }
         }
         return null
     }
