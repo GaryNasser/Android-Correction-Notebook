@@ -99,6 +99,12 @@ fun CourseVideoListScreen(
         viewModel.consumeSectionActionMessage()
     }
 
+    LaunchedEffect(assistantState.actionMessage, assistantState.actionError) {
+        val message = assistantState.actionMessage ?: assistantState.actionError ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(message)
+        assistantViewModel.consumeActionMessage()
+    }
+
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -337,15 +343,19 @@ fun CourseVideoListScreen(
                                         Text(action.description, style = MaterialTheme.typography.bodySmall, maxLines = 2)
                                     }
                                 }
-                                TextButton(onClick = {
-                                    assistantViewModel.applyAction(
-                                        action = action,
-                                        courseId = viewModel.courseId,
-                                        courseName = viewModel.courseName,
-                                        sectionId = section.id,
-                                        sectionTitle = section.title
-                                    )
-                                }) { Text("确认") }
+                                TextButton(
+                                    onClick = {
+                                        assistantViewModel.applyAction(
+                                            action = action,
+                                            courseId = viewModel.courseId,
+                                            courseName = viewModel.courseName,
+                                            sectionId = section.id,
+                                            sectionTitle = section.title
+                                        )
+                                    },
+                                    enabled = !assistantState.isActionBusy,
+                                    shape = RoundedCornerShape(8.dp)
+                                ) { Text(if (assistantState.isActionBusy) "处理中" else "确认") }
                             }
                         }
                     }
@@ -366,12 +376,14 @@ fun CourseVideoListScreen(
                                     section.title
                                 )
                             },
+                            enabled = !assistantState.isActionBusy,
                             shape = RoundedCornerShape(8.dp)
                         ) { Text("存笔记") }
                         TextButton(
                             onClick = {
                                 assistantViewModel.saveResultAsTodo(viewModel.courseId, section.title)
                             },
+                            enabled = !assistantState.isActionBusy,
                             shape = RoundedCornerShape(8.dp)
                         ) { Text("转待办") }
                     }
