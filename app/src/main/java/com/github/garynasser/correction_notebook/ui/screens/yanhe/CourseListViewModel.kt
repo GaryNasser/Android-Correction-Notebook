@@ -155,6 +155,14 @@ class CourseListViewModel @Inject constructor(
         loadCourses(isNextPage = false)
     }
 
+    fun retryLoadCourses() {
+        if (isPersonalCoursesMode) {
+            refreshMySchedule()
+        } else {
+            loadCourses(isNextPage = false)
+        }
+    }
+
     fun refreshMySchedule() {
         if (isRefreshingSchedule) return
         isRefreshingSchedule = true
@@ -195,6 +203,14 @@ class CourseListViewModel @Inject constructor(
                     selectedSemester = "全部学期"
                     uiState = CourseUiState.Error(formatYanheError(throwable))
                 }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                personalCourses = emptyList()
+                courses.clear()
+                semesters = listOf("全部学期")
+                selectedSemester = "全部学期"
+                uiState = CourseUiState.Error(formatYanheError(e))
             } finally {
                 isRefreshingSchedule = false
             }
