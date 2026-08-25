@@ -135,7 +135,7 @@ fun CourseListScreen(
                                     }
                                 }
 
-                                items(state.courses) { course ->
+                                items(state.courses, key = { it.id }) { course ->
                                     CourseCard(
                                         course = course,
                                         onCourseCardClick = onCourseCardClick

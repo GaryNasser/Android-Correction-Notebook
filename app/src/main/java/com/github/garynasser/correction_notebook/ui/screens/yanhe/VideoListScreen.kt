@@ -243,7 +243,7 @@ fun CourseVideoListScreen(
                                 EmptyVideoState(onRefresh = { viewModel.getVideoList(viewModel.courseId) })
                             }
                         }
-                        items(state.videos) { video ->
+                        items(state.videos, key = { it.id }) { video ->
                             val isCompleted = viewModel.progress?.completedSectionIds?.contains(video.id) == true
                             val isResolvingVideo = viewModel.playState is PlayState.Loading
                             val isUpdatingCompletion = video.id in viewModel.updatingCompletionSectionIds
@@ -516,6 +516,7 @@ fun VideoCard(
             append("第 ${section.sectionBigStart}-${section.sectionBigEnd} 大节")
         }
     }
+    val hasTitle = section.title.isNotBlank()
 
     Card(
         modifier = modifier
@@ -548,11 +549,15 @@ fun VideoCard(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
-                    Text(
-                        text = timeInfo,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    if (hasTitle) {
+                        Text(
+                            text = timeInfo,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
                 Checkbox(
                     checked = isCompleted,
@@ -619,28 +624,36 @@ private fun CourseProgressHeader(
     completedCount: Int,
     totalCount: Int
 ) {
-    Card(
+    Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(8.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-        ),
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
     ) {
         Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.padding(horizontal = 11.dp, vertical = 9.dp),
+            verticalArrangement = Arrangement.spacedBy(7.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.School, contentDescription = null)
+                Icon(
+                    Icons.Default.School,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     "课程进度",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f)
                 )
-                Text("$completedCount/$totalCount")
+                Text(
+                    "$completedCount/$totalCount",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
             }
             LinearProgressIndicator(
                 progress = { progressPercent / 100f },
@@ -649,7 +662,9 @@ private fun CourseProgressHeader(
             Text(
                 text = lastTitle?.takeIf { it.isNotBlank() }?.let { "上次看到：$it" } ?: "播放任意章节后会记录继续学习位置",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
