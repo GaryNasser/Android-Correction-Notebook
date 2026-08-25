@@ -59,6 +59,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -90,8 +91,7 @@ import java.util.Locale
 fun KnowledgeBaseFileViewerScreen(
     onBack: () -> Unit,
     onDeleted: () -> Unit,
-    viewModel: KnowledgeBaseFileViewerViewModel = hiltViewModel(),
-    knowledgeBaseViewModel: KnowledgeBaseViewModel = hiltViewModel()
+    viewModel: KnowledgeBaseFileViewerViewModel = hiltViewModel()
 ) {
     val uiState = viewModel.uiState.value
     val context = LocalContext.current
@@ -109,16 +109,24 @@ fun KnowledgeBaseFileViewerScreen(
         fileToExport = null
     }
 
+    LaunchedEffect(uiState.isDeleted) {
+        if (uiState.isDeleted) {
+            onDeleted()
+        }
+    }
+
     fileToDelete?.let { file ->
         FileViewerConfirmDialog(
             title = "删除文件",
             message = "确定删除“${file.displayName}”吗？",
-            confirmText = "删除",
-            onDismiss = { fileToDelete = null },
+            confirmText = if (uiState.isDeletingFile) "删除中" else "删除",
+            enabled = !uiState.isDeletingFile,
+            onDismiss = {
+                if (!uiState.isDeletingFile) fileToDelete = null
+            },
             onConfirm = {
-                knowledgeBaseViewModel.deleteFile(file.id)
+                viewModel.deleteCurrentFile()
                 fileToDelete = null
-                onDeleted()
             }
         )
     }
@@ -148,7 +156,7 @@ fun KnowledgeBaseFileViewerScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = viewModel::refresh, enabled = !uiState.isLoading) {
+                    IconButton(onClick = viewModel::refresh, enabled = !uiState.isLoading && !uiState.isDeletingFile) {
                         Icon(Icons.Default.Refresh, contentDescription = "刷新")
                     }
                     Box {
@@ -163,7 +171,7 @@ fun KnowledgeBaseFileViewerScreen(
                                 DropdownMenuItem(
                                     text = { Text("AI 生成学习集") },
                                     leadingIcon = { Icon(Icons.Default.Style, contentDescription = null) },
-                                    enabled = !uiState.isAiLoading,
+                                    enabled = !uiState.isAiLoading && !uiState.isDeletingFile,
                                     onClick = {
                                         menuExpanded = false
                                         viewModel.generateStudySet()
@@ -172,7 +180,7 @@ fun KnowledgeBaseFileViewerScreen(
                                 DropdownMenuItem(
                                     text = { Text("AI 总结") },
                                     leadingIcon = { Icon(Icons.Default.Psychology, contentDescription = null) },
-                                    enabled = !uiState.isAiLoading,
+                                    enabled = !uiState.isAiLoading && !uiState.isDeletingFile,
                                     onClick = {
                                         menuExpanded = false
                                         viewModel.runAiAction(KnowledgeAiMode.SUMMARY)
@@ -181,7 +189,7 @@ fun KnowledgeBaseFileViewerScreen(
                                 DropdownMenuItem(
                                     text = { Text("AI 提取重点") },
                                     leadingIcon = { Icon(Icons.Default.Lightbulb, contentDescription = null) },
-                                    enabled = !uiState.isAiLoading,
+                                    enabled = !uiState.isAiLoading && !uiState.isDeletingFile,
                                     onClick = {
                                         menuExpanded = false
                                         viewModel.runAiAction(KnowledgeAiMode.KEY_POINTS)
@@ -190,7 +198,7 @@ fun KnowledgeBaseFileViewerScreen(
                                 DropdownMenuItem(
                                     text = { Text("AI 生成复习题") },
                                     leadingIcon = { Icon(Icons.Default.Quiz, contentDescription = null) },
-                                    enabled = !uiState.isAiLoading,
+                                    enabled = !uiState.isAiLoading && !uiState.isDeletingFile,
                                     onClick = {
                                         menuExpanded = false
                                         viewModel.runAiAction(KnowledgeAiMode.QUIZ)
@@ -199,7 +207,7 @@ fun KnowledgeBaseFileViewerScreen(
                                 DropdownMenuItem(
                                     text = { Text("AI 术语表") },
                                     leadingIcon = { Icon(Icons.Default.Description, contentDescription = null) },
-                                    enabled = !uiState.isAiLoading,
+                                    enabled = !uiState.isAiLoading && !uiState.isDeletingFile,
                                     onClick = {
                                         menuExpanded = false
                                         viewModel.runAiAction(KnowledgeAiMode.GLOSSARY)
@@ -208,7 +216,7 @@ fun KnowledgeBaseFileViewerScreen(
                                 DropdownMenuItem(
                                     text = { Text("AI 公式表") },
                                     leadingIcon = { Icon(Icons.Default.Lightbulb, contentDescription = null) },
-                                    enabled = !uiState.isAiLoading,
+                                    enabled = !uiState.isAiLoading && !uiState.isDeletingFile,
                                     onClick = {
                                         menuExpanded = false
                                         viewModel.runAiAction(KnowledgeAiMode.FORMULA_SHEET)
@@ -217,7 +225,7 @@ fun KnowledgeBaseFileViewerScreen(
                                 DropdownMenuItem(
                                     text = { Text("AI 复习清单") },
                                     leadingIcon = { Icon(Icons.Default.Quiz, contentDescription = null) },
-                                    enabled = !uiState.isAiLoading,
+                                    enabled = !uiState.isAiLoading && !uiState.isDeletingFile,
                                     onClick = {
                                         menuExpanded = false
                                         viewModel.runAiAction(KnowledgeAiMode.REVIEW_CHECKLIST)
@@ -226,7 +234,7 @@ fun KnowledgeBaseFileViewerScreen(
                                 DropdownMenuItem(
                                     text = { Text("重建 AI 索引") },
                                     leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) },
-                                    enabled = !uiState.isIndexing,
+                                    enabled = !uiState.isIndexing && !uiState.isDeletingFile,
                                     onClick = {
                                         menuExpanded = false
                                         viewModel.rebuildIndex()
@@ -235,6 +243,7 @@ fun KnowledgeBaseFileViewerScreen(
                                 DropdownMenuItem(
                                     text = { Text("其他应用打开") },
                                     leadingIcon = { Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null) },
+                                    enabled = !uiState.isDeletingFile,
                                     onClick = {
                                         menuExpanded = false
                                         openFileExternally(context, file)
@@ -243,6 +252,7 @@ fun KnowledgeBaseFileViewerScreen(
                                 DropdownMenuItem(
                                     text = { Text("分享") },
                                     leadingIcon = { Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null) },
+                                    enabled = !uiState.isDeletingFile,
                                     onClick = {
                                         menuExpanded = false
                                         shareViewerFile(context, file.localPath, file.mimeType, file.displayName)
@@ -251,6 +261,7 @@ fun KnowledgeBaseFileViewerScreen(
                                 DropdownMenuItem(
                                     text = { Text("导出副本") },
                                     leadingIcon = { Icon(Icons.Default.Download, contentDescription = null) },
+                                    enabled = !uiState.isDeletingFile,
                                     onClick = {
                                         menuExpanded = false
                                         fileToExport = file
@@ -260,6 +271,7 @@ fun KnowledgeBaseFileViewerScreen(
                                 DropdownMenuItem(
                                     text = { Text("文件信息") },
                                     leadingIcon = { Icon(Icons.Default.Info, contentDescription = null) },
+                                    enabled = !uiState.isDeletingFile,
                                     onClick = {
                                         menuExpanded = false
                                         showInfoDialog = true
@@ -268,6 +280,7 @@ fun KnowledgeBaseFileViewerScreen(
                                 DropdownMenuItem(
                                     text = { Text("删除") },
                                     leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
+                                    enabled = !uiState.isDeletingFile,
                                     onClick = {
                                         menuExpanded = false
                                         fileToDelete = file
@@ -311,6 +324,13 @@ fun KnowledgeBaseFileViewerScreen(
                             ViewerStatusBar(
                                 icon = Icons.Default.Psychology,
                                 text = "AI 正在阅读这份资料..."
+                            )
+                        }
+
+                        if (uiState.isDeletingFile) {
+                            ViewerStatusBar(
+                                icon = Icons.Default.Delete,
+                                text = "正在删除文件..."
                             )
                         }
 
@@ -871,6 +891,7 @@ private fun FileViewerConfirmDialog(
     title: String,
     message: String,
     confirmText: String,
+    enabled: Boolean = true,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit
 ) {
@@ -879,12 +900,18 @@ private fun FileViewerConfirmDialog(
         title = { Text(title) },
         text = { Text(message) },
         confirmButton = {
-            TextButton(onClick = onConfirm) {
+            TextButton(
+                onClick = onConfirm,
+                enabled = enabled
+            ) {
                 Text(confirmText)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(
+                onClick = onDismiss,
+                enabled = enabled
+            ) {
                 Text("取消")
             }
         }

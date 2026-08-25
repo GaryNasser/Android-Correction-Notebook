@@ -51,6 +51,8 @@ data class KnowledgeBaseFileViewerUiState(
     val studySetDraft: StudySetDraft? = null,
     val isAiLoading: Boolean = false,
     val isSavingStudySetDraft: Boolean = false,
+    val isDeletingFile: Boolean = false,
+    val isDeleted: Boolean = false,
     val errorMessage: String? = null
 )
 
@@ -74,6 +76,7 @@ class KnowledgeBaseFileViewerViewModel @Inject constructor(
     private var studySetJob: Job? = null
     private var saveDraftJob: Job? = null
     private var indexJob: Job? = null
+    private var deleteJob: Job? = null
 
     init {
         loadFile()
@@ -222,6 +225,38 @@ class KnowledgeBaseFileViewerViewModel @Inject constructor(
 
     fun clearAiResult() {
         uiState.value = uiState.value.copy(aiResult = null, studySetDraft = null)
+    }
+
+    fun deleteCurrentFile() {
+        if (uiState.value.isDeletingFile || deleteJob?.isActive == true) return
+        val file = uiState.value.file ?: return
+        deleteJob = viewModelScope.launch {
+            uiState.value = uiState.value.copy(isDeletingFile = true, errorMessage = null)
+            try {
+                knowledgeBaseRepository.deleteFile(file.id)
+                    .onSuccess {
+                        recyclePdfPages(uiState.value.pdfPages)
+                        uiState.value = KnowledgeBaseFileViewerUiState(
+                            isLoading = false,
+                            isDeleted = true
+                        )
+                    }
+                    .onFailure { throwable ->
+                        if (throwable is CancellationException) throw throwable
+                        uiState.value = uiState.value.copy(
+                            isDeletingFile = false,
+                            errorMessage = throwable.message ?: "删除失败，请稍后再试"
+                        )
+                    }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                uiState.value = uiState.value.copy(
+                    isDeletingFile = false,
+                    errorMessage = error.message ?: "删除失败，请稍后再试"
+                )
+            }
+        }
     }
 
     private fun loadFile() {
