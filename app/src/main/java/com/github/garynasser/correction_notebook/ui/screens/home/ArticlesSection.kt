@@ -108,21 +108,21 @@ private fun ArticleLoadingRow() {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         items(3) {
             Card(
-                modifier = Modifier.width(200.dp),
-                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.width(184.dp),
+                shape = RoundedCornerShape(8.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
                 )
             ) {
-                Column(modifier = Modifier.padding(12.dp)) {
+                Column(modifier = Modifier.padding(10.dp)) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(100.dp)
-                            .clip(RoundedCornerShape(10.dp))
+                            .height(88.dp)
+                            .clip(RoundedCornerShape(8.dp))
                             .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
                     Box(
                         modifier = Modifier
                             .fillMaxWidth(0.8f)
@@ -201,9 +201,9 @@ fun ArticleCard(
 ) {
     Card(
         modifier = Modifier
-            .width(200.dp)
+            .width(184.dp)
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         )
@@ -213,8 +213,8 @@ fun ArticleCard(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(100.dp)
-                    .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
+                    .height(88.dp)
+                    .clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp))
                     .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
                 contentAlignment = Alignment.Center
             ) {
@@ -229,14 +229,14 @@ fun ArticleCard(
                     Icon(
                         Icons.AutoMirrored.Filled.Article,
                         contentDescription = null,
-                        modifier = Modifier.size(40.dp),
+                        modifier = Modifier.size(32.dp),
                         tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
                     )
                 }
             }
 
             Column(
-                modifier = Modifier.padding(12.dp)
+                modifier = Modifier.padding(10.dp)
             ) {
                 Text(
                     text = article.title,
@@ -246,7 +246,7 @@ fun ArticleCard(
                     overflow = TextOverflow.Ellipsis
                 )
 
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(3.dp))
 
                 Text(
                     text = article.summary,
@@ -256,7 +256,7 @@ fun ArticleCard(
                     overflow = TextOverflow.Ellipsis
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(7.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
