@@ -405,7 +405,6 @@ private fun RecentLearningRow(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchAndFilterSection(viewModel: CourseListViewModel) {
     Surface(
@@ -451,6 +450,14 @@ fun SearchAndFilterSection(viewModel: CourseListViewModel) {
                         .weight(1f)
                         .heightIn(min = 34.dp)
                 )
+                SemesterMenu(
+                    selectedSemester = viewModel.selectedSemester,
+                    semesters = viewModel.semesters,
+                    expanded = viewModel.expanded,
+                    onExpandedChange = { viewModel.expanded = it },
+                    onSemesterSelected = viewModel::selectSemester,
+                    modifier = Modifier.weight(1.25f)
+                )
             }
 
             OutlinedTextField(
@@ -495,41 +502,74 @@ fun SearchAndFilterSection(viewModel: CourseListViewModel) {
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = { viewModel.loadCourses(false) })
             )
+        }
+    }
+}
 
-            ExposedDropdownMenuBox(
-                expanded = viewModel.expanded,
-                onExpandedChange = { viewModel.expanded = !viewModel.expanded }
+@Composable
+private fun SemesterMenu(
+    selectedSemester: String,
+    semesters: List<String>,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    onSemesterSelected: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(modifier = modifier) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 34.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { onExpandedChange(!expanded) },
+            shape = RoundedCornerShape(8.dp),
+            color = if (expanded) {
+                MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.62f)
+            } else {
+                MaterialTheme.colorScheme.surface
+            },
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f))
+        ) {
+            Row(
+                modifier = Modifier.padding(start = 9.dp, top = 6.dp, end = 7.dp, bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                OutlinedTextField(
-                    value = viewModel.selectedSemester,
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("选择学期") },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = viewModel.expanded) },
-                    modifier = Modifier
-                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, enabled = true)
-                        .fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp)
+                Text(
+                    text = selectedSemester,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
-                ExposedDropdownMenu(
-                    expanded = viewModel.expanded,
-                    onDismissRequest = { viewModel.expanded = false }
-                ) {
-                    viewModel.semesters.forEach { semester ->
-                        DropdownMenuItem(
-                            text = { Text(semester) },
-                            onClick = {
-                                viewModel.selectSemester(semester)
-                            }
-                        )
+                Icon(
+                    imageVector = Icons.Default.ArrowDropDown,
+                    contentDescription = "选择学期",
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { onExpandedChange(false) }
+        ) {
+            semesters.forEach { semester ->
+                DropdownMenuItem(
+                    text = { Text(semester, style = MaterialTheme.typography.bodyMedium) },
+                    onClick = {
+                        onSemesterSelected(semester)
+                        onExpandedChange(false)
                     }
-                }
+                )
             }
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CourseCard(
     course: Course,
