@@ -12,17 +12,22 @@ import com.github.garynasser.correction_notebook.data.repository.CourseLearningR
 import com.github.garynasser.correction_notebook.data.repository.TodoRepository
 import com.github.garynasser.correction_notebook.domain.usecase.AiStudyUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class CourseAssistantUiState(
     val isLoading: Boolean = false,
+    val isActionBusy: Boolean = false,
     val result: String? = null,
     val actions: List<AiAction> = emptyList(),
-    val error: String? = null
+    val error: String? = null,
+    val actionMessage: String? = null,
+    val actionError: String? = null
 )
 
 @HiltViewModel
@@ -39,7 +44,10 @@ class CourseAssistantViewModel @Inject constructor(
             _uiState.value = CourseAssistantUiState(isLoading = true)
             aiStudyUseCase.summarizeCourseSection(sectionTitle, note)
                 .onSuccess { _uiState.value = CourseAssistantUiState(result = it) }
-                .onFailure { _uiState.value = CourseAssistantUiState(error = it.message ?: "课程助手生成失败") }
+                .onFailure {
+                    if (it is CancellationException) throw it
+                    _uiState.value = CourseAssistantUiState(error = it.message ?: "课程助手生成失败")
+                }
         }
     }
 
@@ -59,7 +67,10 @@ class CourseAssistantViewModel @Inject constructor(
                         actions = it.actions
                     )
                 }
-                .onFailure { _uiState.value = CourseAssistantUiState(error = it.message ?: "课程助手生成失败") }
+                .onFailure {
+                    if (it is CancellationException) throw it
+                    _uiState.value = CourseAssistantUiState(error = it.message ?: "课程助手生成失败")
+                }
         }
     }
 
@@ -67,10 +78,14 @@ class CourseAssistantViewModel @Inject constructor(
         _uiState.value = CourseAssistantUiState()
     }
 
+    fun consumeActionMessage() {
+        _uiState.update { it.copy(actionMessage = null, actionError = null) }
+    }
+
     fun saveResultAsNote(courseId: Int, courseName: String, sectionId: Int, sectionTitle: String) {
         val content = _uiState.value.result?.trim().orEmpty()
         if (content.isBlank()) return
-        viewModelScope.launch {
+        runAssistantAction(successMessage = "已保存为课程笔记", failureMessage = "保存课程笔记失败") {
             courseLearningRepository.saveNote(
                 CourseNote(
                     courseId = courseId,
@@ -87,7 +102,7 @@ class CourseAssistantViewModel @Inject constructor(
     fun saveResultAsTodo(courseId: Int, sectionTitle: String) {
         val content = _uiState.value.result?.trim().orEmpty()
         if (content.isBlank()) return
-        viewModelScope.launch {
+        runAssistantAction(successMessage = "已创建复习待办", failureMessage = "创建待办失败") {
             todoRepository.addTodo(
                 TodoItem(
                     title = "复习：${sectionTitle}".take(40),
@@ -105,7 +120,7 @@ class CourseAssistantViewModel @Inject constructor(
             AiActionType.SAVE_COURSE_NOTE -> {
                 val content = action.payload["content"] ?: action.description.ifBlank { action.title }
                 if (content.isBlank()) return
-                viewModelScope.launch {
+                runAssistantAction(successMessage = "已保存课程笔记", failureMessage = "保存课程笔记失败") {
                     courseLearningRepository.saveNote(
                         CourseNote(
                             courseId = courseId,
@@ -121,14 +136,12 @@ class CourseAssistantViewModel @Inject constructor(
             AiActionType.CREATE_TODO, AiActionType.CREATE_REVIEW_PLAN -> {
                 val content = action.payload["content"] ?: action.description.ifBlank { action.title }
                 if (content.isBlank()) return
-                viewModelScope.launch {
+                runAssistantAction(successMessage = "已创建待办", failureMessage = "创建待办失败") {
                     todoRepository.addTodo(
                         TodoItem(
                             title = action.title.take(40),
                             description = content,
-                            priority = runCatching {
-                                Priority.valueOf(action.payload["priority"].orEmpty())
-                            }.getOrDefault(Priority.MEDIUM),
+                            priority = parseCourseAssistantPriority(action.payload["priority"]),
                             source = TodoSource.COURSE_ASSISTANT,
                             sourceRefId = courseId.toString()
                         )
@@ -137,5 +150,37 @@ class CourseAssistantViewModel @Inject constructor(
             }
             else -> Unit
         }
+    }
+
+    private fun runAssistantAction(
+        successMessage: String,
+        failureMessage: String,
+        action: suspend () -> Unit
+    ) {
+        if (_uiState.value.isActionBusy) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isActionBusy = true, actionMessage = null, actionError = null) }
+            try {
+                action()
+                _uiState.update { it.copy(isActionBusy = false, actionMessage = successMessage) }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isActionBusy = false,
+                        actionError = error.message?.takeIf(String::isNotBlank) ?: failureMessage
+                    )
+                }
+            }
+        }
+    }
+}
+
+internal fun parseCourseAssistantPriority(raw: String?): Priority {
+    return when (raw?.trim()?.uppercase()) {
+        Priority.HIGH.name, "高", "重要", "URGENT" -> Priority.HIGH
+        Priority.LOW.name, "低", "稍后" -> Priority.LOW
+        else -> Priority.MEDIUM
     }
 }
