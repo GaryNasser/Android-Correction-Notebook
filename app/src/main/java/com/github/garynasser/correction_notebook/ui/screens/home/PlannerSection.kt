@@ -2,13 +2,17 @@ package com.github.garynasser.correction_notebook.ui.screens.home
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -16,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -27,6 +32,7 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.NoteAlt
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DatePicker
@@ -40,7 +46,6 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TimeInput
 import androidx.compose.material3.TimePickerState
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
@@ -55,6 +60,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.github.garynasser.correction_notebook.data.model.home.IcsDiffItem
 import com.github.garynasser.correction_notebook.data.model.home.IcsImportPreview
@@ -647,14 +655,22 @@ fun AddScheduleDialog(
     var validationMessage by remember { mutableStateOf<String?>(null) }
     val startTimeState = rememberTimePickerState(initialHour = 9, initialMinute = 0, is24Hour = true)
     val endTimeState = rememberTimePickerState(initialHour = 10, initialMinute = 0, is24Hour = true)
+    val fieldShape = RoundedCornerShape(8.dp)
 
     AlertDialog(
         onDismissRequest = {
             if (!isSaving) onDismiss()
         },
-        title = { Text("添加日程") },
+        shape = RoundedCornerShape(8.dp),
+        title = { Text("添加日程", style = MaterialTheme.typography.titleMedium) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 520.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 OutlinedTextField(
                     value = title,
                     onValueChange = {
@@ -664,7 +680,8 @@ fun AddScheduleDialog(
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("活动标题") },
                     enabled = !isSaving,
-                    singleLine = true
+                    singleLine = true,
+                    shape = fieldShape
                 )
                 OutlinedTextField(
                     value = location,
@@ -675,7 +692,8 @@ fun AddScheduleDialog(
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("地点") },
                     enabled = !isSaving,
-                    singleLine = true
+                    singleLine = true,
+                    shape = fieldShape
                 )
                 OutlinedTextField(
                     value = description,
@@ -683,32 +701,61 @@ fun AddScheduleDialog(
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("备注") },
                     enabled = !isSaving,
-                    maxLines = 3
+                    maxLines = 3,
+                    shape = fieldShape
                 )
-                Row(
+                Card(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("全天安排")
-                    androidx.compose.material3.Switch(
-                        checked = allDay,
-                        onCheckedChange = { allDay = it },
-                        enabled = !isSaving
+                    shape = fieldShape,
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.34f)
                     )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("全天安排", style = MaterialTheme.typography.bodyMedium)
+                        androidx.compose.material3.Switch(
+                            checked = allDay,
+                            onCheckedChange = { allDay = it },
+                            enabled = !isSaving
+                        )
+                    }
                 }
                 OutlinedButton(
                     onClick = { showDatePicker = true },
                     enabled = !isSaving,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(42.dp),
+                    shape = fieldShape
                 ) {
                     Text("日期：${selectedDate.format(DateTimeFormatter.ofPattern("yyyy年MM月dd日"))}")
                 }
                 if (!allDay) {
-                    Text("开始时间", style = MaterialTheme.typography.labelMedium)
-                    CompactTimeInput(state = startTimeState)
-                    Text("结束时间", style = MaterialTheme.typography.labelMedium)
-                    CompactTimeInput(state = endTimeState)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text("开始", style = MaterialTheme.typography.labelMedium)
+                            CompactTimeInput(state = startTimeState)
+                        }
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text("结束", style = MaterialTheme.typography.labelMedium)
+                            CompactTimeInput(state = endTimeState)
+                        }
+                    }
                 }
                 validationMessage?.let { message ->
                     Text(
@@ -720,7 +767,7 @@ fun AddScheduleDialog(
             }
         },
         confirmButton = {
-            TextButton(
+            Button(
                 onClick = {
                     val start = LocalDateTime.of(selectedDate, LocalTime.of(startTimeState.hour, startTimeState.minute))
                     val end = if (allDay) {
@@ -745,7 +792,8 @@ fun AddScheduleDialog(
                         }
                     }
                 },
-                enabled = title.isNotBlank() && !isSaving
+                enabled = title.isNotBlank() && !isSaving,
+                shape = RoundedCornerShape(8.dp)
             ) {
                 Text(if (isSaving) "保存中" else "保存")
             }
@@ -753,7 +801,8 @@ fun AddScheduleDialog(
         dismissButton = {
             TextButton(
                 onClick = onDismiss,
-                enabled = !isSaving
+                enabled = !isSaving,
+                shape = RoundedCornerShape(8.dp)
             ) { Text("取消") }
         }
     )
@@ -784,13 +833,15 @@ fun AddScheduleDialog(
                         }
                         showDatePicker = false
                     },
-                    enabled = !isSaving
+                    enabled = !isSaving,
+                    shape = RoundedCornerShape(8.dp)
                 ) { Text("确定") }
             },
             dismissButton = {
                 TextButton(
                     onClick = { showDatePicker = false },
-                    enabled = !isSaving
+                    enabled = !isSaving,
+                    shape = RoundedCornerShape(8.dp)
                 ) { Text("取消") }
             }
         ) {
@@ -801,17 +852,84 @@ fun AddScheduleDialog(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CompactTimeInput(state: TimePickerState) {
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-        )
+private fun CompactTimeInput(
+    state: TimePickerState,
+    modifier: Modifier = Modifier
+) {
+    var hourText by remember { mutableStateOf(state.hour.toString().padStart(2, '0')) }
+    var minuteText by remember { mutableStateOf(state.minute.toString().padStart(2, '0')) }
+
+    LaunchedEffect(state.hour) {
+        hourText = state.hour.toString().padStart(2, '0')
+    }
+    LaunchedEffect(state.minute) {
+        minuteText = state.minute.toString().padStart(2, '0')
+    }
+
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        TimeInput(
-            state = state,
-            modifier = Modifier.padding(horizontal = 8.dp)
+        CompactTimeField(
+            value = hourText,
+            label = "时",
+            valueRange = 0..23,
+            imeAction = ImeAction.Next,
+            modifier = Modifier.weight(1f),
+            onValueChange = { value ->
+                hourText = value
+                value.toIntOrNull()?.let { state.hour = it.coerceIn(0, 23) }
+            }
+        )
+        Text(
+            text = ":",
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f)
+        )
+        CompactTimeField(
+            value = minuteText,
+            label = "分",
+            valueRange = 0..59,
+            imeAction = ImeAction.Done,
+            modifier = Modifier.weight(1f),
+            onValueChange = { value ->
+                minuteText = value
+                value.toIntOrNull()?.let { state.minute = it.coerceIn(0, 59) }
+            }
         )
     }
+}
+
+@Composable
+private fun CompactTimeField(
+    value: String,
+    label: String,
+    valueRange: IntRange,
+    imeAction: ImeAction,
+    modifier: Modifier = Modifier,
+    onValueChange: (String) -> Unit
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = { raw ->
+            normalizeTimeFieldInput(raw, valueRange)?.let(onValueChange)
+        },
+        modifier = modifier,
+        label = { Text(label) },
+        singleLine = true,
+        shape = RoundedCornerShape(8.dp),
+        textStyle = MaterialTheme.typography.bodyMedium.copy(textAlign = TextAlign.Center),
+        keyboardOptions = KeyboardOptions(
+            keyboardType = KeyboardType.Number,
+            imeAction = imeAction
+        )
+    )
+}
+
+internal fun normalizeTimeFieldInput(raw: String, valueRange: IntRange): String? {
+    val digits = raw.filter { it.isDigit() }.take(2)
+    return digits.takeIf { it.isEmpty() || it.toInt() in valueRange }
 }
 
 @Composable
@@ -825,9 +943,16 @@ fun IcsImportPreviewDialog(
         onDismissRequest = {
             if (!isApplying) onDismiss()
         },
-        title = { Text("导入预览") },
+        shape = RoundedCornerShape(8.dp),
+        title = { Text("导入预览", style = MaterialTheme.typography.titleMedium) },
         text = {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 430.dp),
+                contentPadding = PaddingValues(vertical = 2.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 item {
                     Text(
                         text = preview.fileName,
@@ -854,15 +979,17 @@ fun IcsImportPreviewDialog(
         },
         confirmButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(
+                Button(
                     onClick = { onApply(ImportDecision.MERGE) },
-                    enabled = !isApplying
+                    enabled = !isApplying,
+                    shape = RoundedCornerShape(8.dp)
                 ) {
                     Text(if (isApplying) "导入中" else "合并")
                 }
                 TextButton(
                     onClick = { onApply(ImportDecision.OVERWRITE) },
-                    enabled = !isApplying
+                    enabled = !isApplying,
+                    shape = RoundedCornerShape(8.dp)
                 ) {
                     Text("覆盖")
                 }
@@ -871,7 +998,8 @@ fun IcsImportPreviewDialog(
         dismissButton = {
             TextButton(
                 onClick = onDismiss,
-                enabled = !isApplying
+                enabled = !isApplying,
+                shape = RoundedCornerShape(8.dp)
             ) {
                 Text("取消")
             }
