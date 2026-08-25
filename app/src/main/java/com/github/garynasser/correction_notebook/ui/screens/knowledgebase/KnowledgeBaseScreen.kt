@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import android.webkit.MimeTypeMap
+import androidx.compose.foundation.BorderStroke
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -745,7 +746,9 @@ private fun FileManagementPage(
                     }
                     OutlinedButton(
                         onClick = onImportLocalFile,
-                        enabled = !uiState.isLocalBusy && !uiState.isImportingLocalFile
+                        enabled = !uiState.isLocalBusy && !uiState.isImportingLocalFile,
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
                     ) {
                         if (uiState.isImportingLocalFile) {
                             CircularProgressIndicator(
@@ -753,23 +756,38 @@ private fun FileManagementPage(
                                 strokeWidth = 2.dp
                             )
                         } else {
-                            Icon(Icons.Default.FileOpen, contentDescription = null)
+                            Icon(
+                                Icons.Default.FileOpen,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
                         }
                         Spacer(modifier = Modifier.size(6.dp))
                         Text("导入")
                     }
-                    OutlinedButton(onClick = onToggleSearch) {
-                        Icon(Icons.Default.Search, contentDescription = null)
+                    OutlinedButton(
+                        onClick = onToggleSearch,
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Search,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
                         Spacer(modifier = Modifier.size(6.dp))
                         Text(if (isSearchExpanded) "收起" else "搜索")
                     }
                     OutlinedButton(
                         onClick = onToggleSelectionMode,
-                        enabled = files.isNotEmpty() && !uiState.isLocalBusy
+                        enabled = files.isNotEmpty() && !uiState.isLocalBusy,
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
                     ) {
                         Icon(
                             if (isSelectionMode) Icons.Default.Close else Icons.Default.CheckCircle,
-                            contentDescription = null
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.size(6.dp))
                         Text(if (isSelectionMode) "取消" else "多选")
@@ -860,7 +878,7 @@ private fun FileManagementPage(
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(7.dp),
             contentPadding = PaddingValues(bottom = 88.dp)
         ) {
             item {
@@ -2345,19 +2363,24 @@ private fun FolderRow(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
+            .padding(horizontal = 10.dp)
             .clickable(onClick = onClick),
-        shape = MaterialTheme.shapes.large,
+        shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.elevatedCardColors(
             containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)
         ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.38f)),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         ListItem(
             headlineContent = { Text(folder.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
             supportingContent = { Text("${folder.directFileCount} 个文件") },
             leadingContent = {
-                Icon(Icons.Default.Folder, contentDescription = null)
+                Icon(
+                    Icons.Default.Folder,
+                    contentDescription = null,
+                    modifier = Modifier.size(22.dp)
+                )
             },
             trailingContent = {
                 Box {
@@ -2410,9 +2433,9 @@ private fun FileRow(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
+            .padding(horizontal = 10.dp)
             .clickable(onClick = if (isSelectionMode) onToggleSelected else onOpen),
-        shape = MaterialTheme.shapes.large,
+        shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.elevatedCardColors(
             containerColor = if (isSelected) {
                 MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.76f)
@@ -2420,6 +2443,7 @@ private fun FileRow(
                 MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)
             }
         ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.38f)),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         ListItem(
@@ -2433,7 +2457,9 @@ private fun FileRow(
                         file.courseName?.let { "课程: $it" },
                         file.tags.takeIf { it.isNotEmpty() }?.joinToString(", ") { "#$it" },
                         file.sourceTitle?.takeIf { file.sourceType == "bitshare" }?.let { "来源: BITShare" }
-                    ).joinToString(" · ")
+                    ).joinToString(" · "),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             },
             leadingContent = {
@@ -2443,7 +2469,11 @@ private fun FileRow(
                         onCheckedChange = { onToggleSelected() }
                     )
                 } else {
-                    Icon(Icons.Default.Description, contentDescription = null)
+                    Icon(
+                        Icons.Default.Description,
+                        contentDescription = null,
+                        modifier = Modifier.size(22.dp)
+                    )
                 }
             },
             trailingContent = {
@@ -2522,12 +2552,13 @@ private fun RemoteResultRow(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
+            .padding(horizontal = 10.dp)
             .clickable(onClick = onClick),
-        shape = MaterialTheme.shapes.large,
+        shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.elevatedCardColors(
             containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)
         ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.38f)),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         ListItem(
@@ -2538,18 +2569,23 @@ private fun RemoteResultRow(
                 if (isFolder) {
                     Text(
                         "目录 · ${result.downloadCount} 次下载",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 } else {
                     Text(
-                        "${result.originalName} · ${formatFileSize(result.sizeBytes)} · 下载 ${result.downloadCount}"
+                        "${result.originalName} · ${formatFileSize(result.sizeBytes)} · 下载 ${result.downloadCount}",
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             },
             leadingContent = {
                 Icon(
                     if (isFolder) Icons.Default.Folder else Icons.Default.Description,
-                    contentDescription = if (isFolder) "目录" else "文件"
+                    contentDescription = if (isFolder) "目录" else "文件",
+                    modifier = Modifier.size(22.dp)
                 )
             },
             trailingContent = {
