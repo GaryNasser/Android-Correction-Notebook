@@ -42,6 +42,7 @@ import java.time.LocalDate
 import java.time.format.TextStyle
 import java.util.Locale
 import javax.inject.Inject
+import kotlin.math.min
 
 enum class StatsPeriod {
     DAY, WEEK, MONTH
@@ -240,12 +241,10 @@ fun StatisticsScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .padding(innerPadding),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            item { Spacer(modifier = Modifier.height(4.dp)) }
-
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -339,12 +338,17 @@ fun StatisticsScreen(
             }
 
             item {
-                Card(
+                Surface(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp)
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.42f)
+                    )
                 ) {
                     Column(
-                        modifier = Modifier.padding(14.dp)
+                        modifier = Modifier.padding(12.dp)
                     ) {
                         Text(
                             text = "学习时长趋势",
@@ -367,7 +371,7 @@ fun StatisticsScreen(
                                 message = "正在整理学习统计...",
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(164.dp)
+                                    .height(146.dp)
                             )
                         } else {
                             BarChart(
@@ -375,7 +379,7 @@ fun StatisticsScreen(
                                 labels = uiState.chartLabels,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(164.dp)
+                                    .height(146.dp)
                             )
                         }
                     }
@@ -385,12 +389,17 @@ fun StatisticsScreen(
             if (uiState.subjectDistribution.isNotEmpty()) {
                 item {
                     val subjectSlices = compactSubjectDistribution(uiState.subjectDistribution)
-                    Card(
+                    Surface(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.42f)
+                        )
                     ) {
                         Column(
-                            modifier = Modifier.padding(14.dp)
+                            modifier = Modifier.padding(12.dp)
                         ) {
                             Text(
                                 text = "科目分布",
@@ -400,16 +409,16 @@ fun StatisticsScreen(
                             Spacer(modifier = Modifier.height(10.dp))
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 PieChart(
                                     entries = subjectSlices,
-                                    modifier = Modifier.size(82.dp)
+                                    modifier = Modifier.size(72.dp)
                                 )
                                 Column(
                                     modifier = Modifier.weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    verticalArrangement = Arrangement.spacedBy(5.dp)
                                 ) {
                                     subjectSlices.forEach { (subject, minutes) ->
                                         LegendItem(
@@ -432,8 +441,6 @@ fun StatisticsScreen(
                     )
                 }
             }
-
-            item { Spacer(modifier = Modifier.height(6.dp)) }
         }
     }
 }
@@ -467,11 +474,11 @@ private fun StatsMessageCard(
         )
     ) {
         Row(
-            modifier = Modifier.padding(14.dp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 11.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(9.dp)
         ) {
-            Icon(icon, contentDescription = null, modifier = Modifier.size(24.dp), tint = iconTint)
+            Icon(icon, contentDescription = null, modifier = Modifier.size(21.dp), tint = iconTint)
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(2.dp)
@@ -539,28 +546,44 @@ private fun StatsSummaryStrip(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                .padding(horizontal = 12.dp, vertical = 9.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            CompactStatItem(
-                modifier = Modifier.weight(1f),
-                title = "总时长",
-                value = formatCompactMinutes(totalMinutes),
-                icon = Icons.Default.Timer
-            )
+            Surface(
+                modifier = Modifier.size(38.dp),
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.56f)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.Default.Timer,
+                        contentDescription = null,
+                        modifier = Modifier.size(21.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+            Column(
+                modifier = Modifier.weight(1.18f),
+                verticalArrangement = Arrangement.spacedBy(1.dp)
+            ) {
+                Text(
+                    text = "总学习时长",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.62f),
+                    maxLines = 1
+                )
+                Text(
+                    text = formatCompactMinutes(totalMinutes),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    maxLines = 1
+                )
+            }
             VerticalDivider(
-                modifier = Modifier.height(36.dp),
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.16f)
-            )
-            CompactStatItem(
-                modifier = Modifier.weight(1f),
-                title = "日均",
-                value = formatCompactMinutes(averageMinutes),
-                icon = Icons.AutoMirrored.Filled.TrendingUp
-            )
-            VerticalDivider(
-                modifier = Modifier.height(36.dp),
+                modifier = Modifier.height(38.dp),
                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.16f)
             )
             CompactStatItem(
@@ -568,6 +591,12 @@ private fun StatsSummaryStrip(
                 title = "番茄钟",
                 value = "${completedPomodoros}个",
                 icon = Icons.Default.EmojiEvents
+            )
+            CompactStatItem(
+                modifier = Modifier.weight(1f),
+                title = "日均",
+                value = formatCompactMinutes(averageMinutes),
+                icon = Icons.AutoMirrored.Filled.TrendingUp
             )
         }
     }
@@ -580,32 +609,32 @@ private fun CompactStatItem(
     value: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector
 ) {
-    Column(
+    Row(
         modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Icon(
             icon,
             contentDescription = null,
-            modifier = Modifier.size(18.dp),
+            modifier = Modifier.size(17.dp),
             tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f)
         )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onPrimaryContainer,
-            textAlign = TextAlign.Center,
-            maxLines = 1
-        )
-        Text(
-            text = title,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.62f),
-            textAlign = TextAlign.Center,
-            maxLines = 1
-        )
+        Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            Text(
+                text = value,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                maxLines = 1
+            )
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.62f),
+                maxLines = 1
+            )
+        }
     }
 }
 
@@ -750,6 +779,9 @@ private fun PieChart(
     val total = entries.sumOf { it.second }.coerceAtLeast(1)
 
     Canvas(modifier = modifier) {
+        val strokeWidth = min(size.minDimension * 0.18f, 16.dp.toPx())
+        val inset = strokeWidth / 2f
+        val arcSize = Size(size.width - strokeWidth, size.height - strokeWidth)
         var startAngle = -90f
         entries.forEach { (subject, value) ->
             val sweepAngle = (value.toFloat() / total) * 360f
@@ -758,8 +790,9 @@ private fun PieChart(
                 startAngle = startAngle,
                 sweepAngle = sweepAngle,
                 useCenter = false,
-                style = Stroke(width = 24.dp.toPx(), cap = StrokeCap.Butt),
-                size = Size(size.width, size.height)
+                topLeft = Offset(inset, inset),
+                style = Stroke(width = strokeWidth, cap = StrokeCap.Butt),
+                size = arcSize
             )
             startAngle += sweepAngle
         }
