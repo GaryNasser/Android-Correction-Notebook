@@ -135,6 +135,12 @@ fun HomeScreen(
         homeViewModel.consumeTodoActionMessage()
     }
 
+    LaunchedEffect(uiState.scheduleActionMessage, uiState.scheduleActionError) {
+        val message = uiState.scheduleActionMessage ?: uiState.scheduleActionError ?: return@LaunchedEffect
+        showHomeMessage(message)
+        homeViewModel.consumeScheduleActionMessage()
+    }
+
     // Handle immersive mode
     if (uiState.selectedMode == StudyMode.IMMERSIVE) {
         LaunchedEffect(Unit) {
@@ -274,6 +280,7 @@ fun HomeScreen(
 
     if (uiState.showAddScheduleDialog) {
         AddScheduleDialog(
+            isSaving = uiState.isEditingSchedule,
             onDismiss = { homeViewModel.hideAddScheduleDialog() },
             onAdd = { event -> homeViewModel.addSchedule(event) }
         )
@@ -282,6 +289,7 @@ fun HomeScreen(
     uiState.pendingIcsPreview?.let { preview ->
         IcsImportPreviewDialog(
             preview = preview,
+            isApplying = uiState.isImportingSchedule,
             onDismiss = { homeViewModel.dismissIcsPreview() },
             onApply = { decision: ImportDecision ->
                 homeViewModel.applyIcsPreview(decision)
@@ -452,6 +460,7 @@ private fun BitSchedulePage(
         ScheduleSideControls(
             isSyncing = uiState.isSyncingSchoolSchedule,
             isImporting = uiState.isImportingSchedule,
+            isEditing = uiState.isEditingSchedule,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(end = 8.dp, bottom = 10.dp),
@@ -478,7 +487,9 @@ private fun BitSchedulePage(
 
     occurrenceToDelete?.let { item ->
         AlertDialog(
-            onDismissRequest = { occurrenceToDelete = null },
+            onDismissRequest = {
+                if (!uiState.isEditingSchedule) occurrenceToDelete = null
+            },
             title = { Text("删除日程") },
             text = { Text("确定删除“${item.title}”吗？") },
             confirmButton = {
@@ -486,11 +497,15 @@ private fun BitSchedulePage(
                     onClick = {
                         onDeleteSchedule(item.eventId)
                         occurrenceToDelete = null
-                    }
-                ) { Text("删除") }
+                    },
+                    enabled = !uiState.isEditingSchedule
+                ) { Text(if (uiState.isEditingSchedule) "删除中" else "删除") }
             },
             dismissButton = {
-                TextButton(onClick = { occurrenceToDelete = null }) { Text("取消") }
+                TextButton(
+                    onClick = { occurrenceToDelete = null },
+                    enabled = !uiState.isEditingSchedule
+                ) { Text("取消") }
             }
         )
     }
@@ -680,6 +695,7 @@ private fun WeeklyCourseGrid(
 private fun ScheduleSideControls(
     isSyncing: Boolean,
     isImporting: Boolean,
+    isEditing: Boolean,
     modifier: Modifier,
     onNextWeek: () -> Unit,
     onPreviousWeek: () -> Unit,
@@ -690,6 +706,7 @@ private fun ScheduleSideControls(
     onToday: () -> Unit
 ) {
     var showActions by remember { mutableStateOf(false) }
+    val scheduleMutationBusy = isSyncing || isImporting || isEditing
 
     Column(
         modifier = modifier,
@@ -709,6 +726,7 @@ private fun ScheduleSideControls(
         ScheduleFloatingButton(
             icon = Icons.Default.Add,
             contentDescription = "添加日程",
+            enabled = !scheduleMutationBusy,
             onClick = onAddSchedule
         )
         Box {
@@ -746,7 +764,7 @@ private fun ScheduleSideControls(
                             Icon(Icons.Default.Sync, contentDescription = null)
                         }
                     },
-                    enabled = !isSyncing,
+                    enabled = !scheduleMutationBusy,
                     onClick = {
                         showActions = false
                         onSyncSchoolSchedule()
@@ -755,7 +773,7 @@ private fun ScheduleSideControls(
                 DropdownMenuItem(
                     text = { Text(if (isImporting) "导入中" else "导入 ICS") },
                     leadingIcon = { Icon(Icons.Default.ImportExport, contentDescription = null) },
-                    enabled = !isImporting,
+                    enabled = !scheduleMutationBusy,
                     onClick = {
                         showActions = false
                         onImportIcs()
@@ -770,6 +788,7 @@ private fun ScheduleSideControls(
 private fun ScheduleFloatingButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     contentDescription: String,
+    enabled: Boolean = true,
     onClick: () -> Unit
 ) {
     Surface(
@@ -779,11 +798,14 @@ private fun ScheduleFloatingButton(
         tonalElevation = 4.dp,
         shadowElevation = 2.dp
     ) {
-        IconButton(onClick = onClick) {
+        IconButton(
+            onClick = onClick,
+            enabled = enabled
+        ) {
             Icon(
                 imageVector = icon,
                 contentDescription = contentDescription,
-                tint = MaterialTheme.colorScheme.primary,
+                tint = MaterialTheme.colorScheme.primary.copy(alpha = if (enabled) 1f else 0.38f),
                 modifier = Modifier.size(23.dp)
             )
         }
