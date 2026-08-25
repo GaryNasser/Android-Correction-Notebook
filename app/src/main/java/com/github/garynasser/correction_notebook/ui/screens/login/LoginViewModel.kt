@@ -47,17 +47,28 @@ class LoginViewModel @Inject constructor (
                         authStateManager.updateState(AuthState.Authenticated)
                     }
                     .onFailure { exception ->
-                        errorMessage = exception.message ?: "登录失败，请检查网络"
+                        errorMessage = formatLoginError(exception)
                         authStateManager.updateState(AuthState.Unauthenticated)
                     }
             } catch (exception: CancellationException) {
                 throw exception
             } catch (exception: Exception) {
-                errorMessage = exception.message ?: "登录失败，请检查网络"
+                errorMessage = formatLoginError(exception)
                 authStateManager.updateState(AuthState.Unauthenticated)
             } finally {
                 isLoading = false
             }
         }
+    }
+
+    fun clearError() {
+        errorMessage = null
+    }
+
+    private fun formatLoginError(error: Throwable): String {
+        return error.message
+            ?.replace(Regex("^java\\.lang\\.[A-Za-z]+Exception:\\s*"), "")
+            ?.takeIf { it.isNotBlank() }
+            ?: "登录失败，请检查账号、密码或网络连接"
     }
 }

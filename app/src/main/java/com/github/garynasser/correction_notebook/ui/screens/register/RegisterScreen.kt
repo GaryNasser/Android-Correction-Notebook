@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Visibility
@@ -17,6 +18,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -43,7 +45,10 @@ fun RegisterScreen(
             inputFields = {
                 OutlinedTextField(
                     value = viewModel.username,
-                    onValueChange = { viewModel.username = it },
+                    onValueChange = {
+                        viewModel.username = it
+                        viewModel.clearError()
+                    },
                     label = { Text("用户名") },
                     placeholder = { Text(("用户名")) },
                     enabled = !viewModel.isOnNextLoading,
@@ -51,11 +56,15 @@ fun RegisterScreen(
                         .fillMaxWidth(),
                     shape = RoundedCornerShape(8.dp),
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next)
                 )
 
                 OutlinedTextField(
                     value = viewModel.password,
-                    onValueChange = { viewModel.password = it },
+                    onValueChange = {
+                        viewModel.password = it
+                        viewModel.clearError()
+                    },
                     label = { Text("密码") },
                     placeholder = { Text(("密码")) },
                     enabled = !viewModel.isOnNextLoading,
@@ -64,11 +73,27 @@ fun RegisterScreen(
                     shape = RoundedCornerShape(8.dp),
                     visualTransformation = if (viewModel.isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                     singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Password,
+                        imeAction = ImeAction.Done
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            if (viewModel.isOnNextEnabled) {
+                                viewModel.proceedToCasAuth { onNext() }
+                            }
+                        }
+                    ),
                     trailingIcon = {
-                        IconButton(onClick = { viewModel.isPasswordVisible = !viewModel.isPasswordVisible }) {
+                        IconButton(
+                            onClick = { viewModel.isPasswordVisible = !viewModel.isPasswordVisible },
+                            enabled = !viewModel.isOnNextLoading
+                        ) {
                             val icon = if (viewModel.isPasswordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff
-                            Icon(icon, contentDescription = null)
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = if (viewModel.isPasswordVisible) "隐藏密码" else "显示密码"
+                            )
                         }
                     }
                 )
