@@ -488,10 +488,10 @@ class KnowledgeBaseViewModel @Inject constructor(
     }
 
     fun markFlashcardReviewed(flashcardId: String, remembered: Boolean = true) {
-        viewModelScope.launch {
+        runLocalBusyAction("复习状态更新失败") {
             studySetRepository.markFlashcardReviewed(flashcardId, remembered = remembered)
                 .onSuccess { snackbarMessage.value = if (remembered) "已加入历史闪卡" else "已安排再次复习" }
-                .onFailure { snackbarMessage.value = it.message ?: "复习状态更新失败" }
+                .onFailure { snackbarMessage.value = it.toUiMessage("复习状态更新失败") }
         }
     }
 
@@ -539,50 +539,50 @@ class KnowledgeBaseViewModel @Inject constructor(
     }
 
     fun updateKnowledgeCard(card: DueReviewItem) {
-        viewModelScope.launch {
+        runLocalBusyAction("更新知识卡片失败") {
             studySetRepository.updateKnowledgeCard(card)
                 .onSuccess { snackbarMessage.value = "知识卡片已更新" }
-                .onFailure { snackbarMessage.value = it.message ?: "更新知识卡片失败" }
+                .onFailure { snackbarMessage.value = it.toUiMessage("更新知识卡片失败") }
         }
     }
 
     fun deleteKnowledgeCard(cardId: String) {
-        viewModelScope.launch {
+        runLocalBusyAction("删除知识卡片失败") {
             studySetRepository.deleteKnowledgeCard(cardId)
                 .onSuccess { snackbarMessage.value = "知识卡片已删除" }
-                .onFailure { snackbarMessage.value = it.message ?: "删除知识卡片失败" }
+                .onFailure { snackbarMessage.value = it.toUiMessage("删除知识卡片失败") }
         }
     }
 
     fun renameStudySet(studySetId: String, title: String) {
-        viewModelScope.launch {
+        runLocalBusyAction("重命名学习集失败") {
             studySetRepository.renameStudySet(studySetId, title)
                 .onSuccess { snackbarMessage.value = "学习集已重命名" }
-                .onFailure { snackbarMessage.value = it.message ?: "重命名学习集失败" }
+                .onFailure { snackbarMessage.value = it.toUiMessage("重命名学习集失败") }
         }
     }
 
     fun deleteStudySet(studySetId: String) {
-        viewModelScope.launch {
+        runLocalBusyAction("删除学习集失败") {
             studySetRepository.deleteStudySet(studySetId)
                 .onSuccess { snackbarMessage.value = "学习集已删除" }
-                .onFailure { snackbarMessage.value = it.message ?: "删除学习集失败" }
+                .onFailure { snackbarMessage.value = it.toUiMessage("删除学习集失败") }
         }
     }
 
     fun mergeStudySets(sourceStudySetIds: List<String>, targetStudySetId: String) {
-        viewModelScope.launch {
+        runLocalBusyAction("合并学习集失败") {
             studySetRepository.mergeStudySets(sourceStudySetIds, targetStudySetId)
                 .onSuccess { snackbarMessage.value = "学习集已合并" }
-                .onFailure { snackbarMessage.value = it.message ?: "合并学习集失败" }
+                .onFailure { snackbarMessage.value = it.toUiMessage("合并学习集失败") }
         }
     }
 
     fun moveKnowledgeCard(cardId: String, targetStudySetId: String) {
-        viewModelScope.launch {
+        runLocalBusyAction("移动知识卡片失败") {
             studySetRepository.moveKnowledgeCard(cardId, targetStudySetId)
                 .onSuccess { snackbarMessage.value = "知识卡片已移动" }
-                .onFailure { snackbarMessage.value = it.message ?: "移动知识卡片失败" }
+                .onFailure { snackbarMessage.value = it.toUiMessage("移动知识卡片失败") }
         }
     }
 

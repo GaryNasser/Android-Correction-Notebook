@@ -266,41 +266,50 @@ class KnowledgeBaseFileViewerViewModel @Inject constructor(
             uiState.value = KnowledgeBaseFileViewerUiState(isLoading = true)
             recyclePdfPages(previousPdfPages)
 
-            val file = knowledgeBaseRepository.getFileSummary(args.fileId)
-            if (file == null) {
-                uiState.value = KnowledgeBaseFileViewerUiState(
-                    isLoading = false,
-                    errorMessage = "文件不存在或已被删除"
-                )
-                return@launch
-            }
+            try {
+                val file = knowledgeBaseRepository.getFileSummary(args.fileId)
+                if (file == null) {
+                    uiState.value = KnowledgeBaseFileViewerUiState(
+                        isLoading = false,
+                        errorMessage = "文件不存在或已被删除"
+                    )
+                    return@launch
+                }
 
-            val exists = knowledgeBaseRepository.fileExists(args.fileId)
-            if (!exists) {
-                uiState.value = KnowledgeBaseFileViewerUiState(
-                    isLoading = false,
-                    file = file,
-                    errorMessage = "本地文件不存在，可能已被移除"
-                )
-                return@launch
-            }
-
-            val previewType = resolvePreviewType(file)
-            val chunkCount = knowledgeBaseAiRepository.indexStatus(args.fileId).getOrNull()
-            when (previewType) {
-                KnowledgeBasePreviewType.TEXT -> loadTextPreview(file, previewType)
-                KnowledgeBasePreviewType.PDF -> loadPdfPreview(file, previewType)
-                KnowledgeBasePreviewType.HTML -> loadHtmlPreview(file, previewType)
-                else -> {
+                val exists = knowledgeBaseRepository.fileExists(args.fileId)
+                if (!exists) {
                     uiState.value = KnowledgeBaseFileViewerUiState(
                         isLoading = false,
                         file = file,
-                        previewType = previewType,
-                        indexChunkCount = chunkCount
+                        errorMessage = "本地文件不存在，可能已被移除"
                     )
+                    return@launch
                 }
+
+                val previewType = resolvePreviewType(file)
+                val chunkCount = knowledgeBaseAiRepository.indexStatus(args.fileId).getOrNull()
+                when (previewType) {
+                    KnowledgeBasePreviewType.TEXT -> loadTextPreview(file, previewType)
+                    KnowledgeBasePreviewType.PDF -> loadPdfPreview(file, previewType)
+                    KnowledgeBasePreviewType.HTML -> loadHtmlPreview(file, previewType)
+                    else -> {
+                        uiState.value = KnowledgeBaseFileViewerUiState(
+                            isLoading = false,
+                            file = file,
+                            previewType = previewType,
+                            indexChunkCount = chunkCount
+                        )
+                    }
+                }
+                uiState.value = uiState.value.copy(indexChunkCount = chunkCount)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                uiState.value = KnowledgeBaseFileViewerUiState(
+                    isLoading = false,
+                    errorMessage = error.message ?: "文件预览加载失败，请返回后重试"
+                )
             }
-            uiState.value = uiState.value.copy(indexChunkCount = chunkCount)
         }
     }
 
