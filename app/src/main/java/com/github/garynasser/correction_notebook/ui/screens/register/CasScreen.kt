@@ -125,7 +125,10 @@ fun CasScreen(
                                 } else {
                                     Icons.Default.VisibilityOff
                                 }
-                                Icon(icon, contentDescription = null)
+                                Icon(
+                                    imageVector = icon,
+                                    contentDescription = if (viewModel.isCasPasswordVisible) "隐藏密码" else "显示密码"
+                                )
                             }
                         }
                     )

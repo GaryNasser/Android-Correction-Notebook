@@ -79,7 +79,7 @@ class RegistrationViewModel @Inject constructor(
             } catch (exception: CancellationException) {
                 throw exception
             } catch (exception: Exception) {
-                errorMessage = exception.message ?: "延河课堂登录失败，请检查网络"
+                errorMessage = formatCasError(exception)
                 runCatching { yanheRepository.removeStudentCredential() }
                 authStateManager.updateState(AuthState.Unauthenticated)
             } finally {
@@ -90,5 +90,13 @@ class RegistrationViewModel @Inject constructor(
 
     fun clearError() {
         errorMessage = null
+    }
+
+    private fun formatCasError(error: Throwable): String {
+        val raw = error.message.orEmpty()
+            .replace(Regex("^java\\.lang\\.[A-Za-z]+Exception:\\s*"), "")
+            .replace(Regex("^javax\\.net\\.ssl\\.[A-Za-z]+Exception:\\s*"), "")
+            .trim()
+        return raw.ifBlank { "延河课堂登录失败，请检查学号、密码或网络连接" }
     }
 }
