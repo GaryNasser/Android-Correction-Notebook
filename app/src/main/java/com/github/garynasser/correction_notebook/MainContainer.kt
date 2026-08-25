@@ -99,13 +99,14 @@ fun MainContainer(
                         .fillMaxWidth()
                         .navigationBarsPadding(),
                     color = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 3.dp
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(64.dp)
-                            .padding(horizontal = 6.dp),
+                            .height(56.dp)
+                            .padding(horizontal = 4.dp),
                         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                     ) {
                         bottomNavList.forEach { item ->
