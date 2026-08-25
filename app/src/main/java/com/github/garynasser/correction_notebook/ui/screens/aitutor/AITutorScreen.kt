@@ -489,7 +489,9 @@ private fun SessionPickerDialog(
     onNewSession: () -> Unit
 ) {
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = {
+            if (!uiState.isProviderBusy) onDismiss()
+        },
         shape = RoundedCornerShape(8.dp),
         title = { Text("选择对话", style = MaterialTheme.typography.titleMedium) },
         text = {
@@ -1390,7 +1392,7 @@ fun ProviderDialog(
                                 .height(42.dp),
                             shape = RoundedCornerShape(8.dp)
                         ) {
-                            Text("测试连接")
+                            Text(if (uiState.isProviderBusy) "处理中" else "测试连接")
                         }
                     }
                 }
@@ -1532,14 +1534,20 @@ fun ProviderDialog(
                                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                                     verticalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
-                                    TextButton(onClick = { updateForm(provider.toForm()) }) { Text("编辑") }
+                                    TextButton(
+                                        onClick = { updateForm(provider.toForm()) },
+                                        enabled = !uiState.isProviderBusy
+                                    ) { Text("编辑") }
                                     TextButton(
                                         onClick = { onActivate(provider.id) },
-                                        enabled = !provider.isActive
+                                        enabled = !provider.isActive && !uiState.isProviderBusy
                                     ) {
                                         Text(if (provider.isActive) "已启用" else "启用")
                                     }
-                                    TextButton(onClick = { providerToDelete = provider }) {
+                                    TextButton(
+                                        onClick = { providerToDelete = provider },
+                                        enabled = !uiState.isProviderBusy
+                                    ) {
                                         Text("删除")
                                     }
                                 }
@@ -1553,16 +1561,21 @@ fun ProviderDialog(
             TextButton(
                 onClick = { onSave(form) },
                 enabled = !uiState.isProviderBusy && isFormReady
-            ) { Text("保存") }
+            ) { Text(if (uiState.isProviderBusy) "保存中" else "保存") }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
+            TextButton(
+                onClick = onDismiss,
+                enabled = !uiState.isProviderBusy
+            ) { Text("取消") }
         }
     )
 
     providerToDelete?.let { provider ->
         AlertDialog(
-            onDismissRequest = { providerToDelete = null },
+            onDismissRequest = {
+                if (!uiState.isProviderBusy) providerToDelete = null
+            },
             title = { Text("删除 Provider") },
             text = { Text("确定删除“${provider.name}”吗？API Key 和模型配置会一起移除。") },
             confirmButton = {
@@ -1570,11 +1583,15 @@ fun ProviderDialog(
                     onClick = {
                         onDelete(provider.id)
                         providerToDelete = null
-                    }
+                    },
+                    enabled = !uiState.isProviderBusy
                 ) { Text("删除") }
             },
             dismissButton = {
-                TextButton(onClick = { providerToDelete = null }) { Text("取消") }
+                TextButton(
+                    onClick = { providerToDelete = null },
+                    enabled = !uiState.isProviderBusy
+                ) { Text("取消") }
             }
         )
     }

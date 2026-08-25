@@ -63,20 +63,26 @@ class ProfileViewModel @Inject constructor(
 
     fun setAiEnabled(enabled: Boolean) {
         viewModelScope.launch {
-            aiSettingsManager.setAiEnabled(enabled)
-            _profileMessage.value = if (enabled) {
-                "AI 导师已开启"
-            } else {
-                "AI 导师已关闭"
+            try {
+                aiSettingsManager.setAiEnabled(enabled)
+                _profileMessage.value = if (enabled) {
+                    "AI 导师已开启"
+                } else {
+                    "AI 导师已关闭"
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                _profileMessage.value = "AI 导师设置失败，请稍后再试"
             }
         }
     }
 
     fun saveProvider(form: AiProviderForm) {
-        viewModelScope.launch {
+        runProviderAction("保存 Provider 失败") {
             aiRepository.validateProviderForm(form)?.let { message ->
                 _providerStatusMessage.value = message
-                return@launch
+                return@runProviderAction
             }
             providerRepository.saveProvider(aiRepository.normalizeProviderRecord(form))
             aiSettingsManager.setAiEnabled(true)
@@ -87,7 +93,7 @@ class ProfileViewModel @Inject constructor(
     }
 
     fun activateProvider(providerId: Long) {
-        viewModelScope.launch {
+        runProviderAction("切换 Provider 失败") {
             providerRepository.activateProvider(providerId)
             aiSettingsManager.setAiEnabled(true)
             _providerStatusMessage.value = "已切换默认 Provider"
@@ -95,7 +101,7 @@ class ProfileViewModel @Inject constructor(
     }
 
     fun deleteProvider(providerId: Long) {
-        viewModelScope.launch {
+        runProviderAction("删除 Provider 失败") {
             providerRepository.deleteProvider(providerId)
             if (providerRepository.countProviders() == 0) {
                 aiSettingsManager.setAiEnabled(false)
@@ -176,6 +182,26 @@ class ProfileViewModel @Inject constructor(
 
     fun consumeProfileMessage() {
         _profileMessage.value = null
+    }
+
+    private fun runProviderAction(
+        failureMessage: String,
+        action: suspend () -> Unit
+    ) {
+        if (_isProviderBusy.value) return
+        _isProviderBusy.value = true
+        viewModelScope.launch {
+            try {
+                _providerStatusMessage.value = null
+                action()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                _providerStatusMessage.value = error.message ?: failureMessage
+            } finally {
+                _isProviderBusy.value = false
+            }
+        }
     }
 
 }
