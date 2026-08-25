@@ -21,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 @Composable
 fun BottomBarTab(
@@ -44,17 +45,17 @@ fun BottomBarTab(
             ),
         horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(
-            space = 3.dp,
+            space = 2.dp,
             alignment = androidx.compose.ui.Alignment.CenterVertically
         )
     ) {
         Box(
             modifier = Modifier
-                .size(width = 44.dp, height = 28.dp)
+                .size(width = 38.dp, height = 24.dp)
                 .clip(pillShape)
                 .background(
                     if (isSelected) {
-                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.78f)
+                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.66f)
                     } else {
                         Color.Transparent
                     }
@@ -64,13 +65,14 @@ fun BottomBarTab(
             Icon(
                 imageVector = icon,
                 contentDescription = label,
-                modifier = Modifier.size(21.dp),
+                modifier = Modifier.size(19.dp),
                 tint = if (isSelected) selectedColor else inactiveColor
             )
         }
         Text(
             text = label,
-            style = MaterialTheme.typography.labelSmall,
+            fontSize = 11.sp,
+            lineHeight = 12.sp,
             fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
             color = if (isSelected) selectedColor else inactiveColor,
             maxLines = 1,
