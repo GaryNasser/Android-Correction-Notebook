@@ -64,7 +64,12 @@ fun ProfileScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("设置") },
+                title = {
+                    Text(
+                        text = "设置",
+                        fontWeight = FontWeight.Bold
+                    )
+                },
                 windowInsets = WindowInsets(0, 0, 0, 0),
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0.92f),
@@ -81,8 +86,8 @@ fun ProfileScreen(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(7.dp)
             ) {
                 item {
                     AccountStatusCard(
@@ -265,12 +270,12 @@ private fun AccountStatusCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 10.dp),
+                .padding(horizontal = 10.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Surface(
-                modifier = Modifier.size(38.dp),
+                modifier = Modifier.size(36.dp),
                 shape = RoundedCornerShape(8.dp),
                 color = if (isAuthenticated) {
                     MaterialTheme.colorScheme.primaryContainer
@@ -283,7 +288,7 @@ private fun AccountStatusCard(
                     Icon(
                         imageVector = if (isAuthenticated) Icons.Default.AccountCircle else Icons.Default.Person,
                         contentDescription = null,
-                        modifier = Modifier.size(22.dp),
+                        modifier = Modifier.size(21.dp),
                         tint = if (isAuthenticated) {
                             MaterialTheme.colorScheme.primary
                         } else {
@@ -304,7 +309,10 @@ private fun AccountStatusCard(
                     Text(
                         text = "延河课堂",
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
                     )
                     StatusChip(
                         text = if (isAuthenticated) "已登录" else "未登录",
@@ -448,20 +456,20 @@ private fun SettingsSwitchItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 60.dp)
+            .heightIn(min = 56.dp)
             .toggleable(
                 value = checked,
                 enabled = enabled,
                 role = Role.Switch,
                 onValueChange = onCheckedChange
             )
-            .padding(horizontal = 10.dp, vertical = 8.dp),
+            .padding(horizontal = 9.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+        horizontalArrangement = Arrangement.spacedBy(9.dp)
     ) {
         Surface(
-            modifier = Modifier.size(32.dp),
-            shape = MaterialTheme.shapes.medium,
+            modifier = Modifier.size(30.dp),
+            shape = RoundedCornerShape(8.dp),
             color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.62f),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.32f))
         ) {
@@ -470,7 +478,7 @@ private fun SettingsSwitchItem(
                     icon,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(17.dp)
                 )
             }
         }
@@ -511,15 +519,15 @@ fun SettingsItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 58.dp)
+            .heightIn(min = 54.dp)
             .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 9.dp),
+            .padding(horizontal = 9.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+        horizontalArrangement = Arrangement.spacedBy(9.dp)
     ) {
         Surface(
-            modifier = Modifier.size(32.dp),
-            shape = MaterialTheme.shapes.medium,
+            modifier = Modifier.size(30.dp),
+            shape = RoundedCornerShape(8.dp),
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.62f),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.32f))
         ) {
@@ -528,7 +536,7 @@ fun SettingsItem(
                     icon,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (enabled) 1f else 0.48f),
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(17.dp)
                 )
             }
         }
