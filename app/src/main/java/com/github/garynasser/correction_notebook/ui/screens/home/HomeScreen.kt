@@ -1713,13 +1713,13 @@ fun TodayStudyWorkbench(
     FreshGradientCard(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 188.dp)
+            .heightIn(min = 164.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(22.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(11.dp)
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
@@ -1729,9 +1729,9 @@ fun TodayStudyWorkbench(
                 )
                 Text(
                     text = currentTime.value.format(DateTimeFormatter.ofPattern("HH:mm:ss")),
-                    fontSize = 52.sp,
+                    fontSize = 44.sp,
                     fontWeight = FontWeight.Bold,
-                    lineHeight = 56.sp,
+                    lineHeight = 48.sp,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
                 Text(
@@ -1766,7 +1766,7 @@ fun TodayStudyWorkbench(
                 }
                 FilledTonalButton(onClick = onImmersiveModeClick) {
                     Icon(Icons.Default.Fullscreen, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text("专注")
                 }
             }
@@ -1865,19 +1865,19 @@ private fun WorkbenchChip(
 ) {
     Surface(
         modifier = modifier
-            .heightIn(min = 58.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .heightIn(min = 50.dp)
+            .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.58f)
     ) {
         Row(
-            modifier = Modifier.padding(10.dp),
+            modifier = Modifier.padding(horizontal = 9.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(7.dp)
         ) {
-            Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
-            Column {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = label,
                     style = MaterialTheme.typography.labelSmall,
@@ -1887,6 +1887,7 @@ private fun WorkbenchChip(
                     text = value,
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
             }
