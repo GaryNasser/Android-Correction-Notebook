@@ -904,10 +904,22 @@ internal fun String.toGridLocationText(): String {
         .firstOrNull { it.isNotBlank() }
         .orEmpty()
 
-    return firstAddressLine
+    val spacedParts = firstAddressLine
         .split(Regex("\\s+"))
         .filter { it.isNotBlank() }
-        .joinToString("\n")
+    if (spacedParts.size > 1) return spacedParts.joinToString("\n")
+
+    val compactRoomMatch = Regex("""^(.+?)([A-Za-z]{0,2}\d{2,4})$""").matchEntire(firstAddressLine)
+    return compactRoomMatch
+        ?.destructured
+        ?.let { (building, room) ->
+            if (Regex("""[\u4E00-\u9FFF]""").containsMatchIn(building)) {
+                listOf(building, room).filter(String::isNotBlank).joinToString("\n")
+            } else {
+                firstAddressLine
+            }
+        }
+        ?: firstAddressLine
 }
 
 internal fun LocalDate.toBitWeekStart(): LocalDate {
