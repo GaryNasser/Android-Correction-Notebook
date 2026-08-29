@@ -6,6 +6,7 @@ import com.google.gson.JsonParser
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import java.time.LocalDate
 
 class SchoolScheduleRemoteDataSourceTest {
     private val dataSource = SchoolScheduleRemoteDataSource(
@@ -68,5 +69,68 @@ class SchoolScheduleRemoteDataSourceTest {
         assertEquals(1, courses.size)
         assertEquals(11, courses.first().startSection)
         assertEquals(12, courses.first().endSection)
+    }
+
+    @Test
+    fun parseCurrentTermKeepsDateWhenSchoolReturnsTimeSuffix() {
+        val root = JsonParser.parseString(
+            """
+            {
+              "dqxnxq": {
+                "XNXQDM": "2025-2026-1",
+                "XNXQMC": "2025-2026 学年秋季学期",
+                "KSRQ": "2025-09-01 00:00:00",
+                "JSRQ": "2026-01-18T23:59:59"
+              }
+            }
+            """.trimIndent()
+        ).asJsonObject
+
+        val term = dataSource.parseCurrentTerm(root)
+
+        assertEquals(LocalDate.of(2025, 9, 1), term.startDate)
+        assertEquals(LocalDate.of(2026, 1, 18), term.endDate)
+    }
+
+    @Test
+    fun parseCurrentTermKeepsChineseFormattedDate() {
+        val root = JsonParser.parseString(
+            """
+            {
+              "dqxnxq": {
+                "XNXQDM": "2025-2026-2",
+                "XNXQMC": "2025-2026 学年春季学期",
+                "KSRQ": "2026年2月23日",
+                "JSRQ": "2026年7月5日"
+              }
+            }
+            """.trimIndent()
+        ).asJsonObject
+
+        val term = dataSource.parseCurrentTerm(root)
+
+        assertEquals(LocalDate.of(2026, 2, 23), term.startDate)
+        assertEquals(LocalDate.of(2026, 7, 5), term.endDate)
+    }
+
+    @Test
+    fun parseCurrentTermAcceptsUnpaddedAndDottedDates() {
+        val root = JsonParser.parseString(
+            """
+            {
+              "dqxnxq": {
+                "XNXQDM": "2025-2026-1",
+                "XNXQMC": "2025-2026 学年秋季学期",
+                "KSRQ": "2025-9-1",
+                "JSRQ": "2026.1.18 23:59:59"
+              }
+            }
+            """.trimIndent()
+        ).asJsonObject
+
+        val term = dataSource.parseCurrentTerm(root)
+
+        assertEquals(LocalDate.of(2025, 9, 1), term.startDate)
+        assertEquals(LocalDate.of(2026, 1, 18), term.endDate)
     }
 }

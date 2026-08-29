@@ -116,7 +116,7 @@ class SchoolScheduleRemoteDataSource @Inject constructor(
         }
     }
 
-    private fun parseCurrentTerm(root: JsonObject): SchoolTerm {
+    internal fun parseCurrentTerm(root: JsonObject): SchoolTerm {
         return parseTerms(root, currentOnly = true).firstOrNull()
             ?: throw SchoolScheduleException("学校系统没有返回当前学期")
     }
@@ -234,9 +234,33 @@ class SchoolScheduleRemoteDataSource @Inject constructor(
 
     private fun JsonObject.firstDate(vararg keys: String): LocalDate? {
         val raw = firstString(*keys) ?: return null
-        val patterns = listOf("yyyy-MM-dd", "yyyy/MM/dd", "yyyyMMdd")
-        return patterns.firstNotNullOfOrNull { pattern ->
-            runCatching { LocalDate.parse(raw, DateTimeFormatter.ofPattern(pattern)) }.getOrNull()
+        val candidates = buildList {
+            add(raw)
+            raw.substringBefore("T").takeIf { it != raw }?.let(::add)
+            raw.substringBefore(" ").takeIf { it != raw }?.let(::add)
+            Regex("""\d{4}[-/.]\d{1,2}[-/.]\d{1,2}""")
+                .find(raw)
+                ?.value
+                ?.let(::add)
+            Regex("""\d{4}年\d{1,2}月\d{1,2}日""")
+                .find(raw)
+                ?.value
+                ?.let(::add)
+        }
+        val patterns = listOf(
+            "yyyy-MM-dd",
+            "yyyy-M-d",
+            "yyyy/MM/dd",
+            "yyyy/M/d",
+            "yyyy.MM.dd",
+            "yyyy.M.d",
+            "yyyyMMdd",
+            "yyyy年M月d日"
+        )
+        return candidates.firstNotNullOfOrNull { candidate ->
+            patterns.firstNotNullOfOrNull { pattern ->
+                runCatching { LocalDate.parse(candidate, DateTimeFormatter.ofPattern(pattern)) }.getOrNull()
+            }
         }
     }
 
