@@ -15,12 +15,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -303,49 +305,57 @@ fun KnowledgeBaseFileViewerScreen(
                 onAction = viewModel::refresh
             )
             else -> {
+                val showIndexStatus = uiState.isIndexing || uiState.indexChunkCount != null
+                val showStatusShelf = uiState.errorMessage != null ||
+                    uiState.isAiLoading ||
+                    uiState.isDeletingFile ||
+                    showIndexStatus
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(innerPadding)
                 ) {
-                    Column(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        uiState.errorMessage?.let { message ->
-                            ViewerStatusBar(
-                                icon = Icons.Default.Info,
-                                text = message,
-                                isError = true
-                            )
-                        }
+                    if (showStatusShelf) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                            verticalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            uiState.errorMessage?.let { message ->
+                                ViewerStatusBar(
+                                    icon = Icons.Default.Info,
+                                    text = message,
+                                    isError = true
+                                )
+                            }
 
-                        if (uiState.isAiLoading) {
-                            ViewerStatusBar(
-                                icon = Icons.Default.Psychology,
-                                text = "AI 正在阅读这份资料..."
-                            )
-                        }
+                            if (uiState.isAiLoading) {
+                                ViewerStatusBar(
+                                    icon = Icons.Default.Psychology,
+                                    text = "AI 正在阅读这份资料..."
+                                )
+                            }
 
-                        if (uiState.isDeletingFile) {
-                            ViewerStatusBar(
-                                icon = Icons.Default.Delete,
-                                text = "正在删除文件..."
-                            )
-                        }
+                            if (uiState.isDeletingFile) {
+                                ViewerStatusBar(
+                                    icon = Icons.Default.Delete,
+                                    text = "正在删除文件..."
+                                )
+                            }
 
-                        ViewerStatusBar(
-                            icon = Icons.Default.Psychology,
-                            text = when {
-                                uiState.isIndexing -> "AI 索引正在重建..."
-                                uiState.indexChunkCount == null -> "AI 索引状态未知，可从菜单重建索引"
-                                uiState.indexChunkCount == 0 -> "当前资料尚未建立可用文本索引"
-                                else -> "AI 索引可用：${uiState.indexChunkCount} 个片段"
-                            },
-                            actionText = "重建",
-                            onAction = viewModel::rebuildIndex,
-                            actionEnabled = !uiState.isIndexing
-                        )
+                            if (showIndexStatus) {
+                                ViewerStatusBar(
+                                    icon = Icons.Default.Psychology,
+                                    text = when {
+                                        uiState.isIndexing -> "AI 索引正在重建..."
+                                        uiState.indexChunkCount == 0 -> "当前资料尚未建立可用文本索引"
+                                        else -> "AI 索引可用：${uiState.indexChunkCount} 个片段"
+                                    },
+                                    actionText = "重建",
+                                    onAction = viewModel::rebuildIndex,
+                                    actionEnabled = !uiState.isIndexing
+                                )
+                            }
+                        }
                     }
 
                     Box(
@@ -439,7 +449,12 @@ private fun ViewerStatusBar(
                 overflow = TextOverflow.Ellipsis
             )
             if (actionText != null && onAction != null) {
-                TextButton(onClick = onAction, enabled = actionEnabled) {
+                TextButton(
+                    onClick = onAction,
+                    enabled = actionEnabled,
+                    modifier = Modifier.heightIn(min = 28.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                ) {
                     Text(actionText)
                 }
             }
