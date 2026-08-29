@@ -152,16 +152,7 @@ class StatisticsViewModel @Inject constructor(
                     .filterValues { it > 0 }
                     .toMutableMap()
 
-                courseLearningRepository.progressItems.first()
-                    .filter { progress -> progress.completedCount > 0 || progress.lastAccessedAt > 0L }
-                    .forEach { progress ->
-                        val name = progress.courseName.ifBlank { "课程学习" }
-                        val minutes = (progress.watchedMinutes.takeIf { it > 0 } ?: progress.completedCount * 45)
-                            .coerceAtLeast(0)
-                        if (minutes > 0) {
-                            subjectDistribution[name] = (subjectDistribution[name] ?: 0) + minutes
-                        }
-                    }
+                addCourseProgressMinutes(subjectDistribution)
 
                 if (_uiState.value.period != selectedPeriod) return@launch
                 _uiState.value = _uiState.value.copy(
@@ -183,6 +174,27 @@ class StatisticsViewModel @Inject constructor(
                 )
             }
         }
+    }
+
+    private suspend fun addCourseProgressMinutes(subjectDistribution: MutableMap<String, Int>) {
+        val progressItems = try {
+            courseLearningRepository.progressItems.first()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            emptyList()
+        }
+
+        progressItems
+            .filter { progress -> progress.completedCount > 0 || progress.lastAccessedAt > 0L }
+            .forEach { progress ->
+                val name = progress.courseName.ifBlank { "课程学习" }
+                val minutes = (progress.watchedMinutes.takeIf { it > 0 } ?: progress.completedCount * 45)
+                    .coerceAtLeast(0)
+                if (minutes > 0) {
+                    subjectDistribution[name] = (subjectDistribution[name] ?: 0) + minutes
+                }
+            }
     }
 
     private fun buildChartLabels(
