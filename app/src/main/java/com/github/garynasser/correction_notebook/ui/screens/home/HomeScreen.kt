@@ -1331,7 +1331,7 @@ private fun DueReviewCard(
             if (items.isEmpty()) {
                 Text(
                     text = "从知识库文件菜单选择“AI 生成学习集”，BITStudy 会把资料变成闪卡和测验，并安排复习。",
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
                 )
             } else {
@@ -1340,7 +1340,7 @@ private fun DueReviewCard(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { selectedCard = item },
-                        shape = RoundedCornerShape(14.dp),
+                        shape = RoundedCornerShape(8.dp),
                         color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.36f)
                     ) {
                         Row(
@@ -1516,7 +1516,7 @@ private fun AiStudyAdviceCard(
                 adviceLines(advice).forEach { line ->
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(14.dp),
+                        shape = RoundedCornerShape(8.dp),
                         color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.38f)
                     ) {
                         Row(
@@ -1566,7 +1566,7 @@ private fun AiPlanBlockRow(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(8.dp),
         color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.34f)
     ) {
         Column(
@@ -1632,7 +1632,7 @@ private fun AiActionRow(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(8.dp),
         color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.42f)
     ) {
         Row(
@@ -1713,11 +1713,11 @@ fun TodayStudyWorkbench(
     onContinueLearningClick: () -> Unit,
     onRecentFilesClick: () -> Unit
 ) {
-    val currentTime = remember { mutableStateOf(java.time.LocalTime.now()) }
+    val currentDateTime = remember { mutableStateOf(java.time.LocalDateTime.now()) }
 
     LaunchedEffect(Unit) {
         while (true) {
-            currentTime.value = java.time.LocalTime.now()
+            currentDateTime.value = java.time.LocalDateTime.now()
             val millisUntilNextMinute = 60_000L - (System.currentTimeMillis() % 60_000L)
             kotlinx.coroutines.delay(millisUntilNextMinute.coerceIn(1_000L, 60_000L))
         }
@@ -1726,13 +1726,13 @@ fun TodayStudyWorkbench(
     FreshGradientCard(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 148.dp)
+            .heightIn(min = 132.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(9.dp)
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Text(
@@ -1741,15 +1741,15 @@ fun TodayStudyWorkbench(
                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f)
                 )
                 Text(
-                    text = currentTime.value.format(DateTimeFormatter.ofPattern("HH:mm")),
-                    fontSize = 34.sp,
+                    text = currentDateTime.value.format(DateTimeFormatter.ofPattern("HH:mm")),
+                    fontSize = 30.sp,
                     fontWeight = FontWeight.Bold,
-                    lineHeight = 38.sp,
+                    lineHeight = 34.sp,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
                 Text(
-                    text = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日 E")),
-                    style = MaterialTheme.typography.bodyMedium,
+                    text = currentDateTime.value.toLocalDate().format(DateTimeFormatter.ofPattern("yyyy年MM月dd日 E")),
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f)
                 )
             }
@@ -1777,8 +1777,13 @@ fun TodayStudyWorkbench(
                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f)
                     )
                 }
-                FilledTonalButton(onClick = onImmersiveModeClick) {
-                    Icon(Icons.Default.Fullscreen, contentDescription = null)
+                FilledTonalButton(
+                    onClick = onImmersiveModeClick,
+                    modifier = Modifier.height(40.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp)
+                ) {
+                    Icon(Icons.Default.Fullscreen, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(6.dp))
                     Text("专注")
                 }
@@ -1876,25 +1881,29 @@ private fun WorkbenchChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val chipShape = RoundedCornerShape(8.dp)
+
     Surface(
         modifier = modifier
-            .heightIn(min = 50.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .heightIn(min = 44.dp)
+            .clip(chipShape)
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(12.dp),
+        shape = chipShape,
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.58f)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 9.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(7.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
+            Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = label,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.64f)
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.64f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = value,
@@ -2005,31 +2014,36 @@ fun QuickStatsPreview(
 fun EmptyTodoState(onAddClick: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f)
         )
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(32.dp),
+                .padding(horizontal = 18.dp, vertical = 18.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Icon(
                 Icons.Default.CheckCircle,
                 contentDescription = null,
-                modifier = Modifier.size(48.dp),
+                modifier = Modifier.size(32.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
             )
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(10.dp))
             Text(
                 text = "暂无待办事项",
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
             )
-            Spacer(modifier = Modifier.height(8.dp))
-            TextButton(onClick = onAddClick) {
-                Icon(Icons.Default.Add, contentDescription = null)
+            Spacer(modifier = Modifier.height(4.dp))
+            TextButton(
+                onClick = onAddClick,
+                shape = RoundedCornerShape(8.dp),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+            ) {
+                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(4.dp))
                 Text("添加待办")
             }
@@ -2058,7 +2072,7 @@ fun ModeSelectorDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 480.dp)
+                    .heightIn(max = 420.dp)
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
