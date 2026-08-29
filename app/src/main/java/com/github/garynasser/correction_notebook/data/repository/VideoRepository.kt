@@ -79,15 +79,16 @@ class VideoRepository @Inject constructor(
                 pageSize = pageSize,
                 keyword = keyword
             )
-            response?.let {
-                if (it.code != 0 && it.code != 200) return emptyList()
-                parseCourseResult(it.data, it.message, it.code, page).courses
-            } ?: emptyList()
+            val result = response ?: throw Exception("延河课堂课程列表无响应")
+            if (result.code != 0 && result.code != 200) {
+                throw Exception(result.message.ifBlank { "延河课堂返回异常：${result.code}" })
+            }
+            parseCourseResult(result.data, result.message, result.code, page).courses
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             Log.e("VIDEO_REPO", "获取全校课程列表失败", e)
-            emptyList()
+            throw e
         }
     }
 
@@ -119,7 +120,7 @@ class VideoRepository @Inject constructor(
             throw e
         } catch (e: Exception) {
             Log.e("VIDEO_REPO", "获取个人课程列表失败", e)
-            emptyList()
+            throw e
         }
     }
 
