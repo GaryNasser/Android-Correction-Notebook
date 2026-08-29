@@ -1,6 +1,7 @@
 package com.github.garynasser.correction_notebook.data.repository
 
 import com.github.garynasser.correction_notebook.data.local.CredentialManager
+import com.github.garynasser.correction_notebook.data.model.school.SchoolCourseRaw
 import com.github.garynasser.correction_notebook.data.model.school.SchoolScheduleException
 import com.github.garynasser.correction_notebook.data.model.school.SchoolScheduleSyncResult
 import com.github.garynasser.correction_notebook.data.model.school.SchoolTerm
@@ -32,23 +33,23 @@ class SchoolScheduleRepository @Inject constructor(
         val credential = credentialManager.getCredentials()
             ?: throw SchoolScheduleException("请先登录 BITStudy，再同步教务课表")
         val startedAt = System.currentTimeMillis()
-        val term = remoteDataSource.getCurrentTerm(credential.studentId, credential.password)
-        return syncTermInternal(credential.studentId, credential.password, term, startedAt)
+        val termSchedule = remoteDataSource.getCurrentTermSchedule(credential.studentId, credential.password)
+        return applyTermSchedule(termSchedule.term, termSchedule.courses, startedAt)
     }
 
     suspend fun syncTerm(term: SchoolTerm): SchoolScheduleSyncResult {
         val credential = credentialManager.getCredentials()
             ?: throw SchoolScheduleException("请先登录 BITStudy，再同步教务课表")
-        return syncTermInternal(credential.studentId, credential.password, term, System.currentTimeMillis())
+        val startedAt = System.currentTimeMillis()
+        val rawCourses = remoteDataSource.getSchedule(credential.studentId, credential.password, term.id)
+        return applyTermSchedule(term, rawCourses, startedAt)
     }
 
-    private suspend fun syncTermInternal(
-        studentId: String,
-        password: String,
+    private suspend fun applyTermSchedule(
         term: SchoolTerm,
+        rawCourses: List<SchoolCourseRaw>,
         startedAt: Long
     ): SchoolScheduleSyncResult {
-        val rawCourses = remoteDataSource.getSchedule(studentId, password, term.id)
         if (rawCourses.isEmpty()) {
             throw SchoolScheduleException("这个学期暂时没有可导入课程")
         }
