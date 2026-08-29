@@ -22,7 +22,13 @@ internal object SchoolScheduleParsers {
     }
 
     fun parseSectionRange(raw: String?): Pair<Int, Int>? {
-        val numbers = raw.orEmpty().split(Regex("[^0-9]+")).mapNotNull { it.toIntOrNull() }
+        val text = raw.orEmpty()
+        val compactSections = parseCompactSectionCodes(text)
+        if (compactSections.isNotEmpty()) {
+            return compactSections.first() to compactSections.last()
+        }
+
+        val numbers = text.split(Regex("[^0-9]+")).mapNotNull { it.toIntOrNull() }
         return when {
             numbers.size >= 2 -> numbers.first() to numbers.last()
             numbers.size == 1 -> numbers.first() to numbers.first()
@@ -82,5 +88,17 @@ internal object SchoolScheduleParsers {
 
     private fun matchesWeekParity(week: Int, oddOnly: Boolean, evenOnly: Boolean): Boolean {
         return (!oddOnly || week % 2 == 1) && (!evenOnly || week % 2 == 0)
+    }
+
+    private fun parseCompactSectionCodes(text: String): List<Int> {
+        val digitRuns = Regex("\\d+").findAll(text).map { it.value }.toList()
+        if (digitRuns.isEmpty()) return emptyList()
+        if (digitRuns.any { it.length < 4 || it.length % 2 != 0 }) return emptyList()
+
+        val expectedCount = digitRuns.sumOf { it.length / 2 }
+        val sections = digitRuns.flatMap { digits -> digits.chunked(2) }.mapNotNull { code ->
+            code.toIntOrNull()?.takeIf { it in 1..20 }
+        }
+        return sections.takeIf { it.size == expectedCount }.orEmpty()
     }
 }

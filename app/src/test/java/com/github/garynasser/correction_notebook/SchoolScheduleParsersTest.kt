@@ -36,4 +36,12 @@ class SchoolScheduleParsersTest {
             SchoolScheduleParsers.parseWeeks("2～6双周")
         )
     }
+
+    @Test
+    fun parseSectionRangeHandlesCompactSchoolCodes() {
+        assertEquals(3 to 4, SchoolScheduleParsers.parseSectionRange("0304"))
+        assertEquals(11 to 12, SchoolScheduleParsers.parseSectionRange("1112"))
+        assertEquals(1 to 4, SchoolScheduleParsers.parseSectionRange("01020304"))
+        assertEquals(1 to 4, SchoolScheduleParsers.parseSectionRange("0102,0304"))
+    }
 }
