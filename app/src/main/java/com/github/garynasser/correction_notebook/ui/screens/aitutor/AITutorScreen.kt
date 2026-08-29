@@ -85,6 +85,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
@@ -589,22 +590,50 @@ private fun EmptyChatState(
     onSuggestion: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Box(
+    Surface(
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = 220.dp),
-        contentAlignment = Alignment.Center
+            .heightIn(min = 148.dp),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.36f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.28f))
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(
-                if (isKnowledgeMode) Icons.AutoMirrored.Filled.LibraryBooks else Icons.Default.SmartToy,
-                contentDescription = null,
-                modifier = Modifier.size(48.dp),
-                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 18.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.64f)
+            ) {
+                Icon(
+                    if (isKnowledgeMode) Icons.AutoMirrored.Filled.LibraryBooks else Icons.Default.SmartToy,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .padding(8.dp)
+                        .size(28.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+            Text(
+                text = if (isKnowledgeMode) "问你的知识库" else "AI 学习导师已就绪",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
             )
-            Spacer(modifier = Modifier.height(10.dp))
-            Text(if (isKnowledgeMode) "问你的知识库" else "AI 学习导师已就绪")
-            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = if (isKnowledgeMode) {
+                    "基于已导入的资料提问，适合复习前快速抓重点。"
+                } else {
+                    "从今天的任务开始，直接让 AI 帮你拆成可执行安排。"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             SuggestionChip(
                 onClick = {
                     onSuggestion(
@@ -612,7 +641,8 @@ private fun EmptyChatState(
                         else "帮我制定今天的学习安排"
                     )
                 },
-                label = { Text(if (isKnowledgeMode) "总结资料重点" else "制定学习安排") }
+                label = { Text(if (isKnowledgeMode) "总结资料重点" else "制定学习安排") },
+                shape = RoundedCornerShape(8.dp)
             )
         }
     }
