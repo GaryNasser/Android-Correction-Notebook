@@ -83,7 +83,7 @@ fun MainContainer(
     }
 
     Scaffold(
-        contentWindowInsets = if (hideBottomBar) {
+        contentWindowInsets = if (!hideBottomBar && shouldShowBottomBar) {
             WindowInsets(0, 0, 0, 0)
         } else {
             ScaffoldDefaults.contentWindowInsets
