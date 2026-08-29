@@ -548,8 +548,9 @@ private fun WeeklyCourseGrid(
     modifier: Modifier = Modifier,
     onItemClick: (ScheduleOccurrence) -> Unit
 ) {
-    val weekNumber = selectedDate.get(WeekFields.ISO.weekOfWeekBasedYear())
-    val days = (0..6).map { selectedDate.plusDays(it.toLong()) }
+    val weekStart = selectedDate.toBitWeekStart()
+    val weekNumber = weekStart.get(WeekFields.ISO.weekOfWeekBasedYear())
+    val days = visibleBitWeekDays(selectedDate)
     val weekdayLabels = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
     val itemsByDate = sections.associate { it.date to it.items }
     val headerHeight = 48.dp
@@ -903,6 +904,15 @@ internal fun String.toGridLocationText(): String {
         .firstOrNull { it.isNotBlank() }
         .orEmpty()
         .replace(Regex("\\s+"), " ")
+}
+
+internal fun LocalDate.toBitWeekStart(): LocalDate {
+    return minusDays((dayOfWeek.value - 1).toLong())
+}
+
+internal fun visibleBitWeekDays(selectedDate: LocalDate): List<LocalDate> {
+    val weekStart = selectedDate.toBitWeekStart()
+    return (0..6).map { weekStart.plusDays(it.toLong()) }
 }
 
 private data class CourseSectionSlot(
