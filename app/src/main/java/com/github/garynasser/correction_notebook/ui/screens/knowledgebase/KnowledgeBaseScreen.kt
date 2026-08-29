@@ -2968,38 +2968,42 @@ private fun EmptyStateCard(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .defaultMinSize(minHeight = 220.dp)
-            .padding(horizontal = 18.dp, vertical = 16.dp),
+            .defaultMinSize(minHeight = 156.dp)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center
     ) {
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.large,
+            shape = RoundedCornerShape(8.dp),
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
             ),
-            border = androidx.compose.foundation.BorderStroke(
+            border = BorderStroke(
                 1.dp,
                 MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
             ),
             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
         ) {
             Column(
-                modifier = Modifier.padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 icon?.let {
                     Icon(
                         imageVector = it,
                         contentDescription = null,
-                        modifier = Modifier.size(28.dp),
+                        modifier = Modifier.size(24.dp),
                         tint = MaterialTheme.colorScheme.primary
                     )
                 }
-                Text(text = title, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
                 Text(
                     text = description,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 if (primaryActionText != null && onPrimaryAction != null) {
@@ -3007,11 +3011,19 @@ private fun EmptyStateCard(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Button(onClick = onPrimaryAction) {
+                        Button(
+                            onClick = onPrimaryAction,
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 7.dp)
+                        ) {
                             Text(primaryActionText)
                         }
                         if (secondaryActionText != null && onSecondaryAction != null) {
-                            OutlinedButton(onClick = onSecondaryAction) {
+                            OutlinedButton(
+                                onClick = onSecondaryAction,
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 7.dp)
+                            ) {
                                 Text(secondaryActionText)
                             }
                         }
@@ -3026,9 +3038,10 @@ private fun EmptyStateCard(
 private fun SectionTitle(text: String) {
     Text(
         text = text,
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.SemiBold
+        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+        style = MaterialTheme.typography.labelLarge,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
     )
 }
 
