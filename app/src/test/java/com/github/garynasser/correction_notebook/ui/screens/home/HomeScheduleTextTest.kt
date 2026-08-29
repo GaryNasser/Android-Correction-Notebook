@@ -23,6 +23,28 @@ class HomeScheduleTextTest {
     }
 
     @Test
+    fun gridLocationTextSplitsCompactBuildingAndRoomCode() {
+        assertEquals("文萃楼\nF602", "文萃楼F602".toGridLocationText())
+        assertEquals("综教\nA303", "综教A303".toGridLocationText())
+    }
+
+    @Test
+    fun gridLocationTextDoesNotSplitBareRoomCodes() {
+        assertEquals("3204", "3204".toGridLocationText())
+        assertEquals("A303", "A303".toGridLocationText())
+    }
+
+    @Test
+    fun gridLocationTextSplitsOnlyFirstAddressLineWhenCompact() {
+        val rawLocation = """
+            文萃楼F602
+            良乡校区 备用教室
+        """.trimIndent()
+
+        assertEquals("文萃楼\nF602", rawLocation.toGridLocationText())
+    }
+
+    @Test
     fun visibleBitWeekDaysAlwaysStartOnMonday() {
         val friday = LocalDate.of(2026, 7, 3)
 
