@@ -851,10 +851,10 @@ private fun CourseGridBlock(
         else -> 9.5.sp
     }
     val titleMaxLines = when {
-        compactBlock -> if (hasLocation) 2 else 3
+        compactBlock -> if (hasLocation) 1 else 3
         span == 2 -> if (hasLocation) 4 else 6
-        span == 3 -> if (hasLocation) 7 else 9
-        else -> if (hasLocation) 9 else 12
+        span == 3 -> if (hasLocation) 6 else 9
+        else -> if (hasLocation) 8 else 12
     }
 
     Box(
@@ -899,11 +899,15 @@ private fun CourseGridBlock(
 }
 
 internal fun String.toGridLocationText(): String {
-    return lineSequence()
+    val firstAddressLine = lineSequence()
         .map { it.trim() }
         .firstOrNull { it.isNotBlank() }
         .orEmpty()
-        .replace(Regex("\\s+"), " ")
+
+    return firstAddressLine
+        .split(Regex("\\s+"))
+        .filter { it.isNotBlank() }
+        .joinToString("\n")
 }
 
 internal fun LocalDate.toBitWeekStart(): LocalDate {
