@@ -146,137 +146,119 @@ fun CourseVideoListScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-        Box(
-            modifier = Modifier.fillMaxSize()
-        ) {
-            when (val state = viewModel.uiState) {
-                is VideoUIState.Error -> {
-                    VideoListMessageState(
-                        title = "视频列表加载失败",
-                        message = state.message,
-                        actionText = "重试",
-                        onAction = { viewModel.getVideoList(viewModel.courseId) },
-                        modifier = Modifier.align(Alignment.Center),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    )
-                }
+            Box(
+                modifier = Modifier.fillMaxSize()
+            ) {
+                when (val state = viewModel.uiState) {
+                    is VideoUIState.Error -> {
+                        VideoListMessageState(
+                            title = "视频列表加载失败",
+                            message = state.message,
+                            actionText = "重试",
+                            onAction = { viewModel.getVideoList(viewModel.courseId) },
+                            modifier = Modifier.align(Alignment.Center),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        )
+                    }
 
-                is VideoUIState.Loading -> {
-                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-                }
+                    is VideoUIState.Loading -> {
+                        CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                    }
 
-                is VideoUIState.Success -> {
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(1),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        item {
-                            CourseProgressHeader(
-                                progressPercent = viewModel.progress?.progressPercent ?: 0,
-                                lastTitle = viewModel.progress?.lastSectionTitle,
-                                completedCount = viewModel.progress?.completedCount ?: 0,
-                                totalCount = state.videos.size
-                            )
-                        }
-                        when (val playState = viewModel.playState) {
-                            is PlayState.Loading -> {
-                                item {
-                                    Surface(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(12.dp),
-                                        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(12.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                        ) {
-                                            CircularProgressIndicator(
-                                                modifier = Modifier.size(18.dp),
-                                                strokeWidth = 2.dp
-                                            )
-                                            Text("正在获取延河课堂视频地址...")
-                                        }
-                                    }
-                                }
+                    is VideoUIState.Success -> {
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(1),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            item {
+                                CourseProgressHeader(
+                                    progressPercent = viewModel.progress?.progressPercent ?: 0,
+                                    lastTitle = viewModel.progress?.lastSectionTitle,
+                                    completedCount = viewModel.progress?.completedCount ?: 0,
+                                    totalCount = state.videos.size
+                                )
                             }
-                            is PlayState.Error -> {
-                                item {
-                                    Surface(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(8.dp),
-                                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.62f),
-                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.16f))
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 11.dp, vertical = 9.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            when (val playState = viewModel.playState) {
+                                is PlayState.Loading -> {
+                                    item { VideoResolvingStatus() }
+                                }
+                                is PlayState.Error -> {
+                                    item {
+                                        Surface(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.62f),
+                                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.16f))
                                         ) {
-                                            Icon(
-                                                Icons.Default.Refresh,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(18.dp),
-                                                tint = MaterialTheme.colorScheme.error
-                                            )
-                                            Text(
-                                                text = playState.message,
-                                                modifier = Modifier.weight(1f),
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onErrorContainer
-                                            )
-                                            IconButton(
-                                                onClick = { viewModel.resetPlayState() },
-                                                modifier = Modifier.size(32.dp)
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 11.dp, vertical = 9.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                                             ) {
                                                 Icon(
-                                                    Icons.Default.Close,
-                                                    contentDescription = "关闭播放错误",
+                                                    Icons.Default.Refresh,
+                                                    contentDescription = null,
                                                     modifier = Modifier.size(18.dp),
-                                                    tint = MaterialTheme.colorScheme.onErrorContainer
+                                                    tint = MaterialTheme.colorScheme.error
                                                 )
+                                                Text(
+                                                    text = playState.message,
+                                                    modifier = Modifier.weight(1f),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                                )
+                                                IconButton(
+                                                    onClick = { viewModel.resetPlayState() },
+                                                    modifier = Modifier.size(32.dp)
+                                                ) {
+                                                    Icon(
+                                                        Icons.Default.Close,
+                                                        contentDescription = "关闭播放错误",
+                                                        modifier = Modifier.size(18.dp),
+                                                        tint = MaterialTheme.colorScheme.onErrorContainer
+                                                    )
+                                                }
                                             }
                                         }
                                     }
                                 }
+                                else -> Unit
                             }
-                            else -> Unit
-                        }
-                        if (state.videos.isEmpty()) {
-                            item {
-                                EmptyVideoState(onRefresh = { viewModel.getVideoList(viewModel.courseId) })
-                            }
-                        }
-                        items(state.videos, key = { it.id }) { video ->
-                            val isCompleted = viewModel.progress?.completedSectionIds?.contains(video.id) == true
-                            val isResolvingVideo = viewModel.playState is PlayState.Loading
-                            val isUpdatingCompletion = video.id in viewModel.updatingCompletionSectionIds
-                            VideoCard(
-                                section = video,
-                                isCompleted = isCompleted,
-                                isResolvingVideo = isResolvingVideo,
-                                isUpdatingCompletion = isUpdatingCompletion,
-                                onCompletedChange = { checked ->
-                                    viewModel.setSectionCompleted(video, checked)
-                                },
-                                onAiAssistantClick = {
-                                    selectedSection = video
-                                    noteInput = ""
-                                },
-                                onCameraPlayClick = {
-                                    viewModel.playSection(video, preferScreen = false)
-                                },
-                                onScreenPlayClick = {
-                                    viewModel.playSection(video, preferScreen = true)
+                            if (state.videos.isEmpty()) {
+                                item {
+                                    EmptyVideoState(onRefresh = { viewModel.getVideoList(viewModel.courseId) })
                                 }
-                            )
+                            }
+                            items(state.videos, key = { it.id }) { video ->
+                                val isCompleted = viewModel.progress?.completedSectionIds?.contains(video.id) == true
+                                val isResolvingVideo = viewModel.playState is PlayState.Loading
+                                val isUpdatingCompletion = video.id in viewModel.updatingCompletionSectionIds
+                                VideoCard(
+                                    section = video,
+                                    isCompleted = isCompleted,
+                                    isResolvingVideo = isResolvingVideo,
+                                    isUpdatingCompletion = isUpdatingCompletion,
+                                    onCompletedChange = { checked ->
+                                        viewModel.setSectionCompleted(video, checked)
+                                    },
+                                    onAiAssistantClick = {
+                                        selectedSection = video
+                                        noteInput = ""
+                                    },
+                                    onCameraPlayClick = {
+                                        viewModel.playSection(video, preferScreen = false)
+                                    },
+                                    onScreenPlayClick = {
+                                        viewModel.playSection(video, preferScreen = true)
+                                    }
+                                )
+                            }
                         }
                     }
                 }
             }
-        }
         }
     }
 
@@ -413,6 +395,31 @@ fun CourseVideoListScreen(
 }
 
 @Composable
+private fun VideoResolvingStatus() {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(16.dp),
+                strokeWidth = 2.dp
+            )
+            Text(
+                text = "正在获取视频地址...",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSecondaryContainer
+            )
+        }
+    }
+}
+
+@Composable
 private fun VideoListMessageState(
     title: String,
     message: String,
@@ -542,13 +549,14 @@ fun VideoCard(
     ) {
         Column(
             modifier = Modifier
-                .padding(horizontal = 11.dp, vertical = 10.dp)
+                .padding(horizontal = 10.dp, vertical = 8.dp)
                 .fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(7.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Top
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Column(
                     modifier = Modifier.weight(1f),
@@ -561,21 +569,12 @@ fun VideoCard(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
-                    if (hasTitle) {
-                        Text(
-                            text = timeInfo,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
                 }
                 Checkbox(
                     checked = isCompleted,
                     onCheckedChange = onCompletedChange,
                     enabled = !isUpdatingCompletion,
-                    modifier = Modifier.size(36.dp)
+                    modifier = Modifier.size(32.dp)
                 )
             }
 
@@ -584,48 +583,84 @@ fun VideoCard(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                VideoMetaPill(
+                    text = if (hasTitle) timeInfo else "课程录像",
+                    isCompleted = isCompleted,
+                    modifier = Modifier.weight(1f)
+                )
                 FilledIconButton(
                     onClick = onAiAssistantClick,
-                    modifier = Modifier.size(36.dp),
+                    modifier = Modifier.size(34.dp),
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Psychology,
                         contentDescription = "课程助手",
-                        modifier = Modifier.size(19.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
 
                 FilledIconButton(
                     onClick = onCameraPlayClick,
                     enabled = canClickPlay,
-                    modifier = Modifier.size(36.dp),
+                    modifier = Modifier.size(34.dp),
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Camera,
                         contentDescription = "播放摄像头视频",
-                        modifier = Modifier.size(19.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
 
                 FilledIconButton(
                     onClick = onScreenPlayClick,
                     enabled = canClickPlay,
-                    modifier = Modifier.size(36.dp),
+                    modifier = Modifier.size(34.dp),
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.PlayArrow,
                         contentDescription = "播放屏幕录像",
-                        modifier = Modifier.size(19.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun VideoMetaPill(
+    text: String,
+    isCompleted: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.heightIn(min = 30.dp),
+        shape = RoundedCornerShape(7.dp),
+        color = if (isCompleted) {
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.56f)
+        } else {
+            MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.36f)
+        },
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.38f))
+    ) {
+        Text(
+            text = if (isCompleted) "已完成 · $text" else text,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = if (isCompleted) {
+                MaterialTheme.colorScheme.onPrimaryContainer
+            } else {
+                MaterialTheme.colorScheme.onSecondaryContainer
+            },
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
