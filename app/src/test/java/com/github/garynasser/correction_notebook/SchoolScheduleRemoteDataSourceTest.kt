@@ -44,4 +44,29 @@ class SchoolScheduleRemoteDataSourceTest {
         assertEquals(listOf(1, 2, 3), courses.first().weeks)
         assertEquals("综教 A101", courses.first().location)
     }
+
+    @Test
+    fun parseCoursesHandlesCompactSectionCodeFromSchoolSystem() {
+        val root = JsonParser.parseString(
+            """
+            {
+              "cxxszhxqkb": [
+                {
+                  "KCMC": "机器学习",
+                  "SKXQ": "4",
+                  "JCDM": "1112",
+                  "SKZC": "1-16周",
+                  "JASMC": "文萃楼 F702"
+                }
+              ]
+            }
+            """.trimIndent()
+        ).asJsonObject
+
+        val courses = dataSource.parseCourses(root)
+
+        assertEquals(1, courses.size)
+        assertEquals(11, courses.first().startSection)
+        assertEquals(12, courses.first().endSection)
+    }
 }
