@@ -1718,32 +1718,33 @@ fun TodayStudyWorkbench(
     LaunchedEffect(Unit) {
         while (true) {
             currentTime.value = java.time.LocalTime.now()
-            kotlinx.coroutines.delay(1000)
+            val millisUntilNextMinute = 60_000L - (System.currentTimeMillis() % 60_000L)
+            kotlinx.coroutines.delay(millisUntilNextMinute.coerceIn(1_000L, 60_000L))
         }
     }
 
     FreshGradientCard(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 164.dp)
+            .heightIn(min = 148.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(11.dp)
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(9.dp)
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Text(
                     text = "今天的学习节奏",
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f)
                 )
                 Text(
-                    text = currentTime.value.format(DateTimeFormatter.ofPattern("HH:mm:ss")),
-                    fontSize = 44.sp,
+                    text = currentTime.value.format(DateTimeFormatter.ofPattern("HH:mm")),
+                    fontSize = 34.sp,
                     fontWeight = FontWeight.Bold,
-                    lineHeight = 48.sp,
+                    lineHeight = 38.sp,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
                 Text(
@@ -1760,7 +1761,7 @@ fun TodayStudyWorkbench(
             ) {
                 Surface(
                     modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(8.dp),
                     color = MaterialTheme.colorScheme.surface.copy(alpha = 0.62f)
                 ) {
                     Text(
@@ -1771,7 +1772,7 @@ fun TodayStudyWorkbench(
                             append(completedPomodoros)
                             append(" 个番茄钟")
                         },
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f)
                     )
