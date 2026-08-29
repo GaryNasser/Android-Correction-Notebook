@@ -12,14 +12,14 @@ class HomeScheduleTextTest {
             良乡校区 备用教室
         """.trimIndent()
 
-        assertEquals("文萃楼 F602", rawLocation.toGridLocationText())
+        assertEquals("文萃楼\nF602", rawLocation.toGridLocationText())
     }
 
     @Test
-    fun gridLocationTextKeepsSpacesForNaturalWrapping() {
+    fun gridLocationTextWrapsAtSpacesForNarrowCourseBlocks() {
         val rawLocation = "  游泳馆   浅水区   南侧  "
 
-        assertEquals("游泳馆 浅水区 南侧", rawLocation.toGridLocationText())
+        assertEquals("游泳馆\n浅水区\n南侧", rawLocation.toGridLocationText())
     }
 
     @Test
