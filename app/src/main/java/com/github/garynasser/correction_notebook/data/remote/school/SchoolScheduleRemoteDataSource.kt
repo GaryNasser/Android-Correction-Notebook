@@ -4,6 +4,7 @@ import androidx.core.net.toUri
 import com.github.garynasser.correction_notebook.data.model.school.SchoolCourseRaw
 import com.github.garynasser.correction_notebook.data.model.school.SchoolScheduleException
 import com.github.garynasser.correction_notebook.data.model.school.SchoolTerm
+import com.github.garynasser.correction_notebook.data.model.school.SchoolTermSchedule
 import com.github.garynasser.correction_notebook.data.remote.cas.BitCasClient
 import com.github.garynasser.correction_notebook.di.BasicRetrofit
 import com.google.gson.JsonElement
@@ -38,9 +39,7 @@ class SchoolScheduleRemoteDataSource @Inject constructor(
 
     suspend fun getCurrentTerm(studentId: String, password: String): SchoolTerm = withContext(Dispatchers.IO) {
         establishSession(studentId, password)
-        val json = getJson(CURRENT_TERM_URL)
-        parseTerms(json, currentOnly = true).firstOrNull()
-            ?: throw SchoolScheduleException("学校系统没有返回当前学期")
+        parseCurrentTerm(getJson(CURRENT_TERM_URL))
     }
 
     suspend fun getTerms(studentId: String, password: String): List<SchoolTerm> = withContext(Dispatchers.IO) {
@@ -48,8 +47,21 @@ class SchoolScheduleRemoteDataSource @Inject constructor(
         parseTerms(getJson(TERMS_URL), currentOnly = false)
     }
 
+    suspend fun getCurrentTermSchedule(studentId: String, password: String): SchoolTermSchedule = withContext(Dispatchers.IO) {
+        establishSession(studentId, password)
+        val term = parseCurrentTerm(getJson(CURRENT_TERM_URL))
+        SchoolTermSchedule(
+            term = term,
+            courses = fetchSchedule(term.id)
+        )
+    }
+
     suspend fun getSchedule(studentId: String, password: String, termId: String): List<SchoolCourseRaw> = withContext(Dispatchers.IO) {
         establishSession(studentId, password)
+        fetchSchedule(termId)
+    }
+
+    private fun fetchSchedule(termId: String): List<SchoolCourseRaw> {
         val body = FormBody.Builder()
             .add("XNXQDM", termId)
             .add("xnxqdm", termId)
@@ -59,7 +71,7 @@ class SchoolScheduleRemoteDataSource @Inject constructor(
             .headers(defaultHeaders())
             .post(body)
             .build()
-        parseCourses(executeJsonRequest(request))
+        return parseCourses(executeJsonRequest(request))
     }
 
     private suspend fun establishSession(studentId: String, password: String) {
@@ -102,6 +114,11 @@ class SchoolScheduleRemoteDataSource @Inject constructor(
             return runCatching { JsonParser.parseString(body).asJsonObject }
                 .getOrElse { throw SchoolScheduleException("学校课表格式暂不支持，已保留本地日程", it) }
         }
+    }
+
+    private fun parseCurrentTerm(root: JsonObject): SchoolTerm {
+        return parseTerms(root, currentOnly = true).firstOrNull()
+            ?: throw SchoolScheduleException("学校系统没有返回当前学期")
     }
 
     private fun parseTerms(root: JsonObject, currentOnly: Boolean): List<SchoolTerm> {

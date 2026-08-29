@@ -24,6 +24,11 @@ data class SchoolCourseRaw(
     val extraDescription: String = ""
 )
 
+data class SchoolTermSchedule(
+    val term: SchoolTerm,
+    val courses: List<SchoolCourseRaw>
+)
+
 data class SchoolScheduleSyncResult(
     val termId: String,
     val termName: String,
