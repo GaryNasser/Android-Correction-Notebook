@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -86,7 +87,7 @@ fun HomeScreen(
     val timerState by homeViewModel.timerManager.timerState.collectAsStateWithLifecycle()
     var showCustomTimer by remember { mutableStateOf(false) }
     var startPomodoroAfterSettings by remember { mutableStateOf(false) }
-    var activeMainTab by remember { mutableStateOf(HomeMainTab.BIT) }
+    var activeMainTab by rememberSaveable { mutableStateOf(HomeMainTab.BIT) }
     val context = LocalContext.current
     val listState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
