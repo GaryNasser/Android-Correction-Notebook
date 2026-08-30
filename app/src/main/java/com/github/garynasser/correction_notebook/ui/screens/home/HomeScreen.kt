@@ -916,12 +916,26 @@ internal fun String.toGridLocationText(): String {
         ?.destructured
         ?.let { (building, room) ->
             if (Regex("""[\u4E00-\u9FFF]""").containsMatchIn(building)) {
-                listOf(building, room).filter(String::isNotBlank).joinToString("\n")
+                (building.toSemanticLocationParts() + room)
+                    .filter(String::isNotBlank)
+                    .joinToString("\n")
             } else {
                 firstAddressLine
             }
         }
-        ?: firstAddressLine
+        ?: firstAddressLine.toSemanticLocationParts().joinToString("\n")
+}
+
+private fun String.toSemanticLocationParts(): List<String> {
+    val compact = trim()
+    if (compact.isBlank()) return emptyList()
+    val campusMatch = Regex("""^(.+?校区)(.+)$""").matchEntire(compact)
+    return campusMatch
+        ?.destructured
+        ?.let { (campus, rest) ->
+            listOf(campus, rest.trim()).filter(String::isNotBlank)
+        }
+        ?: listOf(compact)
 }
 
 internal fun LocalDate.toBitWeekStart(): LocalDate {
