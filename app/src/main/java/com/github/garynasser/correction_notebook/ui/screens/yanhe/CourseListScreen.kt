@@ -589,7 +589,7 @@ fun CourseCard(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(52.dp)
+                    .aspectRatio(16f / 9f)
                     .background(
                         Brush.linearGradient(
                             listOf(
