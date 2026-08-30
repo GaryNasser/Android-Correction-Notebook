@@ -416,48 +416,35 @@ fun SearchAndFilterSection(viewModel: CourseListViewModel) {
         tonalElevation = 1.dp
     ) {
         Column(modifier = Modifier.padding(7.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                FilterChip(
-                    selected = viewModel.isPersonalCoursesMode,
-                    onClick = {
-                        if (!viewModel.isPersonalCoursesMode) {
-                            viewModel.toggleCourseMode()
-                        }
-                    },
-                    label = { Text("我的课程") },
-                    leadingIcon = {
-                        Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(15.dp))
-                    },
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 34.dp)
-                )
-                FilterChip(
-                    selected = !viewModel.isPersonalCoursesMode,
-                    onClick = {
-                        if (viewModel.isPersonalCoursesMode) {
-                            viewModel.toggleCourseMode()
-                        }
-                    },
-                    label = { Text("全校课程") },
-                    leadingIcon = {
-                        Icon(Icons.Default.Public, contentDescription = null, modifier = Modifier.size(15.dp))
-                    },
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 34.dp)
-                )
-                SemesterMenu(
-                    selectedSemester = viewModel.selectedSemester,
-                    semesters = viewModel.semesters,
-                    expanded = viewModel.expanded,
-                    onExpandedChange = { viewModel.expanded = it },
-                    onSemesterSelected = viewModel::selectSemester,
-                    modifier = Modifier.weight(1.25f)
-                )
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                if (shouldStackCourseFilters(maxWidth.value)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        CourseModeFilterRow(viewModel = viewModel, modifier = Modifier.fillMaxWidth())
+                        SemesterMenu(
+                            selectedSemester = viewModel.selectedSemester,
+                            semesters = viewModel.semesters,
+                            expanded = viewModel.expanded,
+                            onExpandedChange = { viewModel.expanded = it },
+                            onSemesterSelected = viewModel::selectSemester,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        CourseModeFilterRow(viewModel = viewModel, modifier = Modifier.weight(2f))
+                        SemesterMenu(
+                            selectedSemester = viewModel.selectedSemester,
+                            semesters = viewModel.semesters,
+                            expanded = viewModel.expanded,
+                            onExpandedChange = { viewModel.expanded = it },
+                            onSemesterSelected = viewModel::selectSemester,
+                            modifier = Modifier.weight(1.25f)
+                        )
+                    }
+                }
             }
 
             OutlinedTextField(
@@ -504,6 +491,63 @@ fun SearchAndFilterSection(viewModel: CourseListViewModel) {
             )
         }
     }
+}
+
+@Composable
+private fun CourseModeFilterRow(
+    viewModel: CourseListViewModel,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        CourseModeChip(
+            selected = viewModel.isPersonalCoursesMode,
+            onClick = {
+                if (!viewModel.isPersonalCoursesMode) {
+                    viewModel.toggleCourseMode()
+                }
+            },
+            label = "我的课程",
+            icon = Icons.Default.Person,
+            modifier = Modifier.weight(1f)
+        )
+        CourseModeChip(
+            selected = !viewModel.isPersonalCoursesMode,
+            onClick = {
+                if (viewModel.isPersonalCoursesMode) {
+                    viewModel.toggleCourseMode()
+                }
+            },
+            label = "全校课程",
+            icon = Icons.Default.Public,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+private fun CourseModeChip(
+    selected: Boolean,
+    onClick: () -> Unit,
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    modifier: Modifier = Modifier
+) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(label, maxLines = 1) },
+        leadingIcon = {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(15.dp))
+        },
+        modifier = modifier.heightIn(min = 34.dp)
+    )
+}
+
+internal fun shouldStackCourseFilters(availableWidthDp: Float): Boolean {
+    return availableWidthDp < 420f
 }
 
 @Composable
