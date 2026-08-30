@@ -49,6 +49,21 @@ class HomeScheduleTextTest {
     }
 
     @Test
+    fun gridLocationTextSplitsCompactCampusBuildingAndRoomCode() {
+        val rawLocation = """
+            良乡校区文萃楼F602
+            候补教室
+        """.trimIndent()
+
+        assertEquals("良乡校区\n文萃楼\nF602", rawLocation.toGridLocationText())
+    }
+
+    @Test
+    fun gridLocationTextSplitsCompactCampusLocationWithoutRoomCode() {
+        assertEquals("良乡校区\n游泳馆", "良乡校区游泳馆".toGridLocationText())
+    }
+
+    @Test
     fun visibleBitWeekDaysAlwaysStartOnMonday() {
         val friday = LocalDate.of(2026, 7, 3)
 
