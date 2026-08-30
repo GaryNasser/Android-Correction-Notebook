@@ -65,6 +65,7 @@ data class HomeUiState(
     val todoActionError: String? = null,
     val todayStudyMinutes: Int = 0,
     val completedPomodoros: Int = 0,
+    val todayScheduleCount: Int = 0,
     val recentCourseProgress: List<CourseProgress> = emptyList(),
     val recentKnowledgeFiles: List<KnowledgeBaseFileSummary> = emptyList(),
     val dueReviewItems: List<DueReviewItem> = emptyList(),
@@ -212,6 +213,7 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             scheduleRepository.scheduleEvents.collect {
                 refreshScheduleSections()
+                refreshTodayScheduleCount()
                 if (_uiState.value.aiPlanBlocks.isEmpty()) refreshLocalPlan()
             }
         }
@@ -287,15 +289,10 @@ class HomeViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(
             selectedDate = date,
             scheduleRange = ScheduleRange.TODAY,
-            plannerTab = PlannerTab.SCHEDULE,
-            aiAdvice = null,
-            aiActions = emptyList(),
-            aiReferencedMemories = emptyList(),
-            aiPlanBlocks = emptyList()
+            plannerTab = PlannerTab.SCHEDULE
         )
         viewModelScope.launch {
             refreshScheduleSections()
-            refreshLocalPlan()
         }
     }
 
@@ -304,15 +301,10 @@ class HomeViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(
             selectedDate = weekStart,
             scheduleRange = ScheduleRange.WEEK,
-            plannerTab = PlannerTab.SCHEDULE,
-            aiAdvice = null,
-            aiActions = emptyList(),
-            aiReferencedMemories = emptyList(),
-            aiPlanBlocks = emptyList()
+            plannerTab = PlannerTab.SCHEDULE
         )
         viewModelScope.launch {
             refreshScheduleSections()
-            refreshLocalPlan()
         }
     }
 
@@ -331,6 +323,12 @@ class HomeViewModel @Inject constructor(
         val state = _uiState.value
         val sections = scheduleRepository.getEventsForRange(state.scheduleRange, today = state.selectedDate)
         _uiState.value = _uiState.value.copy(scheduleSections = sections)
+    }
+
+    private suspend fun refreshTodayScheduleCount(targetDate: LocalDate = LocalDate.now()) {
+        _uiState.value = _uiState.value.copy(
+            todayScheduleCount = todayScheduleItems(targetDate).size
+        )
     }
 
     fun showAddTodoDialog() {
@@ -363,32 +361,47 @@ class HomeViewModel @Inject constructor(
 
     fun generateTodayAdvice() {
         viewModelScope.launch {
+            val studyDate = LocalDate.now()
             _uiState.value = _uiState.value.copy(
                 isAiAdviceLoading = true,
                 aiErrorMessage = null
             )
-            aiStudyUseCase.generateTodayPlan(_uiState.value.selectedDate)
-                .onSuccess { result ->
-                    _uiState.value = _uiState.value.copy(
-                        aiAdvice = result.summary.ifBlank { result.rawText },
-                        aiPlanBlocks = result.planBlocks.ifEmpty { buildLocalPlanBlocks() },
-                        aiActions = result.actions,
-                        aiReferencedMemories = result.referencedMemories,
-                        isAiAdviceLoading = false
-                    )
+            val result = aiStudyUseCase.generateTodayPlan(studyDate)
+            if (result.isSuccess) {
+                val adviceResult = result.getOrThrow()
+                val localPlanBlocks = if (adviceResult.planBlocks.isEmpty()) {
+                    val scheduleItems = todayScheduleItems(studyDate)
+                    _uiState.value = _uiState.value.copy(todayScheduleCount = scheduleItems.size)
+                    buildLocalPlanBlocks(studyDate, scheduleItems)
+                } else {
+                    adviceResult.planBlocks
                 }
-                .onFailure { throwable ->
-                    _uiState.value = _uiState.value.copy(
-                        isAiAdviceLoading = false,
-                        aiErrorMessage = throwable.message ?: "AI 建议生成失败",
-                        aiPlanBlocks = buildLocalPlanBlocks()
-                    )
-                }
+                _uiState.value = _uiState.value.copy(
+                    aiAdvice = adviceResult.summary.ifBlank { adviceResult.rawText },
+                    aiPlanBlocks = localPlanBlocks,
+                    aiActions = adviceResult.actions,
+                    aiReferencedMemories = adviceResult.referencedMemories,
+                    isAiAdviceLoading = false
+                )
+            } else {
+                val throwable = result.exceptionOrNull()
+                val scheduleItems = todayScheduleItems(studyDate)
+                _uiState.value = _uiState.value.copy(
+                    isAiAdviceLoading = false,
+                    aiErrorMessage = throwable?.message ?: "AI 建议生成失败",
+                    todayScheduleCount = scheduleItems.size,
+                    aiPlanBlocks = buildLocalPlanBlocks(studyDate, scheduleItems)
+                )
+            }
         }
     }
 
-    fun refreshLocalPlan() {
-        _uiState.value = _uiState.value.copy(aiPlanBlocks = buildLocalPlanBlocks())
+    private suspend fun refreshLocalPlan(targetDate: LocalDate = LocalDate.now()) {
+        val scheduleItems = todayScheduleItems(targetDate)
+        _uiState.value = _uiState.value.copy(
+            todayScheduleCount = scheduleItems.size,
+            aiPlanBlocks = buildLocalPlanBlocks(targetDate, scheduleItems)
+        )
     }
 
     fun breakDownTodo(todo: TodoItem) {
@@ -491,15 +504,17 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    private fun buildLocalPlanBlocks(): List<AiPlanBlock> {
+    private fun buildLocalPlanBlocks(
+        targetDate: LocalDate,
+        scheduleItems: List<ScheduleOccurrence>
+    ): List<AiPlanBlock> {
         val state = _uiState.value
-        val scheduleBlocks = state.scheduleSections
-            .flatMap { it.items }
+        val scheduleBlocks = scheduleItems
             .take(2)
             .map {
                 AiPlanBlock(
                     title = it.title,
-                    reason = "来自 ${state.selectedDate.format(DateTimeFormatter.ofPattern("M月d日"))} 课表/日程",
+                    reason = "来自 ${targetDate.format(DateTimeFormatter.ofPattern("M月d日"))} 课表/日程",
                     estimatedMinutes = 45,
                     priority = "HIGH"
                 )
@@ -554,6 +569,11 @@ class HomeViewModel @Inject constructor(
                     )
                 )
             }
+    }
+
+    private suspend fun todayScheduleItems(targetDate: LocalDate): List<ScheduleOccurrence> {
+        return scheduleRepository.getEventsForRange(ScheduleRange.TODAY, today = targetDate)
+            .flatMap { it.items }
     }
 
     fun showAddScheduleDialog() {
