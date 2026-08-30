@@ -962,13 +962,14 @@ internal fun ScheduleOccurrence.toCourseGridPlacement(): CourseGridPlacement? {
     if (allDay) return null
     val startTime = startAt.toLocalTime()
     val endTime = endAt.toLocalTime()
-    if (!endTime.isAfter(COURSE_SECTIONS.first().start) || !startTime.isBefore(COURSE_SECTIONS.last().end)) {
-        return null
-    }
-    val startIndex = COURSE_SECTIONS.indexOfLast { !it.start.isAfter(startTime) }.coerceAtLeast(0)
-    val endIndex = COURSE_SECTIONS.indexOfFirst { !it.end.isBefore(endTime) }
-        .takeIf { it >= 0 }
-        ?: startIndex
+    val overlappingSectionIndices = COURSE_SECTIONS
+        .mapIndexedNotNull { index, section ->
+            index.takeIf { startTime.isBefore(section.end) && endTime.isAfter(section.start) }
+        }
+    if (overlappingSectionIndices.isEmpty()) return null
+
+    val startIndex = overlappingSectionIndices.first()
+    val endIndex = overlappingSectionIndices.last()
     return CourseGridPlacement(
         startIndex = startIndex,
         span = (endIndex - startIndex + 1).coerceAtLeast(1)

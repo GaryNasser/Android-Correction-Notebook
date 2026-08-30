@@ -88,6 +88,26 @@ class HomeScheduleTextTest {
     }
 
     @Test
+    fun courseGridPlacementSkipsBreakOnlyItems() {
+        assertNull(
+            sampleOccurrence(
+                startAt = LocalDateTime.of(2026, 7, 3, 12, 30),
+                endAt = LocalDateTime.of(2026, 7, 3, 13, 0)
+            ).toCourseGridPlacement()
+        )
+    }
+
+    @Test
+    fun courseGridPlacementUsesOnlyActuallyOverlappedSections() {
+        val placement = sampleOccurrence(
+            startAt = LocalDateTime.of(2026, 7, 3, 13, 0),
+            endAt = LocalDateTime.of(2026, 7, 3, 13, 30)
+        ).toCourseGridPlacement()
+
+        assertEquals(CourseGridPlacement(startIndex = 5, span = 1), placement)
+    }
+
+    @Test
     fun courseGridPlacementMapsNormalCourseSections() {
         val placement = sampleOccurrence(
             startAt = LocalDateTime.of(2026, 7, 3, 13, 20),
