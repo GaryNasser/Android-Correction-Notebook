@@ -937,7 +937,7 @@ private data class CourseSectionSlot(
     val end: java.time.LocalTime
 )
 
-private data class CourseGridPlacement(
+internal data class CourseGridPlacement(
     val startIndex: Int,
     val span: Int
 )
@@ -958,10 +958,13 @@ private val COURSE_SECTIONS = listOf(
     CourseSectionSlot(13, java.time.LocalTime.of(20, 10), java.time.LocalTime.of(20, 55))
 )
 
-private fun ScheduleOccurrence.toCourseGridPlacement(): CourseGridPlacement? {
-    if (allDay) return CourseGridPlacement(startIndex = 0, span = 1)
+internal fun ScheduleOccurrence.toCourseGridPlacement(): CourseGridPlacement? {
+    if (allDay) return null
     val startTime = startAt.toLocalTime()
     val endTime = endAt.toLocalTime()
+    if (!endTime.isAfter(COURSE_SECTIONS.first().start) || !startTime.isBefore(COURSE_SECTIONS.last().end)) {
+        return null
+    }
     val startIndex = COURSE_SECTIONS.indexOfLast { !it.start.isAfter(startTime) }.coerceAtLeast(0)
     val endIndex = COURSE_SECTIONS.indexOfFirst { !it.end.isBefore(endTime) }
         .takeIf { it >= 0 }

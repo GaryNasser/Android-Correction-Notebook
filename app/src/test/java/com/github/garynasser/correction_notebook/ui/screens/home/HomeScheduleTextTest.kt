@@ -1,8 +1,12 @@
 package com.github.garynasser.correction_notebook.ui.screens.home
 
+import com.github.garynasser.correction_notebook.data.model.home.ScheduleOccurrence
+import com.github.garynasser.correction_notebook.data.model.home.ScheduleSourceType
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 import java.time.LocalDate
+import java.time.LocalDateTime
 
 class HomeScheduleTextTest {
     @Test
@@ -59,6 +63,55 @@ class HomeScheduleTextTest {
                 LocalDate.of(2026, 7, 5)
             ),
             visibleBitWeekDays(friday)
+        )
+    }
+
+    @Test
+    fun courseGridPlacementSkipsAllDayItems() {
+        assertNull(sampleOccurrence(allDay = true).toCourseGridPlacement())
+    }
+
+    @Test
+    fun courseGridPlacementSkipsItemsOutsideCourseSections() {
+        assertNull(
+            sampleOccurrence(
+                startAt = LocalDateTime.of(2026, 7, 3, 7, 0),
+                endAt = LocalDateTime.of(2026, 7, 3, 8, 0)
+            ).toCourseGridPlacement()
+        )
+        assertNull(
+            sampleOccurrence(
+                startAt = LocalDateTime.of(2026, 7, 3, 20, 55),
+                endAt = LocalDateTime.of(2026, 7, 3, 22, 0)
+            ).toCourseGridPlacement()
+        )
+    }
+
+    @Test
+    fun courseGridPlacementMapsNormalCourseSections() {
+        val placement = sampleOccurrence(
+            startAt = LocalDateTime.of(2026, 7, 3, 13, 20),
+            endAt = LocalDateTime.of(2026, 7, 3, 14, 55)
+        ).toCourseGridPlacement()
+
+        assertEquals(CourseGridPlacement(startIndex = 5, span = 2), placement)
+    }
+
+    private fun sampleOccurrence(
+        startAt: LocalDateTime = LocalDateTime.of(2026, 7, 3, 8, 0),
+        endAt: LocalDateTime = LocalDateTime.of(2026, 7, 3, 8, 45),
+        allDay: Boolean = false
+    ): ScheduleOccurrence {
+        return ScheduleOccurrence(
+            occurrenceId = "occurrence",
+            eventId = "event",
+            title = "测试课程",
+            description = "",
+            location = "文萃楼F602",
+            startAt = startAt,
+            endAt = endAt,
+            allDay = allDay,
+            sourceType = ScheduleSourceType.MANUAL
         )
     }
 }
