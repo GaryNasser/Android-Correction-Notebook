@@ -7,6 +7,7 @@ import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitSha
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitShareFolderSummary
 import com.github.garynasser.correction_notebook.data.remote.api.BitShareApiService
 import com.github.garynasser.correction_notebook.utils.BitShareNetworkDetector
+import com.github.garynasser.correction_notebook.utils.runCatchingCancellable
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.ResponseBody
@@ -28,7 +29,7 @@ class BitShareRepository @Inject constructor(
     suspend fun searchFiles(
         query: String,
         sortOption: BitShareSortOption
-    ): Result<List<BitShareSearchResult>> = runCatching {
+    ): Result<List<BitShareSearchResult>> = runCatchingCancellable {
         if (query.isBlank()) {
             emptyList()
         } else {
@@ -65,7 +66,7 @@ class BitShareRepository @Inject constructor(
     /**
      * 获取目录详情
      */
-    suspend fun getFolderDetail(folderId: String): Result<BitShareFolderDetail> = runCatching {
+    suspend fun getFolderDetail(folderId: String): Result<BitShareFolderDetail> = runCatchingCancellable {
         val detail = apiService.getFolderDetail(folderId)
         BitShareFolderDetail(
             id = detail.id,
@@ -88,7 +89,7 @@ class BitShareRepository @Inject constructor(
     /**
      * 获取子目录列表
      */
-    suspend fun getSubFolders(parentId: String?): Result<List<BitShareFolderSummary>> = runCatching {
+    suspend fun getSubFolders(parentId: String?): Result<List<BitShareFolderSummary>> = runCatchingCancellable {
         apiService.getFolders(parentId).items.map { folder ->
             BitShareFolderSummary(
                 id = folder.id,
@@ -105,11 +106,11 @@ class BitShareRepository @Inject constructor(
     /**
      * 获取根目录列表
      */
-    suspend fun getRootFolders(): Result<List<BitShareFolderSummary>> = runCatching {
+    suspend fun getRootFolders(): Result<List<BitShareFolderSummary>> = runCatchingCancellable {
         getSubFolders(null).getOrThrow()
     }
 
-    suspend fun getFileDetail(fileId: String): Result<BitShareFileDetail> = runCatching {
+    suspend fun getFileDetail(fileId: String): Result<BitShareFileDetail> = runCatchingCancellable {
         val detail = apiService.getFileDetail(fileId)
         BitShareFileDetail(
             id = detail.id,
@@ -126,11 +127,11 @@ class BitShareRepository @Inject constructor(
     }
 
     suspend fun downloadFile(fileId: String): Result<ResponseBody> {
-        val primaryAttempt = runCatching { apiService.downloadFile(fileId) }
-            .mapCatching { body ->
-                validateDownloadBody(body)
-                body
-            }
+        val primaryAttempt = runCatchingCancellable {
+            val body = apiService.downloadFile(fileId)
+            validateDownloadBody(body)
+            body
+        }
 
         if (primaryAttempt.isSuccess) {
             return primaryAttempt
@@ -140,7 +141,7 @@ class BitShareRepository @Inject constructor(
         primaryAttempt.exceptionOrNull()?.message?.let(fallbackErrorMessages::add)
 
         buildDownloadCandidateUrls(fileId).forEach { url ->
-            val attempt = runCatching {
+            val attempt = runCatchingCancellable {
                 okHttpClient.newCall(
                     Request.Builder()
                         .url(url)

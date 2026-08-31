@@ -15,6 +15,7 @@ import com.github.garynasser.correction_notebook.data.model.studyset.QuizQuestio
 import com.github.garynasser.correction_notebook.data.model.studyset.StudySetQuizItem
 import com.github.garynasser.correction_notebook.data.model.studyset.StudySetDraft
 import com.github.garynasser.correction_notebook.data.model.studyset.StudySetSummary
+import com.github.garynasser.correction_notebook.utils.runCatchingCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import java.util.UUID
@@ -54,7 +55,7 @@ class StudySetRepository @Inject constructor(
         file: KnowledgeBaseFileSummary,
         draft: StudySetDraft,
         createdByAi: Boolean = true
-    ): Result<String> = runCatching {
+    ): Result<String> = runCatchingCancellable {
         val now = System.currentTimeMillis()
         val studySetId = UUID.randomUUID().toString()
         val studySet = StudySetEntity(
@@ -82,7 +83,7 @@ class StudySetRepository @Inject constructor(
         studySetId
     }
 
-    suspend fun markFlashcardReviewed(flashcardId: String, remembered: Boolean): Result<Unit> = runCatching {
+    suspend fun markFlashcardReviewed(flashcardId: String, remembered: Boolean): Result<Unit> = runCatchingCancellable {
         val card = requireNotNull(dao.getFlashcardById(flashcardId)) { "复习卡片不存在" }
         val now = System.currentTimeMillis()
         val delayDays = when {
@@ -113,7 +114,7 @@ class StudySetRepository @Inject constructor(
         formula: String = "",
         tags: List<String> = emptyList(),
         studySetId: String? = null
-    ): Result<String> = runCatching {
+    ): Result<String> = runCatchingCancellable {
         if (type == KnowledgeCardType.QA_FLASHCARD) {
             require(front.isNotBlank()) { "问题不能为空" }
             require(back.isNotBlank()) { "答案不能为空" }
@@ -182,7 +183,7 @@ class StudySetRepository @Inject constructor(
         )
     }
 
-    suspend fun updateKnowledgeCard(item: DueReviewItem): Result<Unit> = runCatching {
+    suspend fun updateKnowledgeCard(item: DueReviewItem): Result<Unit> = runCatchingCancellable {
         val existing = requireNotNull(dao.getFlashcardById(item.flashcardId)) { "知识卡片不存在" }
         dao.updateFlashcard(
             existing.copy(
@@ -206,27 +207,27 @@ class StudySetRepository @Inject constructor(
         )
     }
 
-    suspend fun deleteKnowledgeCard(cardId: String): Result<Unit> = runCatching {
+    suspend fun deleteKnowledgeCard(cardId: String): Result<Unit> = runCatchingCancellable {
         dao.deleteFlashcard(cardId)
     }
 
-    suspend fun renameStudySet(studySetId: String, title: String): Result<Unit> = runCatching {
+    suspend fun renameStudySet(studySetId: String, title: String): Result<Unit> = runCatchingCancellable {
         val cleanTitle = title.trim()
         require(cleanTitle.isNotBlank()) { "学习集名称不能为空" }
         dao.updateStudySetTitle(studySetId, cleanTitle, System.currentTimeMillis())
     }
 
-    suspend fun deleteStudySet(studySetId: String): Result<Unit> = runCatching {
+    suspend fun deleteStudySet(studySetId: String): Result<Unit> = runCatchingCancellable {
         dao.deleteStudySet(studySetId)
     }
 
-    suspend fun mergeStudySets(sourceStudySetIds: List<String>, targetStudySetId: String): Result<Unit> = runCatching {
+    suspend fun mergeStudySets(sourceStudySetIds: List<String>, targetStudySetId: String): Result<Unit> = runCatchingCancellable {
         val sources = sourceStudySetIds.distinct().filter { it != targetStudySetId }
         require(sources.isNotEmpty()) { "请选择要合并的学习集" }
         dao.mergeStudySets(sources, targetStudySetId, System.currentTimeMillis())
     }
 
-    suspend fun moveKnowledgeCard(cardId: String, targetStudySetId: String): Result<Unit> = runCatching {
+    suspend fun moveKnowledgeCard(cardId: String, targetStudySetId: String): Result<Unit> = runCatchingCancellable {
         val card = requireNotNull(dao.getFlashcardById(cardId)) { "知识卡片不存在" }
         require(card.studySetId != targetStudySetId) { "卡片已经在这个学习集中" }
         dao.moveCardToStudySet(cardId, card.studySetId, targetStudySetId, System.currentTimeMillis())

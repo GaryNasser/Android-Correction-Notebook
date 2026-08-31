@@ -2,6 +2,7 @@ package com.github.garynasser.correction_notebook.data.repository
 
 import android.content.Context
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.KnowledgeBaseFileSummary
+import com.github.garynasser.correction_notebook.utils.runCatchingCancellable
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -31,7 +32,7 @@ class KnowledgeBasePreviewRenderer @Inject constructor(
 ) {
 
     suspend fun render(file: KnowledgeBaseFileSummary): Result<RenderedPreview> = withContext(Dispatchers.IO) {
-        runCatching {
+        runCatchingCancellable {
             val source = File(file.localPath)
             require(source.exists()) { "文件不存在" }
 

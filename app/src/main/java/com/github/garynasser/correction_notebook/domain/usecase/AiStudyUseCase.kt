@@ -17,6 +17,7 @@ import com.github.garynasser.correction_notebook.data.repository.MemoryRepositor
 import com.github.garynasser.correction_notebook.data.repository.ScheduleRepository
 import com.github.garynasser.correction_notebook.data.repository.StudySessionRepository
 import com.github.garynasser.correction_notebook.data.repository.TodoRepository
+import com.github.garynasser.correction_notebook.utils.runCatchingCancellable
 import kotlinx.coroutines.flow.first
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -270,7 +271,7 @@ class AiStudyUseCase @Inject constructor(
         )
     }
 
-    suspend fun saveMemory(category: String, content: String): Result<Unit> = runCatching {
+    suspend fun saveMemory(category: String, content: String): Result<Unit> = runCatchingCancellable {
         memoryRepository.saveMemory(
             UserMemoryEntity(
                 category = normalizeMemoryCategory(category),
