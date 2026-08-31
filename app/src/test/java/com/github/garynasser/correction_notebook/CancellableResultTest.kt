@@ -1,6 +1,6 @@
 package com.github.garynasser.correction_notebook
 
-import com.github.garynasser.correction_notebook.data.remote.ai.runCatchingCancellable
+import com.github.garynasser.correction_notebook.utils.runCatchingCancellable
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals

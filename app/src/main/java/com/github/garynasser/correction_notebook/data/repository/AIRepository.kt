@@ -11,7 +11,7 @@ import com.github.garynasser.correction_notebook.data.model.ai.NormalizedChatMes
 import com.github.garynasser.correction_notebook.data.model.ai.NormalizedChatRequest
 import com.github.garynasser.correction_notebook.data.remote.ai.AnthropicCompatibleAdapter
 import com.github.garynasser.correction_notebook.data.remote.ai.OpenAiCompatibleAdapter
-import com.github.garynasser.correction_notebook.data.remote.ai.runCatchingCancellable
+import com.github.garynasser.correction_notebook.utils.runCatchingCancellable
 import com.google.gson.Gson
 import com.google.gson.JsonParser
 import kotlinx.coroutines.flow.first

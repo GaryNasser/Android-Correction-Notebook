@@ -7,6 +7,8 @@ import com.github.garynasser.correction_notebook.data.model.ai.ChatMessage
 import com.github.garynasser.correction_notebook.data.model.ai.NormalizedChatRequest
 import com.github.garynasser.correction_notebook.data.model.ai.NormalizedChatResponse
 import com.github.garynasser.correction_notebook.data.remote.api.AIApiService
+import com.github.garynasser.correction_notebook.utils.recoverCancellable
+import com.github.garynasser.correction_notebook.utils.runCatchingCancellable
 import com.google.gson.Gson
 import javax.inject.Inject
 import javax.inject.Singleton

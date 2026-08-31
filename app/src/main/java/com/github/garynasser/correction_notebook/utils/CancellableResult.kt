@@ -1,4 +1,4 @@
-package com.github.garynasser.correction_notebook.data.remote.ai
+package com.github.garynasser.correction_notebook.utils
 
 import kotlinx.coroutines.CancellationException
 

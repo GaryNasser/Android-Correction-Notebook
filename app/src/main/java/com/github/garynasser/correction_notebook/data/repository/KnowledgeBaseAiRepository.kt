@@ -3,6 +3,7 @@ package com.github.garynasser.correction_notebook.data.repository
 import com.github.garynasser.correction_notebook.data.local.knowledgebase.KnowledgeBaseChunkEntity
 import com.github.garynasser.correction_notebook.data.local.knowledgebase.KnowledgeBaseDao
 import com.github.garynasser.correction_notebook.data.local.knowledgebase.KnowledgeBaseFileEntity
+import com.github.garynasser.correction_notebook.utils.runCatchingCancellable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.w3c.dom.Element
@@ -26,14 +27,14 @@ class KnowledgeBaseAiRepository @Inject constructor(
     private val dao: KnowledgeBaseDao
 ) {
     suspend fun rebuildIndexForFile(fileId: String): Result<Int> = withContext(Dispatchers.IO) {
-        runCatching {
+        runCatchingCancellable {
             val file = requireNotNull(dao.getFileById(fileId)) { "文件不存在" }
             rebuildIndexForFile(file)
         }
     }
 
     suspend fun rebuildAllIndexes(folderId: String? = null): Result<Int> = withContext(Dispatchers.IO) {
-        runCatching {
+        runCatchingCancellable {
             val files = folderId?.let { dao.getFilesForFolder(it) } ?: dao.getAllFiles()
             files.sumOf { rebuildIndexForFile(it) }
         }
@@ -100,7 +101,7 @@ class KnowledgeBaseAiRepository @Inject constructor(
     }
 
     suspend fun indexStatus(fileId: String): Result<Int> = withContext(Dispatchers.IO) {
-        runCatching { dao.countChunksForFile(fileId) }
+        runCatchingCancellable { dao.countChunksForFile(fileId) }
     }
 
     private suspend fun rebuildIndexForFile(file: KnowledgeBaseFileEntity): Int {

@@ -16,6 +16,7 @@ import com.github.garynasser.correction_notebook.data.model.knowledgebase.Knowle
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import com.github.garynasser.correction_notebook.utils.runCatchingCancellable
 import java.io.File
 import java.util.UUID
 import javax.inject.Inject
@@ -110,7 +111,7 @@ class KnowledgeBaseRepository @Inject constructor(
         }
     }
 
-    suspend fun createFolder(parentId: String?, name: String): Result<Unit> = runCatching {
+    suspend fun createFolder(parentId: String?, name: String): Result<Unit> = runCatchingCancellable {
         val normalizedName = name.trim()
         require(normalizedName.isNotEmpty()) { "文件夹名称不能为空" }
 
@@ -127,7 +128,7 @@ class KnowledgeBaseRepository @Inject constructor(
         fileStorage.ensureFolderPath(getFolderPathIds(folder.id))
     }
 
-    suspend fun renameFolder(folderId: String, newName: String): Result<Unit> = runCatching {
+    suspend fun renameFolder(folderId: String, newName: String): Result<Unit> = runCatchingCancellable {
         val folder = requireNotNull(dao.getFolderById(folderId)) { "文件夹不存在" }
         val normalizedName = newName.trim()
         require(normalizedName.isNotEmpty()) { "文件夹名称不能为空" }
@@ -140,7 +141,7 @@ class KnowledgeBaseRepository @Inject constructor(
         )
     }
 
-    suspend fun deleteFolder(folderId: String): Result<Unit> = runCatching {
+    suspend fun deleteFolder(folderId: String): Result<Unit> = runCatchingCancellable {
         val folder = requireNotNull(dao.getFolderById(folderId)) { "文件夹不存在" }
         val childFolderCount = dao.countFoldersByParent(folderId)
         val childFileCount = dao.countFilesByFolder(folderId)
@@ -150,7 +151,7 @@ class KnowledgeBaseRepository @Inject constructor(
         fileStorage.deleteFolder(getFolderPathIds(folderId))
     }
 
-    suspend fun renameFile(fileId: String, newName: String): Result<Unit> = runCatching {
+    suspend fun renameFile(fileId: String, newName: String): Result<Unit> = runCatchingCancellable {
         val file = requireNotNull(dao.getFileById(fileId)) { "文件不存在" }
         val normalizedName = newName.trim()
         require(normalizedName.isNotEmpty()) { "文件名不能为空" }
@@ -163,7 +164,7 @@ class KnowledgeBaseRepository @Inject constructor(
         )
     }
 
-    suspend fun moveFile(fileId: String, targetFolderId: String?): Result<Unit> = runCatching {
+    suspend fun moveFile(fileId: String, targetFolderId: String?): Result<Unit> = runCatchingCancellable {
         val file = requireNotNull(dao.getFileById(fileId)) { "文件不存在" }
         val newPath = fileStorage.moveFile(file.localPath, getFolderPathIds(targetFolderId))
 
@@ -176,7 +177,7 @@ class KnowledgeBaseRepository @Inject constructor(
         )
     }
 
-    suspend fun deleteFile(fileId: String): Result<Unit> = runCatching {
+    suspend fun deleteFile(fileId: String): Result<Unit> = runCatchingCancellable {
         val file = requireNotNull(dao.getFileById(fileId)) { "文件不存在" }
         fileStorage.deleteFile(file.localPath)
         dao.deleteFile(file)
@@ -194,7 +195,7 @@ class KnowledgeBaseRepository @Inject constructor(
     suspend fun importLocalFile(
         targetFolderId: String?,
         fileUri: Uri
-    ): Result<Unit> = runCatching {
+    ): Result<Unit> = runCatchingCancellable {
         val resolvedFolderId = targetFolderId.takeUnless { it == ROOT_FOLDER_ID }
         val metadata = resolveImportMetadata(fileUri)
         val now = System.currentTimeMillis()
@@ -238,7 +239,7 @@ class KnowledgeBaseRepository @Inject constructor(
         detail: BitShareFileDetail,
         targetFolderId: String,
         inputBytes: ByteArray
-    ): Result<Unit> = runCatching {
+    ): Result<Unit> = runCatchingCancellable {
         val resolvedFolderId = targetFolderId.takeUnless { it == ROOT_FOLDER_ID }
         val now = System.currentTimeMillis()
         val displayName = resolveUniqueDisplayName(
@@ -284,7 +285,7 @@ class KnowledgeBaseRepository @Inject constructor(
         courseId: Int?,
         courseName: String?,
         tags: List<String>
-    ): Result<Unit> = runCatching {
+    ): Result<Unit> = runCatchingCancellable {
         val file = requireNotNull(dao.getFileById(fileId)) { "文件不存在" }
         dao.updateFile(
             file.copy(
