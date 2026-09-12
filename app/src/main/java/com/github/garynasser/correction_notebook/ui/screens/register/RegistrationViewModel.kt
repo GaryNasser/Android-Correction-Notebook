@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.github.garynasser.correction_notebook.data.model.auth.AuthState
 import com.github.garynasser.correction_notebook.data.model.auth.UserCredential
 import com.github.garynasser.correction_notebook.data.repository.AuthStateManager
+import com.github.garynasser.correction_notebook.data.repository.VideoRepository
 import com.github.garynasser.correction_notebook.data.repository.YanheRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -20,6 +21,7 @@ import javax.inject.Inject
 class RegistrationViewModel @Inject constructor(
     private val yanheRepository: YanheRepository,
     private val authStateManager: AuthStateManager,
+    private val videoRepository: VideoRepository,
 ): ViewModel() {
     var username by mutableStateOf("")
     var password by mutableStateOf("")
@@ -74,6 +76,7 @@ class RegistrationViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
+                videoRepository.clearSessionCache()
                 yanheRepository.saveStudentCredential(UserCredential(trimmedStudentId, casPassword))
                 yanheRepository.getYanheLoginToken().getOrThrow()
                 authStateManager.updateState(AuthState.Authenticated)
@@ -101,6 +104,7 @@ class RegistrationViewModel @Inject constructor(
             } catch (_: Exception) {
                 // Credentials are removed before the token, so startup cannot restore a failed login.
             }
+            videoRepository.clearSessionCache()
             authStateManager.updateState(AuthState.Unauthenticated)
         }
     }

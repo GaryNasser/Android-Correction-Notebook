@@ -13,6 +13,8 @@ import androidx.lifecycle.ViewModel
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController // 必须是这个
 import androidx.media3.session.SessionToken
@@ -39,9 +41,25 @@ class PlayerViewModel @Inject constructor(
     // 状态管理
     private var browserFuture: ListenableFuture<MediaController>? = null
     private var isCleared = false
+    private var resumeOnForeground = false
     var controller = mutableStateOf<MediaController?>(null)
     var playState by mutableStateOf<PlayState>(PlayState.Idle)
         private set
+
+    private val playerListener = object : Player.Listener {
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            playState = when (playbackState) {
+                Player.STATE_BUFFERING -> PlayState.Loading
+                Player.STATE_READY, Player.STATE_ENDED -> PlayState.Success(videoUrl)
+                else -> playState
+            }
+        }
+
+        override fun onPlayerError(error: PlaybackException) {
+            val message = error.message?.takeIf { it.isNotBlank() } ?: "视频流加载失败"
+            playState = PlayState.Error("播放失败: $message")
+        }
+    }
 
     init {
         setupController()
@@ -69,6 +87,7 @@ class PlayerViewModel @Inject constructor(
                 try {
                     val mediaController = future.get()
                     if (shouldIgnoreControllerCallback(future)) return@addListener
+                    mediaController.addListener(playerListener)
                     controller.value = mediaController
                     startPlay(mediaController)
                 } catch (e: InterruptedException) {
@@ -105,7 +124,19 @@ class PlayerViewModel @Inject constructor(
         mediaController.setMediaItem(mediaItem)
         mediaController.prepare()
         mediaController.play()
-        playState = PlayState.Success(videoUrl)
+    }
+
+    fun onHostPause() {
+        val currentController = controller.value
+        resumeOnForeground = currentController?.playWhenReady == true
+        currentController?.pause()
+    }
+
+    fun onHostResume() {
+        if (resumeOnForeground) {
+            controller.value?.play()
+            resumeOnForeground = false
+        }
     }
 
     fun retryPlayback() {
@@ -125,6 +156,7 @@ class PlayerViewModel @Inject constructor(
 
     override fun onCleared() {
         isCleared = true
+        controller.value?.removeListener(playerListener)
         controller.value?.pause()
         controller.value = null
         browserFuture?.let {

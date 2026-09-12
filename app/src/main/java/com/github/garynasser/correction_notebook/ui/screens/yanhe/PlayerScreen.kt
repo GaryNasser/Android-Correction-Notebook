@@ -41,8 +41,8 @@ fun PlayerScreen(
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_PAUSE -> controller?.pause()
-                Lifecycle.Event.ON_RESUME -> controller?.play()
+                Lifecycle.Event.ON_PAUSE -> viewModel.onHostPause()
+                Lifecycle.Event.ON_RESUME -> viewModel.onHostResume()
                 else -> Unit
             }
         }
@@ -96,7 +96,7 @@ fun PlayerScreen(
                 .padding(horizontal = 8.dp, vertical = 8.dp)
                 .align(Alignment.TopStart)
                 .fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(8.dp),
             color = Color.Black.copy(alpha = 0.44f)
         ) {
             Row(

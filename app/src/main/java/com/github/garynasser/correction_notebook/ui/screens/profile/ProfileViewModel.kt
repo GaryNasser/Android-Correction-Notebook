@@ -10,6 +10,7 @@ import com.github.garynasser.correction_notebook.data.model.auth.AuthState
 import com.github.garynasser.correction_notebook.data.repository.AuthStateManager
 import com.github.garynasser.correction_notebook.data.repository.ProviderRecord
 import com.github.garynasser.correction_notebook.data.repository.ProviderRepository
+import com.github.garynasser.correction_notebook.data.repository.VideoRepository
 import com.github.garynasser.correction_notebook.data.repository.YanheRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -31,6 +32,7 @@ class ProfileViewModel @Inject constructor(
     private val providerRepository: ProviderRepository,
     private val aiRepository: AIRepository,
     private val yanheRepository: YanheRepository,
+    private val videoRepository: VideoRepository,
 ) : ViewModel() {
 
     // Auth state
@@ -184,6 +186,7 @@ class ProfileViewModel @Inject constructor(
                     } catch (_: Exception) {
                         false
                     }
+                    videoRepository.clearSessionCache()
                     authStateManager.updateState(AuthState.Unauthenticated)
                     succeeded
                 }

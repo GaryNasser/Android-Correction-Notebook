@@ -5,6 +5,9 @@ import com.github.garynasser.correction_notebook.data.local.TokenManager
 import com.github.garynasser.correction_notebook.data.remote.api.VideoApiService
 import com.github.garynasser.correction_notebook.data.repository.AuthStateManager
 import com.github.garynasser.correction_notebook.data.repository.YanheRepository
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import retrofit2.HttpException
 import javax.inject.Inject
 
 class VideoRemoteManager @Inject constructor(
@@ -14,28 +17,55 @@ class VideoRemoteManager @Inject constructor(
     private val authStateManager: AuthStateManager,
     private val yanheRepository: YanheRepository
 ) {
+    private val tokenRefreshMutex = Mutex()
+
     private suspend fun <T> safeApiCall(block: suspend (String) -> T): T? {
-        var token = tokenManager.getYanheLoginToken()
+        val token = getOrRefreshToken() ?: return null
+        return try {
+            block("Bearer $token")
+        } catch (error: HttpException) {
+            if (error.code() != 401 && error.code() != 403) throw error
+            val refreshedToken = refreshRejectedToken(token) ?: return null
+            block("Bearer $refreshedToken")
+        }
+    }
 
-        if (token == null) {
-            val credential = credentialManager.getCredentials()
+    private suspend fun getOrRefreshToken(): String? {
+        tokenManager.getYanheLoginToken()?.let { return it }
+        return tokenRefreshMutex.withLock {
+            tokenManager.getYanheLoginToken() ?: requestNewToken()
+        }
+    }
 
-            if (credential == null) {
-                authStateManager.onCasLoginRequired()
-                return null
+    private suspend fun refreshRejectedToken(rejectedToken: String): String? {
+        return tokenRefreshMutex.withLock {
+            val currentToken = tokenManager.getYanheLoginToken()
+            if (currentToken != null && currentToken != rejectedToken) {
+                return@withLock currentToken
             }
+            tokenManager.removeYanheLoginToken()
+            requestNewToken()
+        }
+    }
 
-            val loginResult = yanheRepository.getYanheLoginToken()
-            token = tokenManager.getYanheLoginToken()
+    private suspend fun requestNewToken(): String? {
+        val credential = credentialManager.getCredentials()
 
-            if (token == null) {
-                throw IllegalStateException(
-                    loginResult.exceptionOrNull()?.message ?: "延河课堂登录已失效，请重新登录"
-                )
-            }
+        if (credential == null) {
+            authStateManager.onCasLoginRequired()
+            return null
         }
 
-        return block("Bearer $token")
+        val loginResult = yanheRepository.getYanheLoginToken()
+        val token = tokenManager.getYanheLoginToken()
+
+        if (token == null) {
+            throw IllegalStateException(
+                loginResult.exceptionOrNull()?.message ?: "延河课堂登录已失效，请重新登录"
+            )
+        }
+
+        return token
     }
 
     suspend fun getCourseList(

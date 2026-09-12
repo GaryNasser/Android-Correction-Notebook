@@ -84,8 +84,14 @@ class CourseListViewModel @Inject constructor(
         }
         viewModelScope.launch {
             authStateManager.authState.collect { state ->
-                if (state is AuthState.Authenticated && isPersonalCoursesMode && personalCourses.isEmpty()) {
-                    refreshMySchedule()
+                when (state) {
+                    is AuthState.Authenticated -> {
+                        if (isPersonalCoursesMode && personalCourses.isEmpty()) {
+                            refreshMySchedule()
+                        }
+                    }
+                    is AuthState.Unauthenticated -> clearPersonalCourseState()
+                    else -> Unit
                 }
             }
         }
@@ -129,7 +135,12 @@ class CourseListViewModel @Inject constructor(
                 if (result.isEmpty()) {
                     isEndReached = true
                 } else {
-                    courses.addAll(result)
+                    val existingIds = courses.mapTo(mutableSetOf()) { it.id }
+                    courses.addAll(
+                        result
+                            .distinctBy { it.id }
+                            .filterNot { it.id in existingIds }
+                    )
                     currentPage++
                 }
 
@@ -167,7 +178,7 @@ class CourseListViewModel @Inject constructor(
         if (isRefreshingSchedule) return
         isRefreshingSchedule = true
         courseLoadJob?.cancel()
-        viewModelScope.launch {
+        courseLoadJob = viewModelScope.launch {
             uiState = CourseUiState.Loading
             loadMoreErrorMessage = null
             isPersonalCoursesMode = true
@@ -190,12 +201,7 @@ class CourseListViewModel @Inject constructor(
                     personalCourses = loadedCourses
                     semesters = buildPersonalSemesters()
                     selectedSemester = pickLatestSemester(semesters)
-                    if (loadedCourses.isEmpty()) {
-                        courses.clear()
-                        uiState = CourseUiState.Error("已登录延河课堂，但暂时没有获取到我的课程。请重新登录后刷新，或切换到全校课程搜索。")
-                    } else {
-                        applyPersonalCourseFilters()
-                    }
+                    applyPersonalCourseFilters()
                 }.onFailure { throwable ->
                     if (throwable is CancellationException) throw throwable
                     personalCourses = emptyList()
@@ -215,10 +221,6 @@ class CourseListViewModel @Inject constructor(
                 isRefreshingSchedule = false
             }
         }
-    }
-
-    suspend fun logToYanhe() {
-        refreshMySchedule()
     }
 
     fun selectSemester(semester: String) {
@@ -249,6 +251,17 @@ class CourseListViewModel @Inject constructor(
             .toList()
         courses.addAll(filtered)
         uiState = CourseUiState.Success(filtered)
+    }
+
+    private fun clearPersonalCourseState() {
+        personalCourses = emptyList()
+        semesters = listOf("全部学期")
+        selectedSemester = "全部学期"
+        if (isPersonalCoursesMode) {
+            courseLoadJob?.cancel()
+            courses.clear()
+            uiState = CourseUiState.Success(emptyList())
+        }
     }
 
     private fun buildPersonalSemesters(): List<String> {

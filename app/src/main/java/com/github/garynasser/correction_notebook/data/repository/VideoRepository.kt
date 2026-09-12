@@ -33,6 +33,11 @@ class VideoRepository @Inject constructor(
         val expiredAtSeconds: Long
     )
 
+    fun clearSessionCache() {
+        cachedVideoToken = null
+        cachedUserBadge = null
+    }
+
     suspend fun getYanheAuthData(originalUrl: String): YanheAuthData {
         val token = getFreshVideoToken()
         val signature = SignatureUtils.getSignature()
@@ -227,7 +232,7 @@ class VideoRepository @Inject constructor(
             wrapper.stringValue("course_name", ""),
             wrapper.stringValue("courseName", "")
         )
-        if (id == 0 && nameZh.isBlank()) return null
+        if (id <= 0 || nameZh.isBlank()) return null
 
         val schoolYear = firstNonBlank(
             obj.stringValue("school_year", ""),
@@ -479,7 +484,9 @@ class VideoRepository @Inject constructor(
             ?: wrapper.objectValue("course_session")
             ?: wrapper.objectValue("courseSession")
             ?: wrapper
-        return runCatching { gson.fromJson(obj, CourseSection::class.java) }.getOrNull()
+        return runCatching { gson.fromJson(obj, CourseSection::class.java) }
+            .getOrNull()
+            ?.takeIf { it.id > 0 }
     }
 
     /**
