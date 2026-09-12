@@ -44,6 +44,7 @@ data class KnowledgeBaseFileViewerUiState(
     val textPreview: String? = null,
     val isTextTruncated: Boolean = false,
     val pdfPages: List<Bitmap> = emptyList(),
+    val pdfPageCount: Int = 0,
     val htmlPreviewPath: String? = null,
     val indexChunkCount: Int? = null,
     val isIndexing: Boolean = false,
@@ -388,41 +389,51 @@ class KnowledgeBaseFileViewerViewModel @Inject constructor(
         file: KnowledgeBaseFileSummary,
         previewType: KnowledgeBasePreviewType
     ) {
+        val renderedPages = mutableListOf<Bitmap>()
         val previewResult = try {
-            val pages = withContext(Dispatchers.IO) {
+            val preview = withContext(Dispatchers.IO) {
                 ParcelFileDescriptor.open(File(file.localPath), ParcelFileDescriptor.MODE_READ_ONLY).use { descriptor ->
                     PdfRenderer(descriptor).use { renderer ->
-                        buildList {
-                            for (pageIndex in 0 until renderer.pageCount) {
+                        val totalPageCount = renderer.pageCount
+                        val pages = buildList {
+                            for (pageIndex in 0 until pdfPreviewPageCount(totalPageCount)) {
                                 ensureActive()
                                 renderer.openPage(pageIndex).use { page ->
-                                    val scale = PDF_RENDER_WIDTH.toFloat() / page.width.toFloat()
+                                    val scale = minOf(
+                                        PDF_RENDER_WIDTH.toFloat() / page.width.toFloat(),
+                                        PDF_RENDER_MAX_HEIGHT.toFloat() / page.height.toFloat()
+                                    )
                                     val bitmap = createBitmap(
-                                        PDF_RENDER_WIDTH,
+                                        (page.width * scale).toInt().coerceAtLeast(1),
                                         (page.height * scale).toInt().coerceAtLeast(1)
                                     )
+                                    renderedPages += bitmap
                                     page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
                                     add(bitmap)
                                 }
                             }
                         }
+                        pages to totalPageCount
                     }
                 }
             }
-            Result.success(pages)
+            Result.success(preview)
         } catch (e: CancellationException) {
+            recyclePdfPages(renderedPages)
             throw e
         } catch (e: Exception) {
+            recyclePdfPages(renderedPages)
             Result.failure(e)
         }
 
         uiState.value = previewResult.fold(
-            onSuccess = { pages ->
+            onSuccess = { (pages, totalPageCount) ->
                 KnowledgeBaseFileViewerUiState(
                     isLoading = false,
                     file = file,
                     previewType = previewType,
-                    pdfPages = pages
+                    pdfPages = pages,
+                    pdfPageCount = totalPageCount
                 )
             },
             onFailure = {
@@ -466,13 +477,19 @@ class KnowledgeBaseFileViewerViewModel @Inject constructor(
 
     companion object {
         private const val TEXT_PREVIEW_LIMIT = 24_000
-        private const val PDF_RENDER_WIDTH = 1440
+        private const val PDF_RENDER_WIDTH = 1080
+        private const val PDF_RENDER_MAX_HEIGHT = 2400
 
         private val IMAGE_EXTENSIONS = setOf("png", "jpg", "jpeg", "webp", "gif", "bmp")
         private val TEXT_EXTENSIONS = setOf("txt", "md", "json", "csv", "log", "xml", "yaml", "yml", "kt", "java")
         private val HTML_PREVIEW_EXTENSIONS = setOf("docx", "pptx")
     }
 }
+
+internal const val MAX_PDF_PREVIEW_PAGES = 8
+
+internal fun pdfPreviewPageCount(totalPageCount: Int): Int =
+    totalPageCount.coerceIn(0, MAX_PDF_PREVIEW_PAGES)
 
 private fun KnowledgeAiMode.displayName(): String {
     return when (this) {

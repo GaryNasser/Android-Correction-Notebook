@@ -162,21 +162,21 @@ class AITutorViewModel @Inject constructor(
         if (loading.value) return
         val text = content.trim()
         if (text.isBlank()) return
+        loading.value = true
         viewModelScope.launch {
-            val provider = providerRepository.getActiveProvider()
-            if (provider == null) {
-                error.value = "请先配置 AI Provider"
-                return@launch
-            }
-            val sessionId = selectedSessionId.value ?: chatSessionRepository.createSession(
-                title = titleFrom(text),
-                providerId = provider.id,
-                model = provider.defaultModel
-            ).also { selectedSessionId.value = it }
-
-            loading.value = true
-            error.value = null
             try {
+                val provider = providerRepository.getActiveProvider()
+                if (provider == null) {
+                    error.value = "请先配置 AI Provider"
+                    return@launch
+                }
+                val sessionId = selectedSessionId.value ?: chatSessionRepository.createSession(
+                    title = titleFrom(text),
+                    providerId = provider.id,
+                    model = provider.defaultModel
+                ).also { selectedSessionId.value = it }
+
+                error.value = null
                 chatSessionRepository.saveMessage(sessionId, "user", text)
 
                 val recent = chatSessionRepository.getRecentMessages(sessionId, provider.contextMessageLimit)

@@ -369,7 +369,10 @@ fun KnowledgeBaseFileViewerScreen(
                                 content = uiState.textPreview.orEmpty(),
                                 truncated = uiState.isTextTruncated
                             )
-                            KnowledgeBasePreviewType.PDF -> PdfPreview(uiState.pdfPages)
+                            KnowledgeBasePreviewType.PDF -> PdfPreview(
+                                pages = uiState.pdfPages,
+                                totalPageCount = uiState.pdfPageCount
+                            )
                             KnowledgeBasePreviewType.HTML -> HtmlPreview(uiState.htmlPreviewPath)
                             KnowledgeBasePreviewType.AUDIO,
                             KnowledgeBasePreviewType.VIDEO -> MediaPreview(
@@ -736,7 +739,10 @@ private fun TextPreview(
 }
 
 @Composable
-private fun PdfPreview(pages: List<Bitmap>) {
+private fun PdfPreview(
+    pages: List<Bitmap>,
+    totalPageCount: Int
+) {
     if (pages.isEmpty()) {
         ViewerError(title = "PDF 不可预览", message = "暂时无法渲染这个 PDF，请尝试用其他应用打开。")
         return
@@ -744,8 +750,27 @@ private fun PdfPreview(pages: List<Bitmap>) {
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = PaddingValues(vertical = 8.dp)
     ) {
+        if (totalPageCount > pages.size) {
+            item(key = "pdf_preview_limit") {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.72f),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        text = "为保证预览流畅，当前显示前 ${pages.size} 页，共 $totalPageCount 页。完整内容可用其他应用打开。",
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                }
+            }
+        }
         itemsIndexed(pages) { index, bitmap ->
             ElevatedCard(
                 modifier = Modifier

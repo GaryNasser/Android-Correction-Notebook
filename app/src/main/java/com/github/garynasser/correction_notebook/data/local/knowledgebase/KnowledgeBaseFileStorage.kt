@@ -46,10 +46,15 @@ class KnowledgeBaseFileStorage @Inject constructor(
         val storedName = "${UUID.randomUUID()}-${preferredName.sanitizeFileName()}"
         val targetFile = File(folder, storedName)
 
-        inputStream.use { input ->
-            targetFile.outputStream().use { output ->
-                input.copyTo(output)
+        try {
+            inputStream.use { input ->
+                targetFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
             }
+        } catch (error: Throwable) {
+            targetFile.delete()
+            throw error
         }
 
         StoredKnowledgeBaseFile(

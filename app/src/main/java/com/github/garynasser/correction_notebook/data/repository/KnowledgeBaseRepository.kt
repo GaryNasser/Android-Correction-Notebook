@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import com.github.garynasser.correction_notebook.utils.runCatchingCancellable
 import java.io.File
+import java.io.InputStream
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -238,7 +239,7 @@ class KnowledgeBaseRepository @Inject constructor(
     suspend fun importDownloadedFile(
         detail: BitShareFileDetail,
         targetFolderId: String,
-        inputBytes: ByteArray
+        inputStream: InputStream
     ): Result<Unit> = runCatchingCancellable {
         val resolvedFolderId = targetFolderId.takeUnless { it == ROOT_FOLDER_ID }
         val now = System.currentTimeMillis()
@@ -250,7 +251,7 @@ class KnowledgeBaseRepository @Inject constructor(
         val stored = fileStorage.writeFile(
             folderPathIds = getFolderPathIds(resolvedFolderId),
             preferredName = displayName,
-            inputStream = inputBytes.inputStream()
+            inputStream = inputStream
         )
 
         dao.insertFile(
