@@ -280,6 +280,7 @@ fun HomeScreen(
     // Add Todo Dialog
     if (uiState.showAddTodoDialog) {
         AddTodoDialog(
+            isSaving = uiState.isAddingTodo,
             onDismiss = { homeViewModel.hideAddTodoDialog() },
             onAdd = { todo -> homeViewModel.addTodo(todo) }
         )

@@ -5,6 +5,7 @@ import com.github.garynasser.correction_notebook.data.model.ai.AiActionResult
 import com.github.garynasser.correction_notebook.data.model.ai.MemoryCategory
 import com.github.garynasser.correction_notebook.data.model.ai.NormalizedChatMessage
 import com.github.garynasser.correction_notebook.data.model.home.ScheduleRange
+import com.github.garynasser.correction_notebook.data.model.home.SessionType
 import com.github.garynasser.correction_notebook.data.model.studyset.StudySetDraft
 import com.github.garynasser.correction_notebook.data.remote.ai.AiActionParser
 import com.github.garynasser.correction_notebook.data.remote.ai.StudySetDraftParser
@@ -19,7 +20,9 @@ import com.github.garynasser.correction_notebook.data.repository.StudySessionRep
 import com.github.garynasser.correction_notebook.data.repository.TodoRepository
 import com.github.garynasser.correction_notebook.utils.runCatchingCancellable
 import kotlinx.coroutines.flow.first
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -245,23 +248,50 @@ class AiStudyUseCase @Inject constructor(
         ).map(AiActionParser::parse)
     }
 
-    suspend fun generateStatsInsight(): Result<String> {
-        val today = studySessionRepository.getTodayStats()
-        val weekSessions = studySessionRepository.getWeekSessions()
+    suspend fun generateStatsInsight(
+        startDate: LocalDate,
+        endDate: LocalDate,
+        periodLabel: String
+    ): Result<String> {
+        val sessions = studySessionRepository.getSessionsBetween(startDate, endDate)
+        val totalMinutes = sessions.sumOf { it.durationMinutes }
+        val completedPomodoros = sessions.sumOf {
+            if (it.sessionType == SessionType.POMODORO) {
+                it.pomodoroCount
+            } else {
+                0
+            }
+        }
+        val sessionSummary = sessions
+            .groupBy { it.startTime.toLocalDate() to it.subject }
+            .entries
+            .sortedBy { it.key.first }
+            .joinToString("\n") { (key, items) ->
+                "- ${key.first} ${key.second} ${items.sumOf { it.durationMinutes }} 分钟"
+            }
+        val zoneId = ZoneId.systemDefault()
         val courseProgress = courseLearningRepository.progressItems.first()
+            .filter { progress ->
+                progress.lastAccessedAt > 0L &&
+                    Instant.ofEpochMilli(progress.lastAccessedAt)
+                        .atZone(zoneId)
+                        .toLocalDate()
+                        .let { !it.isBefore(startDate) && !it.isAfter(endDate) }
+            }
             .sortedByDescending { it.lastAccessedAt }
             .take(8)
             .joinToString("\n") {
                 "- ${it.courseName.ifBlank { "课程 ${it.courseId}" }}：完成 ${it.completedCount}/${it.totalSections}，最近：${it.lastSectionTitle.ifBlank { "暂无" }}"
             }
         val prompt = """
-            请只读以下数据，生成 BITStudy 学习统计解读。不要自动创建任务。
-            输出：本周趋势、课程投入、可能拖延项、下周调整建议。控制在 600 字以内。
+            请只读以下数据，生成 BITStudy $periodLabel 学习统计解读。不要自动创建任务。
+            输出：学习趋势、内容投入、可能拖延项、下一步调整建议。控制在 600 字以内。
 
-            今日学习：${today.totalStudyMinutes} 分钟，番茄钟：${today.completedPomodoros}
-            近 7 日学习会话：
-            ${weekSessions.joinToString("\n") { "- ${it.subject} ${it.durationMinutes} 分钟 ${it.startTime.toLocalDate()}" }.ifBlank { "暂无" }}
-            课程进度：
+            统计范围：$startDate 至 $endDate
+            总学习：$totalMinutes 分钟，番茄钟：$completedPomodoros
+            学习会话：
+            ${sessionSummary.ifBlank { "暂无" }}
+            本周期访问课程的累计进度：
             ${courseProgress.ifBlank { "暂无" }}
         """.trimIndent()
         return aiRepository.sendChat(

@@ -3,6 +3,7 @@ package com.github.garynasser.correction_notebook.ui.screens.home
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -27,12 +28,13 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun TodoItemCard(
     todo: TodoItem,
+    isBusy: Boolean = false,
     onToggleComplete: () -> Unit,
     onDelete: () -> Unit,
     onAiBreakdown: (() -> Unit)? = null
 ) {
     var showDeleteConfirm by remember { mutableStateOf(false) }
-    val checkboxModifier = if (todo.isCompleted) {
+    val checkboxBackground = if (todo.isCompleted) {
         Modifier.background(Color(0xFF43A047), CircleShape)
     } else {
         Modifier.background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)
@@ -41,57 +43,67 @@ fun TodoItemCard(
     val scale by animateFloatAsState(
         targetValue = if (todo.isCompleted) 1f else 0f,
         animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessLow
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMedium
         ),
         label = "checkScale"
     )
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (todo.isCompleted) {
                 MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
             } else {
                 MaterialTheme.colorScheme.surface
             }
-        )
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.36f))
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(horizontal = 10.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Checkbox with animation
             Box(
                 modifier = Modifier
-                    .size(24.dp)
+                    .size(48.dp)
                     .clip(CircleShape)
-                    .then(checkboxModifier)
-                    .clickable { onToggleComplete() }
-                    ,
+                    .clickable(enabled = !isBusy, onClick = onToggleComplete),
                 contentAlignment = Alignment.Center
             ) {
-                if (todo.isCompleted) {
-                    Icon(
-                        Icons.Default.Check,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier
-                            .size(16.dp)
-                            .graphicsLayer {
-                                scaleX = scale
-                                scaleY = scale
-                            }
-                    )
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .then(checkboxBackground),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isBusy) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(14.dp),
+                            color = MaterialTheme.colorScheme.primary,
+                            strokeWidth = 2.dp
+                        )
+                    } else if (todo.isCompleted) {
+                        Icon(
+                            Icons.Default.Check,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier
+                                .size(16.dp)
+                                .graphicsLayer {
+                                    scaleX = scale
+                                    scaleY = scale
+                                }
+                        )
+                    }
                 }
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(6.dp))
 
-            // Content
             Column(
                 modifier = Modifier.weight(1f)
             ) {
@@ -150,6 +162,7 @@ fun TodoItemCard(
             onAiBreakdown?.let { breakdown ->
                 IconButton(
                     onClick = breakdown,
+                    enabled = !isBusy,
                     modifier = Modifier.size(32.dp)
                 ) {
                     Icon(
@@ -163,6 +176,7 @@ fun TodoItemCard(
 
             IconButton(
                 onClick = { showDeleteConfirm = true },
+                enabled = !isBusy,
                 modifier = Modifier.size(32.dp)
             ) {
                 Icon(
@@ -177,7 +191,8 @@ fun TodoItemCard(
 
     if (showDeleteConfirm) {
         AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
+            onDismissRequest = { if (!isBusy) showDeleteConfirm = false },
+            shape = RoundedCornerShape(8.dp),
             title = { Text("删除待办") },
             text = { Text("确定删除“${todo.title}”吗？") },
             confirmButton = {
@@ -185,11 +200,15 @@ fun TodoItemCard(
                     onClick = {
                         onDelete()
                         showDeleteConfirm = false
-                    }
+                    },
+                    enabled = !isBusy
                 ) { Text("删除") }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = false }) { Text("取消") }
+                TextButton(
+                    onClick = { showDeleteConfirm = false },
+                    enabled = !isBusy
+                ) { Text("取消") }
             }
         )
     }

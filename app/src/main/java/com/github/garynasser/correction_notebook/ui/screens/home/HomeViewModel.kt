@@ -64,6 +64,8 @@ data class HomeUiState(
     val articleErrorMessage: String? = null,
     val todoActionMessage: String? = null,
     val todoActionError: String? = null,
+    val isAddingTodo: Boolean = false,
+    val mutatingTodoIds: Set<String> = emptySet(),
     val todayStudyMinutes: Int = 0,
     val completedPomodoros: Int = 0,
     val todayScheduleCount: Int = 0,
@@ -338,10 +340,13 @@ class HomeViewModel @Inject constructor(
     }
 
     fun hideAddTodoDialog() {
+        if (_uiState.value.isAddingTodo) return
         _uiState.value = _uiState.value.copy(showAddTodoDialog = false)
     }
 
     fun addTodo(todo: TodoItem) {
+        if (_uiState.value.isAddingTodo) return
+        _uiState.value = _uiState.value.copy(isAddingTodo = true)
         viewModelScope.launch {
             try {
                 todoRepository.addTodo(todo)
@@ -357,6 +362,8 @@ class HomeViewModel @Inject constructor(
                     todoActionMessage = null,
                     todoActionError = "待办添加失败，请稍后再试"
                 )
+            } finally {
+                _uiState.value = _uiState.value.copy(isAddingTodo = false)
             }
         }
     }
@@ -615,14 +622,14 @@ class HomeViewModel @Inject constructor(
 
     fun importIcs(uri: android.net.Uri) {
         if (_uiState.value.isAnyScheduleMutationBusy()) return
+        _uiState.value = _uiState.value.copy(
+            isImportingSchedule = true,
+            scheduleActionMessage = null,
+            scheduleActionError = null,
+            scheduleImportMessage = null,
+            scheduleImportError = null
+        )
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(
-                isImportingSchedule = true,
-                scheduleActionMessage = null,
-                scheduleActionError = null,
-                scheduleImportMessage = null,
-                scheduleImportError = null
-            )
             try {
                 val preview = icsImportRepository.buildPreview(uri)
                 _uiState.value = _uiState.value.copy(
@@ -643,15 +650,15 @@ class HomeViewModel @Inject constructor(
 
     fun syncSchoolSchedule() {
         if (_uiState.value.isAnyScheduleMutationBusy()) return
+        _uiState.value = _uiState.value.copy(
+            isSyncingSchoolSchedule = true,
+            scheduleActionMessage = null,
+            scheduleActionError = null,
+            schoolScheduleSyncMessage = null,
+            schoolScheduleSyncError = null,
+            plannerTab = PlannerTab.SCHEDULE
+        )
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(
-                isSyncingSchoolSchedule = true,
-                scheduleActionMessage = null,
-                scheduleActionError = null,
-                schoolScheduleSyncMessage = null,
-                schoolScheduleSyncError = null,
-                plannerTab = PlannerTab.SCHEDULE
-            )
             try {
                 val result = schoolScheduleRepository.syncCurrentTerm()
                 _uiState.value = _uiState.value.copy(
@@ -698,9 +705,9 @@ class HomeViewModel @Inject constructor(
 
     fun applyIcsPreview(decision: ImportDecision) {
         if (_uiState.value.isAnyScheduleMutationBusy()) return
+        val preview = _uiState.value.pendingIcsPreview ?: return
+        _uiState.value = _uiState.value.copy(isImportingSchedule = true)
         viewModelScope.launch {
-            val preview = _uiState.value.pendingIcsPreview ?: return@launch
-            _uiState.value = _uiState.value.copy(isImportingSchedule = true)
             try {
                 scheduleRepository.applyImportPreview(preview, decision)
                 _uiState.value = _uiState.value.copy(
@@ -739,12 +746,12 @@ class HomeViewModel @Inject constructor(
         action: suspend () -> Unit
     ) {
         if (_uiState.value.isAnyScheduleMutationBusy()) return
+        _uiState.value = _uiState.value.copy(
+            isEditingSchedule = true,
+            scheduleActionMessage = null,
+            scheduleActionError = null
+        )
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(
-                isEditingSchedule = true,
-                scheduleActionMessage = null,
-                scheduleActionError = null
-            )
             try {
                 action()
                 refreshScheduleSections()
@@ -773,14 +780,19 @@ class HomeViewModel @Inject constructor(
     }
 
     fun toggleTodoComplete(todoId: String) {
+        if (todoId in _uiState.value.mutatingTodoIds) return
+        _uiState.value = _uiState.value.copy(
+            mutatingTodoIds = _uiState.value.mutatingTodoIds + todoId
+        )
         viewModelScope.launch {
             try {
                 val todo = todoRepository.getTodoById(todoId)
-                val wasCompleted = todo?.isCompleted ?: false
+                    ?: throw IllegalStateException("待办不存在")
+                val wasCompleted = todo.isCompleted
 
                 todoRepository.toggleComplete(todoId)
 
-                if (!wasCompleted && todo != null) {
+                if (!wasCompleted) {
                     val completedAt = System.currentTimeMillis()
                     val historyItem = TodoHistoryItem(
                         id = java.util.UUID.randomUUID().toString(),
@@ -808,7 +820,7 @@ class HomeViewModel @Inject constructor(
                     }
                 } else {
                     _uiState.value = _uiState.value.copy(
-                        todoActionMessage = if (wasCompleted) "已恢复待办" else "待办状态已更新",
+                        todoActionMessage = "已恢复待办",
                         todoActionError = null
                     )
                 }
@@ -819,11 +831,19 @@ class HomeViewModel @Inject constructor(
                     todoActionMessage = null,
                     todoActionError = "待办状态更新失败，请稍后再试"
                 )
+            } finally {
+                _uiState.value = _uiState.value.copy(
+                    mutatingTodoIds = _uiState.value.mutatingTodoIds - todoId
+                )
             }
         }
     }
 
     fun deleteTodo(todoId: String) {
+        if (todoId in _uiState.value.mutatingTodoIds) return
+        _uiState.value = _uiState.value.copy(
+            mutatingTodoIds = _uiState.value.mutatingTodoIds + todoId
+        )
         viewModelScope.launch {
             try {
                 todoRepository.deleteTodo(todoId)
@@ -837,6 +857,10 @@ class HomeViewModel @Inject constructor(
                 _uiState.value = _uiState.value.copy(
                     todoActionMessage = null,
                     todoActionError = "待办删除失败，请稍后再试"
+                )
+            } finally {
+                _uiState.value = _uiState.value.copy(
+                    mutatingTodoIds = _uiState.value.mutatingTodoIds - todoId
                 )
             }
         }
