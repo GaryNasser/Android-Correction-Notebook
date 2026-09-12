@@ -80,8 +80,8 @@ class TodoHistoryViewModel(application: Application) : AndroidViewModel(applicat
 
     fun deleteHistoryItem(itemId: String) {
         if (_uiState.value.isMutating) return
+        _uiState.update { it.copy(isMutating = true, message = null) }
         viewModelScope.launch {
-            _uiState.update { it.copy(isMutating = true, message = null) }
             try {
                 todoHistoryRepository.deleteHistoryItem(itemId)
                 _uiState.update { it.copy(message = "已删除完成记录") }
@@ -97,8 +97,8 @@ class TodoHistoryViewModel(application: Application) : AndroidViewModel(applicat
 
     fun clearAllHistory() {
         if (_uiState.value.isMutating) return
+        _uiState.update { it.copy(isMutating = true, message = null) }
         viewModelScope.launch {
-            _uiState.update { it.copy(isMutating = true, message = null) }
             try {
                 todoHistoryRepository.clearAllHistory()
                 _uiState.update { it.copy(message = "已清空完成历史") }

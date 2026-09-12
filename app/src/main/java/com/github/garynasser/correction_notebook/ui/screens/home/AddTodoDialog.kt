@@ -3,11 +3,13 @@ package com.github.garynasser.correction_notebook.ui.screens.home
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -28,12 +30,13 @@ private const val MaxTodoDescriptionLength = 180
 
 @Composable
 fun AddTodoDialog(
+    isSaving: Boolean = false,
     onDismiss: () -> Unit,
     onAdd: (TodoItem) -> Unit
 ) {
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
-    val canAdd = title.isNotBlank()
+    val canAdd = title.isNotBlank() && !isSaving
     val addTodo = {
         if (canAdd) {
             onAdd(TodoItem(title = title.trim(), description = description.trim()))
@@ -41,7 +44,7 @@ fun AddTodoDialog(
     }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!isSaving) onDismiss() },
         shape = RoundedCornerShape(8.dp),
         title = {
             Text(
@@ -60,6 +63,7 @@ fun AddTodoDialog(
                     supportingText = {
                         Text("${title.length}/$MaxTodoTitleLength")
                     },
+                    enabled = !isSaving,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(8.dp),
                     singleLine = true,
@@ -73,6 +77,7 @@ fun AddTodoDialog(
                     supportingText = {
                         Text("${description.length}/$MaxTodoDescriptionLength")
                     },
+                    enabled = !isSaving,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(8.dp),
                     minLines = 2,
@@ -88,11 +93,19 @@ fun AddTodoDialog(
                 enabled = canAdd,
                 shape = RoundedCornerShape(8.dp)
             ) {
-                Text("添加")
+                if (isSaving) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text("添加")
+                }
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss, enabled = !isSaving) {
                 Text("取消")
             }
         }

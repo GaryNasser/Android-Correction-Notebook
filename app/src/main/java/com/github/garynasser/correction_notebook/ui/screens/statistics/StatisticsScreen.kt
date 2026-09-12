@@ -27,7 +27,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.github.garynasser.correction_notebook.data.repository.CourseLearningRepository
 import com.github.garynasser.correction_notebook.data.repository.StudySessionRepository
 import com.github.garynasser.correction_notebook.domain.usecase.AiStudyUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -36,7 +35,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.TextStyle
@@ -66,7 +64,6 @@ data class StatsUiState(
 @HiltViewModel
 class StatisticsViewModel @Inject constructor(
     private val studySessionRepository: StudySessionRepository,
-    private val courseLearningRepository: CourseLearningRepository,
     private val aiStudyUseCase: AiStudyUseCase
 ) : ViewModel() {
 
@@ -81,7 +78,13 @@ class StatisticsViewModel @Inject constructor(
 
     fun setPeriod(period: StatsPeriod) {
         if (_uiState.value.period == period) return
-        _uiState.value = _uiState.value.copy(period = period)
+        aiInsightJob?.cancel()
+        _uiState.value = _uiState.value.copy(
+            period = period,
+            aiInsight = null,
+            isAiInsightLoading = false,
+            aiInsightError = null
+        )
         loadStats()
     }
 
@@ -91,30 +94,44 @@ class StatisticsViewModel @Inject constructor(
 
     fun generateAiInsight() {
         if (_uiState.value.isAiInsightLoading || aiInsightJob?.isActive == true) return
+        val selectedPeriod = _uiState.value.period
+        val (startDate, endDate) = statsDateRange(selectedPeriod, LocalDate.now())
+        _uiState.value = _uiState.value.copy(
+            isAiInsightLoading = true,
+            aiInsightError = null
+        )
         aiInsightJob = viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isAiInsightLoading = true, aiInsightError = null)
             try {
-                aiStudyUseCase.generateStatsInsight()
+                aiStudyUseCase.generateStatsInsight(
+                    startDate = startDate,
+                    endDate = endDate,
+                    periodLabel = periodLabel(selectedPeriod)
+                )
                     .onSuccess {
-                        _uiState.value = _uiState.value.copy(
-                            aiInsight = it,
-                            isAiInsightLoading = false
-                        )
+                        if (_uiState.value.period == selectedPeriod) {
+                            _uiState.value = _uiState.value.copy(aiInsight = it)
+                        }
                     }
                     .onFailure {
                         if (it is CancellationException) throw it
-                        _uiState.value = _uiState.value.copy(
-                            isAiInsightLoading = false,
-                            aiInsightError = it.message ?: "AI 解读失败"
-                        )
+                        if (_uiState.value.period == selectedPeriod) {
+                            _uiState.value = _uiState.value.copy(
+                                aiInsightError = it.message ?: "AI 解读失败"
+                            )
+                        }
                     }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(
-                    isAiInsightLoading = false,
-                    aiInsightError = e.message ?: "AI 解读失败"
-                )
+                if (_uiState.value.period == selectedPeriod) {
+                    _uiState.value = _uiState.value.copy(
+                        aiInsightError = e.message ?: "AI 解读失败"
+                    )
+                }
+            } finally {
+                if (_uiState.value.period == selectedPeriod) {
+                    _uiState.value = _uiState.value.copy(isAiInsightLoading = false)
+                }
             }
         }
     }
@@ -126,11 +143,7 @@ class StatisticsViewModel @Inject constructor(
             try {
                 val selectedPeriod = _uiState.value.period
                 val today = LocalDate.now()
-                val (startDate, endDate) = when (selectedPeriod) {
-                    StatsPeriod.DAY -> today to today
-                    StatsPeriod.WEEK -> today.minusDays(6) to today
-                    StatsPeriod.MONTH -> today.withDayOfMonth(1) to today
-                }
+                val (startDate, endDate) = statsDateRange(selectedPeriod, today)
 
                 val sessions = studySessionRepository.getSessionsBetween(startDate, endDate)
                 val dateRange = generateSequence(startDate) { current ->
@@ -151,8 +164,6 @@ class StatisticsViewModel @Inject constructor(
                     .mapValues { (_, items) -> items.sumOf { it.durationMinutes } }
                     .filterValues { it > 0 }
                     .toMutableMap()
-
-                addCourseProgressMinutes(subjectDistribution)
 
                 if (_uiState.value.period != selectedPeriod) return@launch
                 _uiState.value = _uiState.value.copy(
@@ -176,27 +187,6 @@ class StatisticsViewModel @Inject constructor(
         }
     }
 
-    private suspend fun addCourseProgressMinutes(subjectDistribution: MutableMap<String, Int>) {
-        val progressItems = try {
-            courseLearningRepository.progressItems.first()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            emptyList()
-        }
-
-        progressItems
-            .filter { progress -> progress.completedCount > 0 || progress.lastAccessedAt > 0L }
-            .forEach { progress ->
-                val name = progress.courseName.ifBlank { "课程学习" }
-                val minutes = (progress.watchedMinutes.takeIf { it > 0 } ?: progress.completedCount * 45)
-                    .coerceAtLeast(0)
-                if (minutes > 0) {
-                    subjectDistribution[name] = (subjectDistribution[name] ?: 0) + minutes
-                }
-            }
-    }
-
     private fun buildChartLabels(
         dates: List<LocalDate>,
         period: StatsPeriod
@@ -212,6 +202,15 @@ class StatisticsViewModel @Inject constructor(
             }
         }
     }
+}
+
+internal fun statsDateRange(period: StatsPeriod, today: LocalDate): Pair<LocalDate, LocalDate> {
+    val startDate = when (period) {
+        StatsPeriod.DAY -> today
+        StatsPeriod.WEEK -> today.minusDays(6)
+        StatsPeriod.MONTH -> today.withDayOfMonth(1)
+    }
+    return startDate to today
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

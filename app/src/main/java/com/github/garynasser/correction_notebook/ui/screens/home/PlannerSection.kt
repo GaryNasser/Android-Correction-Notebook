@@ -103,8 +103,8 @@ fun PlannerSection(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             PlannerHeader(
                 selectedDate = uiState.selectedDate,
@@ -151,6 +151,7 @@ fun PlannerSection(
                 )
                 PlannerTab.TODO -> TodoPlannerContent(
                     todos = uiState.todoItems,
+                    mutatingTodoIds = uiState.mutatingTodoIds,
                     onAddTodo = onAddTodo,
                     onShowHistory = onShowTodoHistory,
                     onToggleTodo = onToggleTodo,
@@ -241,7 +242,7 @@ private fun SchedulePlannerContent(
             onItemClick = { selectedOccurrence = it }
         )
     } else {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             sections.filter { it.items.isNotEmpty() }.forEach { section ->
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
@@ -275,6 +276,7 @@ private fun SchedulePlannerContent(
 @Composable
 private fun TodoPlannerContent(
     todos: List<TodoItem>,
+    mutatingTodoIds: Set<String>,
     onAddTodo: () -> Unit,
     onShowHistory: () -> Unit,
     onToggleTodo: (String) -> Unit,
@@ -311,10 +313,11 @@ private fun TodoPlannerContent(
             description = "把今天想完成的小事、提醒或备注写进 ToDo List。"
         )
     } else {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             todos.forEach { todo ->
                 TodoItemCard(
                     todo = todo,
+                    isBusy = todo.id in mutatingTodoIds,
                     onToggleComplete = { onToggleTodo(todo.id) },
                     onAiBreakdown = { onBreakDownTodo(todo) },
                     onDelete = { onDeleteTodo(todo.id) }

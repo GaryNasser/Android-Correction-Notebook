@@ -45,7 +45,7 @@ class StudySessionRepository(private val context: Context) {
     }
 
     suspend fun getWeekSessions(): List<StudySession> {
-        val weekAgo = LocalDate.now().minusDays(7)
+        val weekAgo = LocalDate.now().minusDays(6)
         return sessions.first().filter {
             !it.startTime.toLocalDate().isBefore(weekAgo)
         }
