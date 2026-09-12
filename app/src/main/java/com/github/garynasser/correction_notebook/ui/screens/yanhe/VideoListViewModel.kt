@@ -95,13 +95,6 @@ class VideoListViewModel @Inject constructor(
 
     }
 
-    fun recordWatch(section: CourseSection, videoUrl: String) {
-        viewModelScope.launch {
-            recordWatchInternal(section, videoUrl)
-            loadProgress()
-        }
-    }
-
     fun playSection(section: CourseSection, preferScreen: Boolean) {
         if (playJob?.isActive == true) return
         playJob = viewModelScope.launch {
@@ -114,15 +107,21 @@ class VideoListViewModel @Inject constructor(
                         videoRepository.getCourseSessionDetail(section.id)
                     }
                 }
-                val videoUrl = selectVideoUrl(playableSection, preferScreen)
+                val videoUrl = selectCourseVideoUrl(playableSection, preferScreen)
                     ?: throw Exception("该节次没有可播放的视频")
-                recordWatchInternal(playableSection, videoUrl)
-                loadProgress()
                 playState = PlayState.Success(
                     url = videoUrl,
                     videoTitle = playableSection.displayTitle(),
                     courseName = courseName
                 )
+                try {
+                    recordWatchInternal(playableSection, videoUrl)
+                    progress = courseLearningRepository.getProgressForCourse(courseId)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    sectionActionMessage = "视频已打开，但学习进度记录失败：${e.message ?: "请稍后再试"}"
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -181,19 +180,6 @@ class VideoListViewModel @Inject constructor(
         )
     }
 
-    private fun selectVideoUrl(section: CourseSection, preferScreen: Boolean): String? {
-        section.videos.forEach { video ->
-            val preferred = if (preferScreen) video.vgaUrl else video.mainUrl
-            val fallback = if (preferScreen) video.mainUrl else video.vgaUrl
-            firstNonBlank(preferred, fallback, video.room, video.path)?.let { return it }
-        }
-        return null
-    }
-
-    private fun firstNonBlank(vararg values: String): String? {
-        return values.firstOrNull { it.isNotBlank() }
-    }
-
     private fun CourseSection.displayTitle(): String {
         return title.ifBlank {
             if (sectionBigStart == sectionBigEnd) {
@@ -203,4 +189,15 @@ class VideoListViewModel @Inject constructor(
             }
         }
     }
+}
+
+internal fun selectCourseVideoUrl(section: CourseSection, preferScreen: Boolean): String? {
+    section.videos.forEach { video ->
+        val preferred = if (preferScreen) video.vgaUrl else video.mainUrl
+        val fallback = if (preferScreen) video.mainUrl else video.vgaUrl
+        listOf(preferred, fallback, video.room, video.path)
+            .firstOrNull { it.isNotBlank() }
+            ?.let { return it }
+    }
+    return null
 }

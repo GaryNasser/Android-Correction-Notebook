@@ -291,7 +291,7 @@ private fun EmptyCourseState(
             )
             Text(
                 text = if (isPersonalMode) {
-                    "点击右上角同步，登录并刷新延河课堂我的课程。"
+                    "点击右上角同步我的课程；未登录时会先打开统一认证。"
                 } else {
                     "换个关键词或学期再试试。"
                 },
@@ -633,7 +633,7 @@ fun CourseCard(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .aspectRatio(16f / 9f)
+                    .aspectRatio(2f)
                     .background(
                         Brush.linearGradient(
                             listOf(
@@ -679,7 +679,7 @@ fun CourseCard(
             ) {
                 Text(
                     text = course.nameZh,
-                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
