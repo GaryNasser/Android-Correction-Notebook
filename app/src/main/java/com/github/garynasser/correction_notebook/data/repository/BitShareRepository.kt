@@ -8,10 +8,10 @@ import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitSha
 import com.github.garynasser.correction_notebook.data.remote.api.BitShareApiService
 import com.github.garynasser.correction_notebook.utils.BitShareNetworkDetector
 import com.github.garynasser.correction_notebook.utils.runCatchingCancellable
+import kotlinx.coroutines.runInterruptible
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.ResponseBody
-import okhttp3.ResponseBody.Companion.toResponseBody
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -142,28 +142,28 @@ class BitShareRepository @Inject constructor(
 
         buildDownloadCandidateUrls(fileId).forEach { url ->
             val attempt = runCatchingCancellable {
-                okHttpClient.newCall(
-                    Request.Builder()
-                        .url(url)
-                        .get()
-                        .build()
-                ).execute().use { response ->
-                    if (!response.isSuccessful) {
-                        error("HTTP ${response.code}")
-                    }
-                    val body = response.body ?: error("下载响应为空")
-                    val bytes = body.bytes()
-                    if (bytes.isEmpty()) {
-                        error("下载内容为空")
-                    }
-                    bytes
+                val response = runInterruptible {
+                    okHttpClient.newCall(
+                        Request.Builder()
+                            .url(url)
+                            .get()
+                            .build()
+                    ).execute()
                 }
+                if (!response.isSuccessful) {
+                    response.close()
+                    error("HTTP ${response.code}")
+                }
+                val body = response.body ?: run {
+                    response.close()
+                    error("下载响应为空")
+                }
+                validateDownloadBody(body)
+                body
             }
 
             if (attempt.isSuccess) {
-                return Result.success(
-                    attempt.getOrThrow().toResponseBody(null)
-                )
+                return attempt
             }
 
             attempt.exceptionOrNull()?.message?.let { message ->
@@ -195,8 +195,15 @@ class BitShareRepository @Inject constructor(
 
     private fun validateDownloadBody(body: ResponseBody) {
         val contentType = body.contentType()?.toString().orEmpty().lowercase()
-        if (contentType.contains("application/json") || contentType.contains("text/html")) {
-            error("下载接口返回了非文件内容")
+        val errorMessage = when {
+            contentType.contains("application/json") || contentType.contains("text/html") ->
+                "下载接口返回了非文件内容"
+            body.contentLength() == 0L -> "下载内容为空"
+            else -> null
+        }
+        if (errorMessage != null) {
+            body.close()
+            error(errorMessage)
         }
     }
 }

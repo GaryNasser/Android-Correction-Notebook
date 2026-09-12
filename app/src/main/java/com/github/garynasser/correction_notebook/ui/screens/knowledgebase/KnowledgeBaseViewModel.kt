@@ -316,17 +316,20 @@ class KnowledgeBaseViewModel @Inject constructor(
     }
 
     fun searchRemoteResources() {
-        if (remoteQuery.value.isBlank()) {
+        val query = remoteQuery.value.trim()
+        if (query.isBlank()) {
             remoteResults.value = emptyList()
             remoteErrorMessage.value = null
             return
         }
+        if (isRemoteSearching.value) return
 
+        val sort = remoteSort.value
+        isRemoteSearching.value = true
         viewModelScope.launch {
-            isRemoteSearching.value = true
             remoteErrorMessage.value = null
             try {
-                bitShareRepository.searchFiles(remoteQuery.value, remoteSort.value)
+                bitShareRepository.searchFiles(query, sort)
                     .onSuccess {
                         remoteResults.value = it
                     }
@@ -344,8 +347,9 @@ class KnowledgeBaseViewModel @Inject constructor(
     }
 
     fun loadRemoteDetail(fileId: String) {
+        if (isRemoteDetailLoading.value || isRemoteFolderLoading.value) return
+        isRemoteDetailLoading.value = true
         viewModelScope.launch {
-            isRemoteDetailLoading.value = true
             remoteErrorMessage.value = null
             try {
                 bitShareRepository.getFileDetail(fileId)
@@ -372,8 +376,9 @@ class KnowledgeBaseViewModel @Inject constructor(
      * 因此只能显示文件夹信息，无法列出文件夹内容
      */
     fun loadRemoteFolderDetail(folderId: String) {
+        if (isRemoteFolderLoading.value || isRemoteDetailLoading.value) return
+        isRemoteFolderLoading.value = true
         viewModelScope.launch {
-            isRemoteFolderLoading.value = true
             remoteErrorMessage.value = null
             try {
                 bitShareRepository.getFolderDetail(folderId)
@@ -509,8 +514,9 @@ class KnowledgeBaseViewModel @Inject constructor(
         tags: List<String>,
         studySetId: String? = null
     ) {
+        if (isLocalBusy.value) return
+        isLocalBusy.value = true
         viewModelScope.launch {
-            isLocalBusy.value = true
             try {
                 studySetRepository.saveManualCard(
                     title = title,
@@ -616,8 +622,10 @@ class KnowledgeBaseViewModel @Inject constructor(
 
     fun importLocalFiles(fileUris: List<Uri>) {
         if (fileUris.isEmpty()) return
+        if (isImportingLocalFile.value) return
+        val targetFolderId = currentFolderId.value
+        isImportingLocalFile.value = true
         viewModelScope.launch {
-            isImportingLocalFile.value = true
             try {
                 var successCount = 0
                 var failureCount = 0
@@ -625,7 +633,7 @@ class KnowledgeBaseViewModel @Inject constructor(
 
                 fileUris.forEach { fileUri ->
                     knowledgeBaseRepository.importLocalFile(
-                        targetFolderId = currentFolderId.value,
+                        targetFolderId = targetFolderId,
                         fileUri = fileUri
                     ).onSuccess {
                         successCount += 1
@@ -635,7 +643,7 @@ class KnowledgeBaseViewModel @Inject constructor(
                     }
                 }
 
-                val folderName = knowledgeBaseRepository.getFolderName(currentFolderId.value)
+                val folderName = knowledgeBaseRepository.getFolderName(targetFolderId)
                 snackbarMessage.value = when {
                     successCount > 0 && failureCount == 0 -> {
                         if (successCount == 1) "已导入到 $folderName" else "已导入 $successCount 个文件到 $folderName"
@@ -657,7 +665,11 @@ class KnowledgeBaseViewModel @Inject constructor(
         result: BitShareSearchResult,
         folderId: String?
     ) {
+        if (activeDownloadId.value != null) return
+        activeDownloadId.value = result.id
         viewModelScope.launch {
+            snackbarMessage.value = "开始下载 ${result.originalName.ifBlank { result.title }}"
+            remoteErrorMessage.value = null
             try {
                 val detail = bitShareRepository.getFileDetail(result.id).getOrElse {
                     BitShareFileDetail(
@@ -679,46 +691,21 @@ class KnowledgeBaseViewModel @Inject constructor(
                 throw e
             } catch (e: Exception) {
                 snackbarMessage.value = e.message ?: "下载失败"
+            } finally {
+                activeDownloadId.value = null
             }
         }
     }
 
     fun downloadRemoteFileToFolder(folderId: String?) {
         val detail = selectedRemoteDetail.value ?: return
-        performRemoteDownload(folderId, detail)
-    }
-
-    private fun performRemoteDownload(
-        folderId: String?,
-        detail: BitShareFileDetail
-    ) {
+        if (activeDownloadId.value != null) return
+        activeDownloadId.value = detail.id
         viewModelScope.launch {
-            activeDownloadId.value = detail.id
             snackbarMessage.value = "开始下载 ${detail.originalName}"
             remoteErrorMessage.value = null
             try {
-                val downloadResult = bitShareRepository.downloadFile(detail.id)
-                downloadResult
-                    .mapCatching { body ->
-                        withContext(Dispatchers.IO) {
-                            body.use { responseBody ->
-                                knowledgeBaseRepository.importDownloadedFile(
-                                    detail = detail,
-                                    targetFolderId = folderId ?: KnowledgeBaseRepository.ROOT_FOLDER_ID,
-                                    inputBytes = responseBody.bytes()
-                                ).getOrThrow()
-                            }
-                        }
-                    }
-                    .onSuccess {
-                        val folderName = knowledgeBaseRepository.getFolderName(folderId)
-                        snackbarMessage.value = "已保存到 $folderName"
-                        selectedTabIndex.value = 0
-                        selectedRemoteDetail.value = null
-                    }
-                    .onFailure {
-                        snackbarMessage.value = it.toUiMessage("下载失败")
-                    }
+                performRemoteDownload(folderId, detail)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -727,6 +714,37 @@ class KnowledgeBaseViewModel @Inject constructor(
                 activeDownloadId.value = null
             }
         }
+    }
+
+    private suspend fun performRemoteDownload(
+        folderId: String?,
+        detail: BitShareFileDetail
+    ) {
+        val downloadResult = withContext(Dispatchers.IO) {
+            bitShareRepository.downloadFile(detail.id)
+        }
+        downloadResult
+            .mapCatching { body ->
+                withContext(Dispatchers.IO) {
+                    body.use { responseBody ->
+                        knowledgeBaseRepository.importDownloadedFile(
+                            detail = detail,
+                            targetFolderId = folderId ?: KnowledgeBaseRepository.ROOT_FOLDER_ID,
+                            inputStream = responseBody.byteStream()
+                        ).getOrThrow()
+                    }
+                }
+            }
+            .onSuccess {
+                val folderName = knowledgeBaseRepository.getFolderName(folderId)
+                snackbarMessage.value = "已保存到 $folderName"
+                selectedTabIndex.value = 0
+                selectedRemoteDetail.value = null
+            }
+            .onFailure {
+                if (it is CancellationException) throw it
+                snackbarMessage.value = it.toUiMessage("下载失败")
+            }
     }
 
     private fun guessMimeType(extension: String): String {
@@ -754,8 +772,8 @@ class KnowledgeBaseViewModel @Inject constructor(
         action: suspend () -> Unit
     ) {
         if (isLocalBusy.value) return
+        isLocalBusy.value = true
         viewModelScope.launch {
-            isLocalBusy.value = true
             try {
                 action()
             } catch (e: CancellationException) {

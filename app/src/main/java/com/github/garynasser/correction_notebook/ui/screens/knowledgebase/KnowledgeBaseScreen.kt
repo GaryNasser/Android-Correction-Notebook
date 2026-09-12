@@ -517,7 +517,10 @@ fun KnowledgeBaseScreen(
                     ),
                     actions = {
                         if (uiState.selectedTabIndex == 2) {
-                            IconButton(onClick = { viewModel.searchRemoteResources() }) {
+                            IconButton(
+                                onClick = { viewModel.searchRemoteResources() },
+                                enabled = !uiState.isRemoteSearching
+                            ) {
                                 Icon(Icons.Default.Refresh, contentDescription = "刷新搜索")
                             }
                         }
@@ -2222,6 +2225,7 @@ private fun BitSharePage(
                 onValueChange = onQueryChanged,
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
+                enabled = !uiState.isRemoteSearching,
                 label = { Text("搜索课程资料") },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                 trailingIcon = {
@@ -2249,6 +2253,7 @@ private fun BitSharePage(
                     FilterChip(
                         selected = uiState.remoteSort == option,
                         onClick = { onSortChanged(option) },
+                        enabled = !uiState.isRemoteSearching,
                         label = { Text(label) }
                     )
                 }
