@@ -128,7 +128,7 @@ fun ProfileScreen(
                         Column {
                             SettingsItem(
                                 icon = Icons.Default.Key,
-                                title = "API配置",
+                                title = "API 配置",
                                 subtitle = activeProvider?.let { "${it.name} · ${it.defaultModel}" } ?: "设置 AI Provider、模型和接口密钥",
                                 enabled = !isLoading,
                                 onClick = { showAiSettingsDialog = true }

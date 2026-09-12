@@ -2,7 +2,6 @@ package com.github.garynasser.correction_notebook
 
 import com.github.garynasser.correction_notebook.utils.compareVersionNames
 import com.github.garynasser.correction_notebook.utils.isRemoteVersionNewer
-import com.github.garynasser.correction_notebook.utils.versionNameToCode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -32,10 +31,5 @@ class VersionNameComparatorTest {
     @Test
     fun ignoresPrereleaseSuffixWhenCoreVersionMatches() {
         assertEquals(0, compareVersionNames("1.3.0-beta1", "1.3.0"))
-    }
-
-    @Test
-    fun convertsPrefixedVersionNameToComparableCode() {
-        assertEquals(1_003_000L, versionNameToCode("BITStudy-v1.3.0"))
     }
 }

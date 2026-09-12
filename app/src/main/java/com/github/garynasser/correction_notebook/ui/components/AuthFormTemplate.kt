@@ -88,7 +88,7 @@ fun AuthFormTemplate(
                 enabled = isButtonEnabled && !isLoading,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(44.dp),
+                    .height(48.dp),
                 shape = RoundedCornerShape(8.dp)
             ) {
                 if (isLoading) {

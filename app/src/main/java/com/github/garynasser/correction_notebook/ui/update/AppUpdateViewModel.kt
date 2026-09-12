@@ -53,18 +53,15 @@ class AppUpdateViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val latest = appUpdateRepository.getLatestVersion()
-                val forceUpdate = latest.forceUpdate ||
-                    (latest.minSupportedVersionCode > 0 &&
-                        _uiState.value.currentVersionCode < latest.minSupportedVersionCode)
-                val hasUpdate = isRemoteVersionNewer(
-                    remoteVersionName = latest.latestVersionName,
-                    currentVersionName = _uiState.value.currentVersionName
-                ) || forceUpdate
-                val updateInfo = latest.copy(forceUpdate = forceUpdate)
+                val updateInfo = resolveAvailableUpdate(
+                    latest = latest,
+                    currentVersionName = _uiState.value.currentVersionName,
+                    currentVersionCode = _uiState.value.currentVersionCode
+                )
                 _uiState.update {
                     it.copy(
-                        availableUpdate = updateInfo.takeIf { hasUpdate },
-                        snackbarMessage = if (!hasUpdate && !silent) "当前已是最新版本" else null
+                        availableUpdate = updateInfo,
+                        snackbarMessage = if (updateInfo == null && !silent) "当前已是最新版本" else null
                     )
                 }
             } catch (error: CancellationException) {
@@ -108,3 +105,21 @@ class AppUpdateViewModel @Inject constructor(
 
 private fun PackageManager.getPackageInfoCompat(packageName: String) =
     getPackageInfo(packageName, 0)
+
+internal fun resolveAvailableUpdate(
+    latest: AppVersionInfo,
+    currentVersionName: String,
+    currentVersionCode: Long
+): AppVersionInfo? {
+    val forceUpdate = latest.forceUpdate ||
+        (latest.minSupportedVersionCode > 0 && currentVersionCode < latest.minSupportedVersionCode)
+    val hasNewerVersionCode = latest.latestVersionCode > 0 &&
+        latest.latestVersionCode > currentVersionCode
+    val hasNewerVersionName = isRemoteVersionNewer(
+        remoteVersionName = latest.latestVersionName,
+        currentVersionName = currentVersionName
+    )
+
+    return latest.copy(forceUpdate = forceUpdate)
+        .takeIf { forceUpdate || hasNewerVersionCode || hasNewerVersionName }
+}

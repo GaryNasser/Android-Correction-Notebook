@@ -11,7 +11,9 @@ import com.github.garynasser.correction_notebook.data.repository.AuthStateManage
 import com.github.garynasser.correction_notebook.data.repository.YanheRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 @HiltViewModel
@@ -68,20 +70,20 @@ class RegistrationViewModel @Inject constructor(
         errorMessage = null
         val trimmedStudentId = studentId.trim()
         if (trimmedStudentId.isBlank() || casPassword.isBlank()) return
+        isCasLoading = true
 
         viewModelScope.launch {
-            isCasLoading = true
             try {
                 yanheRepository.saveStudentCredential(UserCredential(trimmedStudentId, casPassword))
                 yanheRepository.getYanheLoginToken().getOrThrow()
                 authStateManager.updateState(AuthState.Authenticated)
                 onSuccess()
             } catch (exception: CancellationException) {
+                clearFailedYanheLogin()
                 throw exception
             } catch (exception: Exception) {
                 errorMessage = formatCasError(exception)
-                runCatching { yanheRepository.removeStudentCredential() }
-                authStateManager.updateState(AuthState.Unauthenticated)
+                clearFailedYanheLogin()
             } finally {
                 isCasLoading = false
             }
@@ -90,6 +92,17 @@ class RegistrationViewModel @Inject constructor(
 
     fun clearError() {
         errorMessage = null
+    }
+
+    private suspend fun clearFailedYanheLogin() {
+        withContext(NonCancellable) {
+            try {
+                yanheRepository.clearYanheSession()
+            } catch (_: Exception) {
+                // Credentials are removed before the token, so startup cannot restore a failed login.
+            }
+            authStateManager.updateState(AuthState.Unauthenticated)
+        }
     }
 
     private fun formatCasError(error: Throwable): String {

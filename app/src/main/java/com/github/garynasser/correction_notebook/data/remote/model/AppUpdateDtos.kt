@@ -1,7 +1,6 @@
 package com.github.garynasser.correction_notebook.data.remote.model
 
 import com.github.garynasser.correction_notebook.data.model.appupdate.AppVersionInfo
-import com.github.garynasser.correction_notebook.utils.versionNameToCode
 import com.google.gson.annotations.SerializedName
 import java.time.Instant
 
@@ -52,7 +51,7 @@ fun GitHubReleaseDto.toDomain(): AppVersionInfo {
 
     return AppVersionInfo(
         latestVersionName = tagName,
-        latestVersionCode = tagName.toVersionCode(),
+        latestVersionCode = 0,
         minSupportedVersionCode = 0,
         downloadUrl = downloadUrl,
         updateTitle = name?.takeIf { it.isNotBlank() } ?: "发现新版本",
@@ -66,5 +65,3 @@ private fun String?.toEpochMillisOrZero(): Long {
     if (this.isNullOrBlank()) return 0L
     return runCatching { Instant.parse(this).toEpochMilli() }.getOrDefault(0L)
 }
-
-private fun String.toVersionCode(): Long = versionNameToCode(this)
