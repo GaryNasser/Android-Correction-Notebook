@@ -5,6 +5,7 @@ import com.github.garynasser.correction_notebook.data.model.home.ScheduleSourceT
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 
@@ -79,6 +80,15 @@ class HomeScheduleTextTest {
             ),
             visibleBitWeekDays(friday)
         )
+    }
+
+    @Test
+    fun datePickerUsesUtcMidnightWithoutTimezoneDrift() {
+        val date = LocalDate.of(2026, 7, 3)
+        val millis = date.toDatePickerUtcMillis()
+
+        assertEquals(Instant.parse("2026-07-03T00:00:00Z").toEpochMilli(), millis)
+        assertEquals(date, datePickerMillisToLocalDate(millis))
     }
 
     @Test

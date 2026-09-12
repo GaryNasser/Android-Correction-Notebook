@@ -75,11 +75,9 @@ import com.github.garynasser.correction_notebook.data.model.home.ScheduleSection
 import com.github.garynasser.correction_notebook.data.model.home.ScheduleSourceType
 import com.github.garynasser.correction_notebook.data.model.home.TodoItem
 import com.github.garynasser.correction_notebook.ui.components.FreshCard
-import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
-import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 @Composable
@@ -813,10 +811,7 @@ fun AddScheduleDialog(
 
     if (showDatePicker) {
         val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = selectedDate
-                .atStartOfDay(ZoneId.systemDefault())
-                .toInstant()
-                .toEpochMilli()
+            initialSelectedDateMillis = selectedDate.toDatePickerUtcMillis()
         )
         DatePickerDialog(
             onDismissRequest = {
@@ -826,9 +821,7 @@ fun AddScheduleDialog(
                 TextButton(
                     onClick = {
                         datePickerState.selectedDateMillis?.let { millis ->
-                            selectedDate = Instant.ofEpochMilli(millis)
-                                .atZone(ZoneId.systemDefault())
-                                .toLocalDate()
+                            selectedDate = datePickerMillisToLocalDate(millis)
                             validationMessage = null
                         }
                         showDatePicker = false

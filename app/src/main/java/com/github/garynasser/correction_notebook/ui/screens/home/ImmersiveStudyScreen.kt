@@ -89,6 +89,8 @@ fun ImmersiveStudyScreen(
     var showControls by remember { mutableStateOf(true) }
     var showMoreSheet by remember { mutableStateOf(false) }
     var isAlerting by remember { mutableStateOf(false) }
+    val currentSoundEnabled by rememberUpdatedState(soundEnabled)
+    val currentVibrationEnabled by rememberUpdatedState(vibrationEnabled)
     val activity = context as? android.app.Activity
     val window = activity?.window
     val decorView = window?.decorView
@@ -122,10 +124,10 @@ fun ImmersiveStudyScreen(
 
         timerManager.onTimerFinished = {
             isAlerting = true
-            if (soundEnabled) {
+            if (currentSoundEnabled) {
                 alertManager?.playAlarmSound(looping = true)
             }
-            if (vibrationEnabled) {
+            if (currentVibrationEnabled) {
                 alertManager?.vibrate(AlertManager.VibrationPattern.POMODORO)
             }
         }
