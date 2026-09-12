@@ -39,6 +39,7 @@ import com.github.garynasser.correction_notebook.domain.usecase.AiStudyUseCase
 import com.github.garynasser.correction_notebook.domain.usecase.StudyTimerManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -135,6 +136,7 @@ class HomeViewModel @Inject constructor(
     val timerManager = StudyTimerManager(viewModelScope)
     private var sessionPersisted = false
     private var currentSessionStartedAt: LocalDateTime? = null
+    private var finishSessionJob: Job? = null
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
@@ -919,11 +921,22 @@ class HomeViewModel @Inject constructor(
     }
 
     fun finishCurrentSessionAndExit() {
-        viewModelScope.launch {
-            persistCurrentSessionIfNeeded()
-            timerManager.stop()
-            currentSessionStartedAt = null
-            clearSelectedMode()
+        if (finishSessionJob?.isActive == true) return
+        finishSessionJob = viewModelScope.launch {
+            try {
+                persistCurrentSessionIfNeeded()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    todoActionMessage = null,
+                    todoActionError = "学习记录保存失败，但本次计时已结束"
+                )
+            } finally {
+                timerManager.stop()
+                currentSessionStartedAt = null
+                clearSelectedMode()
+            }
         }
     }
 
@@ -942,7 +955,6 @@ class HomeViewModel @Inject constructor(
         val fallbackStart = endedAt.minusMinutes(snapshot.durationMinutes.toLong())
         val startAt = currentSessionStartedAt ?: fallbackStart
 
-        sessionPersisted = true
         studySessionRepository.addSession(
             StudySession(
                 subject = snapshot.sessionType.defaultSubject(),
@@ -953,6 +965,7 @@ class HomeViewModel @Inject constructor(
                 pomodoroCount = snapshot.pomodoroCount
             )
         )
+        sessionPersisted = true
         currentSessionStartedAt = null
         refreshTodayStats()
     }

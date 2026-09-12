@@ -8,6 +8,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -29,11 +31,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle as ComposeTextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
@@ -60,9 +66,8 @@ import com.github.garynasser.correction_notebook.ui.components.MetricTile
 import com.github.garynasser.correction_notebook.ui.components.SectionHeader
 import com.github.garynasser.correction_notebook.ui.screens.statistics.StatisticsScreen
 import com.github.garynasser.correction_notebook.ui.screens.statistics.StatisticsViewModel
-import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.format.TextStyle
 import java.time.format.DateTimeFormatter
 import java.time.temporal.WeekFields
@@ -514,10 +519,7 @@ private fun BitSchedulePage(
 
     if (showDatePicker) {
         val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = uiState.selectedDate
-                .atStartOfDay(ZoneId.systemDefault())
-                .toInstant()
-                .toEpochMilli()
+            initialSelectedDateMillis = uiState.selectedDate.toDatePickerUtcMillis()
         )
         DatePickerDialog(
             onDismissRequest = { showDatePicker = false },
@@ -525,10 +527,7 @@ private fun BitSchedulePage(
                 TextButton(
                     onClick = {
                         datePickerState.selectedDateMillis?.let { millis ->
-                            val pickedDate = Instant.ofEpochMilli(millis)
-                                .atZone(ZoneId.systemDefault())
-                                .toLocalDate()
-                            onWeekChange(pickedDate)
+                            onWeekChange(datePickerMillisToLocalDate(millis))
                         }
                         showDatePicker = false
                     }
@@ -825,38 +824,32 @@ private fun CourseGridBlock(
     val displayLocation = item.location.toGridLocationText()
     val hasLocation = displayLocation.isNotBlank()
     val compactBlock = span <= 1
-    val titleLength = item.title.trim().length
-    val locationLength = displayLocation.replace("\n", "").length
-    val denseText = titleLength + locationLength >= 28
-    val titleFontSize = when {
-        compactBlock -> if (denseText) 7.5.sp else 8.5.sp
-        span == 2 -> if (denseText) 8.5.sp else 9.5.sp
-        span == 3 -> if (denseText) 9.sp else 10.sp
-        else -> if (denseText) 9.5.sp else 10.5.sp
+    val text = buildAnnotatedString {
+        withStyle(
+            SpanStyle(
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.84f),
+                fontWeight = FontWeight.SemiBold
+            )
+        ) {
+            append(item.title.trim())
+        }
+        if (hasLocation) {
+            append("\n")
+            withStyle(
+                SpanStyle(
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f),
+                    fontWeight = FontWeight.Medium
+                )
+            ) {
+                append(displayLocation)
+            }
+        }
     }
-    val locationFontSize = when {
-        compactBlock -> if (locationLength >= 10) 7.sp else 7.5.sp
-        span == 2 -> if (locationLength >= 10) 7.5.sp else 8.sp
-        span == 3 -> if (locationLength >= 10) 8.sp else 8.5.sp
-        else -> if (locationLength >= 10) 8.5.sp else 9.sp
-    }
-    val titleLineHeight = when {
-        compactBlock -> if (denseText) 8.5.sp else 9.5.sp
-        span == 2 -> if (denseText) 9.5.sp else 10.5.sp
-        span == 3 -> if (denseText) 10.sp else 11.sp
-        else -> if (denseText) 10.5.sp else 11.5.sp
-    }
-    val locationLineHeight = when {
-        compactBlock -> 8.sp
-        span == 2 -> 8.5.sp
-        span == 3 -> 9.sp
-        else -> 9.5.sp
-    }
-    val titleMaxLines = when {
-        compactBlock -> if (hasLocation) 1 else 3
-        span == 2 -> if (hasLocation) 4 else 6
-        span == 3 -> if (hasLocation) 6 else 9
-        else -> if (hasLocation) 8 else 12
+    val maxFontSize = when {
+        compactBlock -> 8.5.sp
+        span == 2 -> 9.5.sp
+        span == 3 -> 10.sp
+        else -> 10.5.sp
     }
 
     Box(
@@ -867,36 +860,17 @@ private fun CourseGridBlock(
             .padding(horizontal = 3.dp, vertical = if (compactBlock) 2.dp else 4.dp),
         contentAlignment = Alignment.Center
     ) {
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Text(
-                text = item.title,
-                fontSize = titleFontSize,
-                lineHeight = titleLineHeight,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.84f),
-                textAlign = TextAlign.Center,
-                maxLines = titleMaxLines,
-                overflow = TextOverflow.Clip,
-                softWrap = true
+        BasicText(
+            text = text,
+            style = ComposeTextStyle(textAlign = TextAlign.Center),
+            overflow = TextOverflow.Clip,
+            softWrap = true,
+            autoSize = TextAutoSize.StepBased(
+                minFontSize = 7.sp,
+                maxFontSize = maxFontSize,
+                stepSize = 0.5.sp
             )
-            if (hasLocation) {
-                Spacer(modifier = Modifier.height(if (compactBlock) 1.dp else 2.dp))
-                Text(
-                    text = displayLocation,
-                    fontSize = locationFontSize,
-                    lineHeight = locationLineHeight,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
-                    textAlign = TextAlign.Center,
-                    overflow = TextOverflow.Clip,
-                    softWrap = true
-                )
-            }
-        }
+        )
     }
 }
 
@@ -945,6 +919,14 @@ internal fun LocalDate.toBitWeekStart(): LocalDate {
 internal fun visibleBitWeekDays(selectedDate: LocalDate): List<LocalDate> {
     val weekStart = selectedDate.toBitWeekStart()
     return (0..6).map { weekStart.plusDays(it.toLong()) }
+}
+
+internal fun LocalDate.toDatePickerUtcMillis(): Long {
+    return atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+}
+
+internal fun datePickerMillisToLocalDate(millis: Long): LocalDate {
+    return java.time.Instant.ofEpochMilli(millis).atZone(ZoneOffset.UTC).toLocalDate()
 }
 
 private data class CourseSectionSlot(

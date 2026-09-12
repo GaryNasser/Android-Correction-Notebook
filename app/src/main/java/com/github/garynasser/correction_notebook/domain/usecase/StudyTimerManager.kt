@@ -49,7 +49,7 @@ class StudyTimerManager(
             remainingSeconds = totalSeconds,
             isRunning = true
         )
-        startCountdownJob(totalSeconds)
+        startCountdownJob(totalSeconds = totalSeconds, remainingSeconds = totalSeconds)
     }
 
     fun startStopwatch() {
@@ -87,7 +87,10 @@ class StudyTimerManager(
             }
             is TimerState.Countdown -> {
                 _timerState.value = state.copy(isRunning = true)
-                startCountdownJob(state.remainingSeconds)
+                startCountdownJob(
+                    totalSeconds = state.totalSeconds,
+                    remainingSeconds = state.remainingSeconds
+                )
             }
             is TimerState.Stopwatch -> {
                 val currentElapsed = state.elapsedSeconds
@@ -101,6 +104,7 @@ class StudyTimerManager(
     fun skip() {
         when (val state = _timerState.value) {
             is TimerState.Pomodoro -> {
+                stopTimer()
                 handlePomodoroPhaseEnd(skipped = true)
             }
             is TimerState.Countdown -> {
@@ -236,7 +240,8 @@ class StudyTimerManager(
                 } else {
                     pomodoroState.completedPomodoros + 1
                 }
-                newPhase = if (newCompleted % settings.pomodorosBeforeLongBreak == 0) {
+                val longBreakInterval = settings.pomodorosBeforeLongBreak.coerceAtLeast(1)
+                newPhase = if (newCompleted > 0 && newCompleted % longBreakInterval == 0) {
                     PomodoroPhase.LONG_BREAK
                 } else {
                     PomodoroPhase.SHORT_BREAK
@@ -271,9 +276,12 @@ class StudyTimerManager(
         // Trigger alert for phase change
         onTimerFinished?.invoke()
         onPomodoroPhaseChanged?.invoke(newPhase)
+        if (pomodoroState.isRunning) {
+            startTimerJob()
+        }
     }
 
-    private fun startCountdownJob(remainingSeconds: Int) {
+    private fun startCountdownJob(totalSeconds: Int, remainingSeconds: Int) {
         timerJob = scope.launch {
             var remaining = remainingSeconds
             while (remaining > 0) {
@@ -291,7 +299,7 @@ class StudyTimerManager(
                 }
             }
             if (remaining <= 0) {
-                _timerState.value = TimerState.CountdownFinished(remainingSeconds)
+                _timerState.value = TimerState.CountdownFinished(totalSeconds)
                 onTimerFinished?.invoke()
             }
         }
