@@ -25,8 +25,8 @@ class YanheRepository @Inject constructor(
     }
 
     suspend fun clearYanheSession() {
-        tokenManager.removeYanheLoginToken()
         credentialManager.removeCredentials()
+        tokenManager.removeYanheLoginToken()
     }
 
     suspend fun getYanheLoginToken(): Result<String> {

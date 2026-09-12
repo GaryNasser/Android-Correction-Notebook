@@ -13,6 +13,7 @@ import com.github.garynasser.correction_notebook.data.repository.ProviderReposit
 import com.github.garynasser.correction_notebook.data.repository.YanheRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -20,6 +21,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 @HiltViewModel
@@ -172,12 +174,24 @@ class ProfileViewModel @Inject constructor(
 
     fun logout() {
         if (_isLoading.value) return
+        _isLoading.value = true
         viewModelScope.launch {
-            _isLoading.update { true }
             try {
-                yanheRepository.clearYanheSession()
-                authStateManager.updateState(AuthState.Unauthenticated)
-                _profileMessage.value = "已退出延河课堂"
+                val cleanupSucceeded = withContext(NonCancellable) {
+                    val succeeded = try {
+                        yanheRepository.clearYanheSession()
+                        true
+                    } catch (_: Exception) {
+                        false
+                    }
+                    authStateManager.updateState(AuthState.Unauthenticated)
+                    succeeded
+                }
+                _profileMessage.value = if (cleanupSucceeded) {
+                    "已退出延河课堂"
+                } else {
+                    "已退出，部分登录缓存清理失败"
+                }
             } catch (error: CancellationException) {
                 throw error
             } catch (_: Exception) {

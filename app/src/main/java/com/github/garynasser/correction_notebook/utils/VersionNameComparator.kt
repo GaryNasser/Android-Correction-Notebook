@@ -20,19 +20,6 @@ fun compareVersionNames(first: String, second: String): Int {
     return 0
 }
 
-fun versionNameToCode(versionName: String): Long {
-    val parts = versionName.toComparableVersionParts().take(3)
-
-    return parts.foldIndexed(0L) { index, acc, value ->
-        val multiplier = when (index) {
-            0 -> 1_000_000L
-            1 -> 1_000L
-            else -> 1L
-        }
-        acc + value * multiplier
-    }
-}
-
 private fun String.toComparableVersionParts(): List<Int> {
     val versionText = trim()
         .dropWhile { char -> !char.isDigit() }

@@ -37,10 +37,9 @@ class LoginViewModel @Inject constructor (
         errorMessage = null
         val trimmedUsername = username.trim()
         if (trimmedUsername.isBlank() || password.length < 6) return
+        isLoading = true
 
         viewModelScope.launch {
-            isLoading = true
-
             try {
                 authRepository.login(trimmedUsername, password)
                     .onSuccess {
