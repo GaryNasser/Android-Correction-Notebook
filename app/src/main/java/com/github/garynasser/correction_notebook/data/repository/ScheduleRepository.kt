@@ -77,7 +77,7 @@ class ScheduleRepository(private val context: Context) {
         return (0..java.time.temporal.ChronoUnit.DAYS.between(startDate, endDate).toInt()).map { offset ->
             val date = startDate.plusDays(offset.toLong())
             val items = occurrences
-                .filter { occurrence -> occurrence.startAt.toLocalDate() == date || overlapsDate(occurrence, date) }
+                .filter { occurrence -> scheduleOccurrenceOverlapsDate(occurrence, date) }
                 .sortedWith(compareBy<ScheduleOccurrence> { !it.allDay }.thenBy { it.startAt })
             ScheduleSection(
                 title = when (range) {
@@ -97,23 +97,9 @@ class ScheduleRepository(private val context: Context) {
     ) {
         context.scheduleDataStore.edit { prefs ->
             val current = prefs[scheduleEventsKey]?.let(::parseScheduleEvents) ?: emptyList()
-            val retained = when (decision) {
-                ImportDecision.MERGE -> {
-                    val incomingIds = preview.incomingEvents.map { compositeKey(it) }.toSet()
-                    current.filterNot { event ->
-                        event.sourceType == ScheduleSourceType.ICS_IMPORT &&
-                            event.sourceCalendarId == preview.sourceCalendarId &&
-                            compositeKey(event) in incomingIds
-                    }
-                }
-                ImportDecision.OVERWRITE -> {
-                    current.filterNot {
-                        it.sourceType == ScheduleSourceType.ICS_IMPORT &&
-                            it.sourceCalendarId == preview.sourceCalendarId
-                    }
-                }
-            }
-            prefs[scheduleEventsKey] = serializeScheduleEvents(retained + preview.incomingEvents)
+            prefs[scheduleEventsKey] = serializeScheduleEvents(
+                applyIcsImport(current, preview, decision)
+            )
         }
     }
 
@@ -144,6 +130,10 @@ class ScheduleRepository(private val context: Context) {
         }
     }
 
+    suspend fun getImportedEvents(): List<ScheduleEvent> {
+        return scheduleEvents.first().filter { it.sourceType == ScheduleSourceType.ICS_IMPORT }
+    }
+
     private fun buildOccurrences(
         events: List<ScheduleEvent>,
         startDate: LocalDate,
@@ -163,7 +153,11 @@ class ScheduleRepository(private val context: Context) {
             .flatMap { event ->
                 if (event.recurrenceRule.isNullOrBlank()) {
                     val occurrence = event.toOccurrence(event.startAt, event.endAt)
-                    if (overlapsRange(occurrence, startDate, endDate)) listOf(occurrence) else emptyList()
+                    if (scheduleOccurrenceOverlapsRange(occurrence, startDate, endDate)) {
+                        listOf(occurrence)
+                    } else {
+                        emptyList()
+                    }
                 } else {
                     expandRecurringEvent(event, overrides, startDate, endDate)
                 }
@@ -259,23 +253,9 @@ class ScheduleRepository(private val context: Context) {
         } else {
             event.toOccurrence(occurrenceStart, occurrenceStart.plus(duration))
         }
-        if (overlapsRange(occurrence, startDate, endDate)) {
+        if (scheduleOccurrenceOverlapsRange(occurrence, startDate, endDate)) {
             output += occurrence
         }
-    }
-
-    private fun overlapsRange(
-        occurrence: ScheduleOccurrence,
-        startDate: LocalDate,
-        endDate: LocalDate
-    ): Boolean {
-        val occurrenceStart = occurrence.startAt.toLocalDate()
-        val occurrenceEnd = occurrence.endAt.toLocalDate()
-        return !occurrenceEnd.isBefore(startDate) && !occurrenceStart.isAfter(endDate)
-    }
-
-    private fun overlapsDate(occurrence: ScheduleOccurrence, date: LocalDate): Boolean {
-        return !occurrence.endAt.toLocalDate().isBefore(date) && !occurrence.startAt.toLocalDate().isAfter(date)
     }
 
     private fun parseRecurrenceRule(rrule: String?): Map<String, String> {
@@ -326,13 +306,6 @@ class ScheduleRepository(private val context: Context) {
             allDay = allDay,
             sourceType = sourceType
         )
-    }
-
-    private fun compositeKey(event: ScheduleEvent): String {
-        return listOf(
-            event.sourceEventUid.orEmpty(),
-            event.recurrenceId?.format(formatter).orEmpty()
-        ).joinToString("#")
     }
 
     private fun overrideKey(uid: String, recurrenceId: LocalDateTime): String {
@@ -414,15 +387,25 @@ class ScheduleRepository(private val context: Context) {
                     LocalDateTime.of(date, LocalTime.MIDNIGHT) to true
                 }
                 cleaned.endsWith("Z") -> {
-                    val utc = java.time.ZonedDateTime.parse(cleaned, DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmssX"))
+                    val utc = listOf(
+                        DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmssX"),
+                        DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmX")
+                    ).firstNotNullOfOrNull { formatter ->
+                        runCatching { java.time.ZonedDateTime.parse(cleaned, formatter) }.getOrNull()
+                    } ?: throw IllegalArgumentException("Unsupported ICS date-time: $raw")
                     utc.withZoneSameInstant(java.time.ZoneId.systemDefault()).toLocalDateTime() to false
                 }
                 else -> {
-                    val value = LocalDateTime.parse(cleaned, DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss"))
+                    val value = listOf(
+                        DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss"),
+                        DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmm")
+                    ).firstNotNullOfOrNull { formatter ->
+                        runCatching { LocalDateTime.parse(cleaned, formatter) }.getOrNull()
+                    } ?: throw IllegalArgumentException("Unsupported ICS date-time: $raw")
                     if (tzid.isNullOrBlank()) {
                         value to false
                     } else {
-                        val zoned = value.atZone(java.time.ZoneId.of(tzid))
+                        val zoned = value.atZone(java.time.ZoneId.of(tzid.trim('"')))
                             .withZoneSameInstant(java.time.ZoneId.systemDefault())
                             .toLocalDateTime()
                         zoned to false
@@ -431,4 +414,71 @@ class ScheduleRepository(private val context: Context) {
             }
         }
     }
+}
+
+internal fun icsEventCompositeKey(event: ScheduleEvent): String {
+    val recurrenceId = event.recurrenceId?.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME).orEmpty()
+    val uid = event.sourceEventUid?.trim().orEmpty()
+    if (uid.isNotEmpty()) return "uid#$uid#$recurrenceId"
+
+    return listOf(
+        "fallback",
+        event.title.trim(),
+        event.startAt.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
+        event.endAt.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
+        recurrenceId
+    ).joinToString("#")
+}
+
+internal fun applyIcsImport(
+    current: List<ScheduleEvent>,
+    preview: IcsImportPreview,
+    decision: ImportDecision
+): List<ScheduleEvent> {
+    val sourceIds = preview.replacedCalendarIds + preview.sourceCalendarId
+    if (decision == ImportDecision.OVERWRITE) {
+        return current.filterNot {
+            it.sourceType == ScheduleSourceType.ICS_IMPORT && it.sourceCalendarId in sourceIds
+        } + preview.incomingEvents
+    }
+
+    val incomingKeys = preview.incomingEvents.map(::icsEventCompositeKey).toSet()
+    val locallyEditedKeys = current
+        .filter {
+            it.sourceType == ScheduleSourceType.ICS_IMPORT &&
+                it.sourceCalendarId in sourceIds &&
+                it.lastImportedAt != null &&
+                it.updatedAt > it.lastImportedAt
+        }
+        .map(::icsEventCompositeKey)
+        .toSet()
+    val retained = current.filterNot { event ->
+        event.sourceType == ScheduleSourceType.ICS_IMPORT &&
+            event.sourceCalendarId in sourceIds &&
+            icsEventCompositeKey(event) in incomingKeys &&
+            icsEventCompositeKey(event) !in locallyEditedKeys
+    }
+    return retained + preview.incomingEvents.filterNot {
+        icsEventCompositeKey(it) in locallyEditedKeys
+    }
+}
+
+internal fun scheduleOccurrenceOverlapsDate(
+    occurrence: ScheduleOccurrence,
+    date: LocalDate
+): Boolean {
+    val dayStart = date.atStartOfDay()
+    val nextDayStart = date.plusDays(1).atStartOfDay()
+    return occurrence.startAt < nextDayStart && occurrence.endAt > dayStart
+}
+
+internal fun scheduleOccurrenceOverlapsRange(
+    occurrence: ScheduleOccurrence,
+    startDate: LocalDate,
+    endDate: LocalDate
+): Boolean {
+    if (endDate.isBefore(startDate)) return false
+    val rangeStart = startDate.atStartOfDay()
+    val rangeEndExclusive = endDate.plusDays(1).atStartOfDay()
+    return occurrence.startAt < rangeEndExclusive && occurrence.endAt > rangeStart
 }

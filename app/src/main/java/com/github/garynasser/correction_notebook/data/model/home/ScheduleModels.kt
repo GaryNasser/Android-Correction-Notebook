@@ -73,6 +73,7 @@ data class IcsDiffItem(
 data class IcsImportPreview(
     val fileName: String,
     val sourceCalendarId: String,
+    val replacedCalendarIds: Set<String> = emptySet(),
     val incomingEvents: List<ScheduleEvent>,
     val added: List<IcsDiffItem>,
     val updated: List<IcsDiffItem>,
