@@ -971,6 +971,9 @@ fun IcsImportPreviewDialog(
                 if (preview.conflicts.isNotEmpty()) {
                     item { DiffPreviewGroup("冲突提醒", preview.conflicts) }
                 }
+                if (preview.deleted.isNotEmpty()) {
+                    item { DiffPreviewGroup("覆盖时删除", preview.deleted) }
+                }
             }
         },
         confirmButton = {
