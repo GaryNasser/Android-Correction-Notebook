@@ -6,6 +6,7 @@ import android.net.Uri
 import android.widget.Toast
 import android.webkit.MimeTypeMap
 import androidx.compose.foundation.BorderStroke
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -87,12 +88,14 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -133,6 +136,7 @@ private enum class FileSortMode {
 @Composable
 fun KnowledgeBaseScreen(
     onOpenFile: (String) -> Unit,
+    onFullscreenModeChanged: (Boolean) -> Unit = {},
     viewModel: KnowledgeBaseViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -503,6 +507,39 @@ fun KnowledgeBaseScreen(
     val isLearningMode = uiState.selectedTabIndex == 1 && learningStudySet != null
     val isQuizMode = uiState.selectedTabIndex == 1 && quizStudySet != null
     val isImmersiveMode = isLearningMode || isQuizMode
+
+    if (isImmersiveMode) {
+        val currentFullscreenCallback by rememberUpdatedState(onFullscreenModeChanged)
+        DisposableEffect(Unit) {
+            currentFullscreenCallback(true)
+            onDispose { currentFullscreenCallback(false) }
+        }
+    }
+
+    val hasInternalBackTarget = isImmersiveMode ||
+        selectedStudySet != null ||
+        isSelectionMode ||
+        isSearchExpanded ||
+        uiState.currentFolderId != null
+    BackHandler(enabled = hasInternalBackTarget) {
+        when {
+            isLearningMode -> learningStudySetId = null
+            isQuizMode -> {
+                quizStudySetId = null
+                quizStartQuestionId = null
+            }
+            selectedStudySet != null -> selectedStudySetId = null
+            isSelectionMode -> {
+                isSelectionMode = false
+                selectedFileIds = emptySet()
+            }
+            isSearchExpanded -> {
+                isSearchExpanded = false
+                viewModel.updateLocalSearchQuery("")
+            }
+            uiState.currentFolderId != null -> viewModel.navigateBack()
+        }
+    }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
