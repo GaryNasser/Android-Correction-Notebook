@@ -133,7 +133,6 @@ fun AITutorScreen(
         topBar = {
             TopAppBar(
                 title = { Text("AI 学习中枢") },
-                windowInsets = WindowInsets(0, 0, 0, 0),
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0.92f),
                     scrolledContainerColor = MaterialTheme.colorScheme.surface

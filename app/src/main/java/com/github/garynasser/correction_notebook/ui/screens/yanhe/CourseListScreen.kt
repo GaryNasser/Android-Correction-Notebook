@@ -59,7 +59,6 @@ fun CourseListScreen(
         topBar = {
             TopAppBar(
                 title = { Text(text = "课程资源", fontWeight = FontWeight.Bold) },
-                windowInsets = WindowInsets(0, 0, 0, 0),
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0.92f),
                     scrolledContainerColor = MaterialTheme.colorScheme.surface

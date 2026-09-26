@@ -199,7 +199,6 @@ fun HomeScreen(
                         onTabSelected = { activeMainTab = it }
                     )
                 },
-                windowInsets = WindowInsets(0, 0, 0, 0),
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0.92f),
                     scrolledContainerColor = MaterialTheme.colorScheme.surface

@@ -226,7 +226,6 @@ fun StatisticsScreen(
         topBar = {
             TopAppBar(
                 title = { Text("学习统计") },
-                windowInsets = WindowInsets(0, 0, 0, 0),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")

@@ -54,7 +54,6 @@ fun TodoHistoryScreen(
         topBar = {
             TopAppBar(
                 title = { Text("完成历史") },
-                windowInsets = WindowInsets(0, 0, 0, 0),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
