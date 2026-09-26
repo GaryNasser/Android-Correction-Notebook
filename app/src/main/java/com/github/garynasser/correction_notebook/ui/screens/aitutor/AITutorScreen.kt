@@ -3,6 +3,7 @@ package com.github.garynasser.correction_notebook.ui.screens.aitutor
 import android.annotation.SuppressLint
 import androidx.compose.foundation.BorderStroke
 import android.util.Base64
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.clickable
@@ -1173,7 +1174,15 @@ private fun MathFormulaView(
                 .heightIn(min = 56.dp, max = 220.dp),
             factory = { context ->
                 WebView(context).apply {
-                    webViewClient = WebViewClient()
+                    webViewClient = object : WebViewClient() {
+                        override fun shouldOverrideUrlLoading(
+                            view: WebView?,
+                            request: WebResourceRequest?
+                        ): Boolean = true
+
+                        @Suppress("DEPRECATION")
+                        override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean = true
+                    }
                     settings.javaScriptEnabled = true
                     settings.domStorageEnabled = false
                     settings.allowFileAccess = false
@@ -1191,6 +1200,13 @@ private fun MathFormulaView(
                     "UTF-8",
                     null
                 )
+            },
+            onRelease = { webView ->
+                webView.stopLoading()
+                webView.loadUrl("about:blank")
+                webView.clearHistory()
+                webView.removeAllViews()
+                webView.destroy()
             }
         )
     }
