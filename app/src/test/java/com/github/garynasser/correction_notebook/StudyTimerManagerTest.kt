@@ -31,4 +31,15 @@ class StudyTimerManagerTest {
         assertTrue(state.state.timeRemainingSeconds < 60)
         manager.pause()
     }
+
+    @Test
+    fun skippingCountdownCannotBeOverwrittenByThePreviousTimerJob() = runBlocking {
+        val manager = StudyTimerManager(this)
+        manager.startCountdown(minutes = 1)
+
+        manager.skip()
+        delay(1_100)
+
+        assertTrue(manager.timerState.value is TimerState.CountdownFinished)
+    }
 }

@@ -108,6 +108,7 @@ class StudyTimerManager(
                 handlePomodoroPhaseEnd(skipped = true)
             }
             is TimerState.Countdown -> {
+                stopTimer()
                 _timerState.value = TimerState.CountdownFinished(state.totalSeconds)
             }
             is TimerState.Stopwatch -> {
