@@ -416,7 +416,9 @@ fun SearchAndFilterSection(viewModel: CourseListViewModel) {
     ) {
         Column(modifier = Modifier.padding(7.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-                if (shouldStackCourseFilters(maxWidth.value)) {
+                if (viewModel.semesters.size <= 1) {
+                    CourseModeFilterRow(viewModel = viewModel, modifier = Modifier.fillMaxWidth())
+                } else if (shouldStackCourseFilters(maxWidth.value)) {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         CourseModeFilterRow(viewModel = viewModel, modifier = Modifier.fillMaxWidth())
                         SemesterMenu(
