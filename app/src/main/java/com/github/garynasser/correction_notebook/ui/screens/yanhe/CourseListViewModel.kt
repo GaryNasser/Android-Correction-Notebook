@@ -93,15 +93,14 @@ class CourseListViewModel @Inject constructor(
 
     fun loadCourses(isNextPage: Boolean = false) {
         if (isNextPage && (isLoadingMore || isEndReached || courseLoadJob?.isActive == true)) return
+        if (!isNextPage) {
+            courseLoadJob?.cancel()
+        }
         if (isPersonalCoursesMode) {
             if (!isNextPage) {
                 applyPersonalCourseFilters()
             }
             return
-        }
-
-        if (!isNextPage) {
-            courseLoadJob?.cancel()
         }
 
         courseLoadJob = viewModelScope.launch {
