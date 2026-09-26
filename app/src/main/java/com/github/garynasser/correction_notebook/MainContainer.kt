@@ -183,7 +183,7 @@ fun MainContainer(
                     onOpenKnowledgeFile = { fileId ->
                         navController.navigate(KnowledgeBaseFileViewer(fileId))
                     },
-                    onImmersiveModeChanged = { hideBottomBar = it }
+                    onFullscreenModeChanged = { hideBottomBar = it }
                 )
             }
             composable<ArticleDetailRoute> {
@@ -199,7 +199,8 @@ fun MainContainer(
                 KnowledgeBaseScreen(
                     onOpenFile = { fileId ->
                         navController.navigate(KnowledgeBaseFileViewer(fileId))
-                    }
+                    },
+                    onFullscreenModeChanged = { hideBottomBar = it }
                 )
             }
 

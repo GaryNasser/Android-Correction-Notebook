@@ -2,6 +2,7 @@ package com.github.garynasser.correction_notebook.ui.screens.home
 
 import android.content.Context
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -85,7 +86,7 @@ fun HomeScreen(
     onOpenCourse: (Int, String) -> Unit = { _, _ -> },
     onNavigateToKnowledgeBase: () -> Unit = {},
     onOpenKnowledgeFile: (String) -> Unit = {},
-    onImmersiveModeChanged: (Boolean) -> Unit = {},
+    onFullscreenModeChanged: (Boolean) -> Unit = {},
     onOpenArticle: (Article) -> Unit = {}
 ) {
     val uiState by homeViewModel.uiState.collectAsStateWithLifecycle()
@@ -149,14 +150,7 @@ fun HomeScreen(
 
     // Handle immersive mode
     if (uiState.selectedMode == StudyMode.IMMERSIVE) {
-        LaunchedEffect(Unit) {
-            onImmersiveModeChanged(true)
-        }
-        DisposableEffect(Unit) {
-            onDispose {
-                onImmersiveModeChanged(false)
-            }
-        }
+        FullscreenHomeSurfaceEffect(onFullscreenModeChanged)
         ImmersiveStudyScreen(
             timerManager = homeViewModel.timerManager,
             onExit = { homeViewModel.finishCurrentSessionAndExit() },
@@ -175,6 +169,8 @@ fun HomeScreen(
 
     // Handle statistics screen
     if (uiState.showStatistics) {
+        FullscreenHomeSurfaceEffect(onFullscreenModeChanged)
+        BackHandler(onBack = homeViewModel::hideStatistics)
         StatisticsScreen(
             viewModel = statisticsViewModel,
             onBack = { homeViewModel.hideStatistics() }
@@ -184,6 +180,8 @@ fun HomeScreen(
 
     // Handle todo history screen
     if (uiState.showTodoHistory) {
+        FullscreenHomeSurfaceEffect(onFullscreenModeChanged)
+        BackHandler(onBack = homeViewModel::hideTodoHistory)
         TodoHistoryScreen(
             onBack = { homeViewModel.hideTodoHistory() }
         )
@@ -392,6 +390,15 @@ fun HomeScreen(
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun FullscreenHomeSurfaceEffect(onFullscreenModeChanged: (Boolean) -> Unit) {
+    val currentCallback by rememberUpdatedState(onFullscreenModeChanged)
+    DisposableEffect(Unit) {
+        currentCallback(true)
+        onDispose { currentCallback(false) }
     }
 }
 
