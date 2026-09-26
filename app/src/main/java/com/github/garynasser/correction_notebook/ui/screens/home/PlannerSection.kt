@@ -38,6 +38,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -74,6 +75,7 @@ import com.github.garynasser.correction_notebook.data.model.home.ScheduleRange
 import com.github.garynasser.correction_notebook.data.model.home.ScheduleSection
 import com.github.garynasser.correction_notebook.data.model.home.ScheduleSourceType
 import com.github.garynasser.correction_notebook.data.model.home.TodoItem
+import com.github.garynasser.correction_notebook.data.repository.scheduleDateRange
 import com.github.garynasser.correction_notebook.ui.components.FreshCard
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -251,10 +253,7 @@ private fun SchedulePlannerContent(
                         fontWeight = FontWeight.SemiBold
                     )
                     section.items.forEach { item ->
-                        ScheduleOccurrenceCard(
-                            item = item,
-                            onClick = { selectedOccurrence = item }
-                        )
+                        CompactWeekScheduleItem(item = item, onClick = { selectedOccurrence = item })
                     }
                 }
             }
@@ -361,42 +360,32 @@ private fun WeekScheduleContent(
     sections: List<ScheduleSection>,
     onItemClick: (ScheduleOccurrence) -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        sections.forEach { section ->
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f)
-                )
-            ) {
-                Column(
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        sections.forEachIndexed { index, section ->
+            if (index > 0) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.42f))
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                        .heightIn(min = 36.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "${section.date.format(DateTimeFormatter.ofPattern("M月d日"))} ${section.date.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.CHINA)}",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Text(
-                            text = if (section.items.isEmpty()) "无课" else "${section.items.size} 项",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.58f)
-                        )
-                    }
-                    if (section.items.isEmpty()) {
-                        Text(
-                            text = "留给复习、自习或临时安排",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.58f)
-                        )
-                    } else {
+                    Text(
+                        text = "${section.date.format(DateTimeFormatter.ofPattern("M月d日"))} ${section.date.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.CHINA)}",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = if (section.items.isEmpty()) "无课" else "${section.items.size} 项",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.58f)
+                    )
+                }
+                if (section.items.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         section.items.forEach { item ->
                             CompactWeekScheduleItem(item = item, onClick = { onItemClick(item) })
                         }
@@ -433,7 +422,7 @@ private fun CompactWeekScheduleItem(
                 text = item.title,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.SemiBold,
-                maxLines = 1
+                maxLines = 2
             )
             if (item.location.isNotBlank()) {
                 Text(
@@ -453,74 +442,18 @@ private fun PlannerEmptyState(
     title: String,
     description: String
 ) {
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f)
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Text(text = title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            Text(
-                text = description,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.74f)
-            )
-        }
-    }
-}
-
-@Composable
-private fun ScheduleOccurrenceCard(
-    item: ScheduleOccurrence,
-    onClick: () -> Unit
-) {
-    Card(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(
-            containerColor = sourceContainerColor(item.sourceType)
-        )
+            .padding(horizontal = 4.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = formatScheduleTimeCompact(item),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.width(76.dp)
-            )
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                Text(
-                    text = item.title,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1
-                )
-                if (item.location.isNotBlank()) {
-                    Text(
-                        text = item.location,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.64f),
-                        maxLines = 1
-                    )
-                }
-            }
-            SourceBadge(sourceType = item.sourceType)
-        }
+        Text(text = title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+        Text(
+            text = description,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.74f)
+        )
     }
 }
 
@@ -628,7 +561,10 @@ private fun scheduleRangeSummary(selectedDate: LocalDate, selectedRange: Schedul
     return when (selectedRange) {
         ScheduleRange.TODAY -> "显示 ${selectedDate.format(DateTimeFormatter.ofPattern("M月d日"))} 的课程和日程"
         ScheduleRange.TOMORROW -> "显示 ${selectedDate.plusDays(1).format(DateTimeFormatter.ofPattern("M月d日"))} 的课程和日程"
-        ScheduleRange.WEEK -> "显示从 ${selectedDate.format(DateTimeFormatter.ofPattern("M月d日"))} 起 7 天的课程和日程"
+        ScheduleRange.WEEK -> {
+            val (monday, sunday) = scheduleDateRange(ScheduleRange.WEEK, selectedDate)
+            "显示 ${monday.format(DateTimeFormatter.ofPattern("M月d日"))} 至 ${sunday.format(DateTimeFormatter.ofPattern("M月d日"))} 的课程和日程"
+        }
     }
 }
 
