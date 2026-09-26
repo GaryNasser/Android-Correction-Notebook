@@ -184,13 +184,9 @@ class BitShareRepository @Inject constructor(
         )
     }
 
-    private fun buildDownloadCandidateUrls(fileId: String): List<String> {
-        val preferredBase = networkDetector.getBitShareBaseUrl().trimEnd('/')
-        return listOf(
-            "$preferredBase/api/public/files/$fileId/download",
-            "https://app.bitshare.com.cn/api/public/files/$fileId/download",
-            "http://10.170.35.57:8890/api/public/files/$fileId/download"
-        ).distinct()
+    private suspend fun buildDownloadCandidateUrls(fileId: String): List<String> {
+        val environment = networkDetector.detectEnvironmentWithRetry(maxRetries = 1)
+        return bitShareDownloadFallbackUrls(environment, fileId)
     }
 
     private fun validateDownloadBody(body: ResponseBody) {
@@ -205,5 +201,16 @@ class BitShareRepository @Inject constructor(
             body.close()
             error(errorMessage)
         }
+    }
+}
+
+internal fun bitShareDownloadFallbackUrls(
+    environment: BitShareNetworkDetector.NetworkEnvironment,
+    fileId: String
+): List<String> {
+    return if (environment == BitShareNetworkDetector.NetworkEnvironment.INTRANET) {
+        listOf("http://10.170.35.57:8890/api/public/files/$fileId/download")
+    } else {
+        emptyList()
     }
 }
