@@ -178,13 +178,6 @@ class CourseListViewModel @Inject constructor(
             isEndReached = true
 
             try {
-                val loginResult = yanheRepository.getYanheLoginToken()
-                if (loginResult.isFailure) {
-                    uiState = CourseUiState.Success(emptyList())
-                    authStateManager.onCasLoginRequired()
-                    return@launch
-                }
-
                 runCatching {
                     withTimeout(30_000) {
                         videoRepository.getAllPersonalCourses()

@@ -121,7 +121,7 @@ class BitCasClient @Inject constructor(
 
         val html = fetchBody(request)
         return extractFormAction(html)
-            ?: throw CasAuthException("统一认证失败，请检查学号或密码")
+            ?: throw CasCredentialException("统一认证失败，请检查学号或密码")
     }
 
     private fun getServiceTicket(tgtUrl: String, serviceUrl: String): String {
@@ -146,8 +146,8 @@ class BitCasClient @Inject constructor(
             okHttpClient.newCall(request).execute().use { response ->
                 val body = response.body?.string().orEmpty()
                 if (!response.isSuccessful) {
-                    if (response.code == 401) {
-                        throw CasAuthException("统一认证失败，请检查学号或密码")
+                    if (isCasCredentialFailureStatus(response.code)) {
+                        throw CasCredentialException("统一认证失败，请检查学号或密码")
                     }
                     throw CasAuthException("统一认证请求失败：${response.code}")
                 }
@@ -247,4 +247,10 @@ class BitCasClient @Inject constructor(
     }
 }
 
-class CasAuthException(message: String, cause: Throwable? = null) : Exception(message, cause)
+open class CasAuthException(message: String, cause: Throwable? = null) : Exception(message, cause)
+
+class CasCredentialException(message: String) : CasAuthException(message)
+
+internal fun isCasCredentialFailureStatus(statusCode: Int): Boolean {
+    return statusCode == 400 || statusCode == 401
+}
