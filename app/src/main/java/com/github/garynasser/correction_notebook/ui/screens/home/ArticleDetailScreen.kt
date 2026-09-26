@@ -58,6 +58,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.github.garynasser.correction_notebook.data.model.home.ArticleContentBlock
+import java.net.URI
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -72,7 +73,7 @@ fun ArticleDetailScreen(
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
     var menuExpanded by remember { mutableStateOf(false) }
-    val fallbackUrl = uiState.articleDetail?.url ?: uiState.fallbackUrl
+    val fallbackUrl = safeArticleWebUrl(uiState.articleDetail?.url ?: uiState.fallbackUrl)
 
     fun openFallbackUrl() {
         val url = fallbackUrl ?: return
@@ -106,7 +107,10 @@ fun ArticleDetailScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { viewModel.refresh() }) {
+                    IconButton(
+                        onClick = viewModel::refresh,
+                        enabled = !uiState.isLoading && !uiState.isRefreshing
+                    ) {
                         Icon(Icons.Default.Refresh, contentDescription = "刷新")
                     }
                     Box {
@@ -210,6 +214,7 @@ fun ArticleDetailScreen(
                             }
 
                             is ArticleContentBlock.Image -> {
+                                val safeImageUrl = safeArticleWebUrl(block.imageUrl)
                                 Card(
                                     shape = RoundedCornerShape(8.dp),
                                     colors = CardDefaults.cardColors(
@@ -218,14 +223,30 @@ fun ArticleDetailScreen(
                                     elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                                 ) {
                                     Column {
-                                        AsyncImage(
-                                            model = block.imageUrl,
-                                            contentDescription = null,
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .aspectRatio(16f / 9f),
-                                            contentScale = ContentScale.Crop
-                                        )
+                                        if (safeImageUrl != null) {
+                                            AsyncImage(
+                                                model = safeImageUrl,
+                                                contentDescription = block.caption.ifBlank { null },
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .aspectRatio(16f / 9f),
+                                                contentScale = ContentScale.Fit
+                                            )
+                                        } else {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .aspectRatio(16f / 9f),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.Image,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(32.dp),
+                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.56f)
+                                                )
+                                            }
+                                        }
                                         if (block.caption.isNotBlank()) {
                                             Text(
                                                 text = block.caption,
@@ -239,9 +260,10 @@ fun ArticleDetailScreen(
                             }
 
                             is ArticleContentBlock.Link -> {
+                                val safeLinkUrl = safeArticleWebUrl(block.url)
                                 Card(
-                                    modifier = Modifier.clickable {
-                                        runCatching { uriHandler.openUri(block.url) }
+                                    modifier = Modifier.clickable(enabled = safeLinkUrl != null) {
+                                        safeLinkUrl?.let { url -> runCatching { uriHandler.openUri(url) } }
                                     },
                                     shape = RoundedCornerShape(8.dp),
                                     colors = CardDefaults.cardColors(
@@ -278,9 +300,13 @@ fun ArticleDetailScreen(
                                                 )
                                             }
                                             Text(
-                                                text = block.url,
+                                                text = safeLinkUrl ?: "链接不可用",
                                                 style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.primary
+                                                color = if (safeLinkUrl != null) {
+                                                    MaterialTheme.colorScheme.primary
+                                                } else {
+                                                    MaterialTheme.colorScheme.error
+                                                }
                                             )
                                         }
                                     }
@@ -429,4 +455,12 @@ private fun ArticleInlineStatus(
 
 private fun formatArticleDate(timestamp: Long): String {
     return SimpleDateFormat("yyyy年MM月dd日 HH:mm", Locale.getDefault()).format(Date(timestamp))
+}
+
+internal fun safeArticleWebUrl(raw: String?): String? {
+    val value = raw?.trim()?.takeIf(String::isNotEmpty) ?: return null
+    val uri = runCatching { URI(value) }.getOrNull() ?: return null
+    return value.takeIf {
+        uri.scheme?.lowercase() in setOf("http", "https") && !uri.host.isNullOrBlank()
+    }
 }
