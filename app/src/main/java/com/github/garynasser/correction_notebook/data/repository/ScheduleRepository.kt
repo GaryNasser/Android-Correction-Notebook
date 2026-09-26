@@ -68,11 +68,7 @@ class ScheduleRepository(private val context: Context) {
     }
 
     suspend fun getEventsForRange(range: ScheduleRange, today: LocalDate = LocalDate.now()): List<ScheduleSection> {
-        val (startDate, endDate) = when (range) {
-            ScheduleRange.TODAY -> today to today
-            ScheduleRange.TOMORROW -> today.plusDays(1) to today.plusDays(1)
-            ScheduleRange.WEEK -> today to today.plusDays(6)
-        }
+        val (startDate, endDate) = scheduleDateRange(range, today)
         val occurrences = buildOccurrences(scheduleEvents.first(), startDate, endDate)
         return (0..java.time.temporal.ChronoUnit.DAYS.between(startDate, endDate).toInt()).map { offset ->
             val date = startDate.plusDays(offset.toLong())
@@ -412,6 +408,17 @@ class ScheduleRepository(private val context: Context) {
                     }
                 }
             }
+        }
+    }
+}
+
+internal fun scheduleDateRange(range: ScheduleRange, selectedDate: LocalDate): Pair<LocalDate, LocalDate> {
+    return when (range) {
+        ScheduleRange.TODAY -> selectedDate to selectedDate
+        ScheduleRange.TOMORROW -> selectedDate.plusDays(1) to selectedDate.plusDays(1)
+        ScheduleRange.WEEK -> {
+            val monday = selectedDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+            monday to monday.plusDays(6)
         }
     }
 }

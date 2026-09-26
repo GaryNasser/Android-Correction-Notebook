@@ -326,7 +326,11 @@ class HomeViewModel @Inject constructor(
     private suspend fun refreshScheduleSections() {
         val state = _uiState.value
         val sections = scheduleRepository.getEventsForRange(state.scheduleRange, today = state.selectedDate)
-        _uiState.value = _uiState.value.copy(scheduleSections = sections)
+        if (_uiState.value.selectedDate == state.selectedDate &&
+            _uiState.value.scheduleRange == state.scheduleRange
+        ) {
+            _uiState.value = _uiState.value.copy(scheduleSections = sections)
+        }
     }
 
     private suspend fun refreshTodayScheduleCount(targetDate: LocalDate = LocalDate.now()) {
