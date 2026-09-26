@@ -2,7 +2,9 @@ package com.github.garynasser.correction_notebook.data.remote.manager
 
 import com.github.garynasser.correction_notebook.data.local.CredentialManager
 import com.github.garynasser.correction_notebook.data.local.TokenManager
+import com.github.garynasser.correction_notebook.data.model.auth.AuthState
 import com.github.garynasser.correction_notebook.data.remote.api.VideoApiService
+import com.github.garynasser.correction_notebook.data.remote.cas.CasCredentialException
 import com.github.garynasser.correction_notebook.data.repository.AuthStateManager
 import com.github.garynasser.correction_notebook.data.repository.YanheRepository
 import kotlinx.coroutines.sync.Mutex
@@ -60,6 +62,11 @@ class VideoRemoteManager @Inject constructor(
         val token = tokenManager.getYanheLoginToken()
 
         if (token == null) {
+            if (loginResult.exceptionOrNull() is CasCredentialException) {
+                credentialManager.removeCredentials()
+                authStateManager.updateState(AuthState.Unauthenticated)
+                authStateManager.onCasLoginRequired()
+            }
             throw IllegalStateException(
                 loginResult.exceptionOrNull()?.message ?: "延河课堂登录已失效，请重新登录"
             )
