@@ -66,6 +66,12 @@ class AISettingsManager @Inject constructor(
         }
     }
 
+    suspend fun clearLegacyApiKey() {
+        context.aiDataStore.edit { prefs ->
+            prefs.remove(API_KEY_KEY)
+        }
+    }
+
     suspend fun setAiModel(model: String) {
         context.aiDataStore.edit { prefs ->
             prefs[AI_MODEL_KEY] = model
