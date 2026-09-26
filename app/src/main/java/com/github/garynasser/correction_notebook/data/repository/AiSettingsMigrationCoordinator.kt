@@ -12,9 +12,11 @@ class AiSettingsMigrationCoordinator @Inject constructor(
     private val providerRepository: ProviderRepository
 ) {
     suspend fun migrateIfNeeded() {
-        if (providerRepository.countProviders() > 0) return
-
         val apiKey = aiSettingsManager.apiKey.first().trim()
+        if (providerRepository.countProviders() > 0) {
+            if (apiKey.isNotBlank()) aiSettingsManager.clearLegacyApiKey()
+            return
+        }
         if (apiKey.isBlank()) return
 
         val baseUrl = aiSettingsManager.apiBaseUrl.first().trim()
@@ -40,6 +42,7 @@ class AiSettingsMigrationCoordinator @Inject constructor(
                 updatedAt = System.currentTimeMillis()
             )
         )
+        aiSettingsManager.clearLegacyApiKey()
     }
 
     private fun buildDefaultProviderName(baseUrl: String): String {
