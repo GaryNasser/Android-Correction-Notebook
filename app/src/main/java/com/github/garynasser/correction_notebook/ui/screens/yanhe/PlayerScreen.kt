@@ -10,7 +10,6 @@ import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -21,9 +20,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.ui.PlayerView
 
 @Composable
@@ -33,24 +29,8 @@ fun PlayerScreen(
 ) {
     val playState = viewModel.playState
     val controller by viewModel.controller // 监听 MediaController 的变化
-    val lifecycleOwner = LocalLifecycleOwner.current
     val videoTitle = viewModel.videoTitle.ifBlank { "延河课堂视频" }
     val courseName = viewModel.courseName
-
-    // 生命周期管理：当用户切离界面时自动暂停，回来时尝试播放
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            when (event) {
-                Lifecycle.Event.ON_PAUSE -> viewModel.onHostPause()
-                Lifecycle.Event.ON_RESUME -> viewModel.onHostResume()
-                else -> Unit
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-        }
-    }
 
     Box(
         modifier = Modifier
