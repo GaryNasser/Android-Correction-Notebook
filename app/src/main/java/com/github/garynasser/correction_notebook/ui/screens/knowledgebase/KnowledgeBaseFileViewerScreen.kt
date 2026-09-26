@@ -5,6 +5,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
 import android.webkit.MimeTypeMap
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
@@ -604,10 +605,17 @@ private fun HtmlPreview(htmlPreviewPath: String?) {
                     builtInZoomControls = true
                     displayZoomControls = false
                     allowFileAccess = true
+                    allowContentAccess = false
+                    blockNetworkLoads = true
                     loadWithOverviewMode = true
                     useWideViewPort = true
                 }
-                webViewClient = WebViewClient()
+                webViewClient = object : WebViewClient() {
+                    override fun shouldOverrideUrlLoading(
+                        view: WebView?,
+                        request: WebResourceRequest?
+                    ): Boolean = true
+                }
                 loadUrl(File(htmlPreviewPath).toURI().toString())
             }
         },
@@ -617,6 +625,11 @@ private fun HtmlPreview(htmlPreviewPath: String?) {
             if (webView.url != targetUrl) {
                 webView.loadUrl(targetUrl)
             }
+        },
+        onRelease = { webView ->
+            webView.stopLoading()
+            webView.loadUrl("about:blank")
+            webView.destroy()
         }
     )
 }
