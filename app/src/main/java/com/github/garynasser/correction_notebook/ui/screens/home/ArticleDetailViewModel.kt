@@ -9,6 +9,7 @@ import com.github.garynasser.correction_notebook.data.repository.ArticleReposito
 import com.github.garynasser.correction_notebook.ui.navigation.ArticleDetailRoute
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -35,17 +36,19 @@ class ArticleDetailViewModel @Inject constructor(
         ArticleDetailUiState(fallbackUrl = args.fallbackUrl)
     )
     val uiState: StateFlow<ArticleDetailUiState> = _uiState.asStateFlow()
+    private var loadJob: Job? = null
 
     init {
         loadArticleDetail()
     }
 
     fun refresh() {
+        if (loadJob?.isActive == true) return
         loadArticleDetail(forceRefresh = true)
     }
 
     private fun loadArticleDetail(forceRefresh: Boolean = false) {
-        viewModelScope.launch {
+        loadJob = viewModelScope.launch {
             val currentDetail = _uiState.value.articleDetail
             _uiState.value = _uiState.value.copy(
                 isLoading = currentDetail == null,
