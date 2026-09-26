@@ -146,13 +146,10 @@ object NetworkModule {
     @Provides
     @Singleton
     fun provideBitShareApiService(
-        @BasicRetrofit okHttpClient: OkHttpClient,
-        networkDetector: BitShareNetworkDetector
+        @BasicRetrofit okHttpClient: OkHttpClient
     ): BitShareApiService {
-        // 根据网络环境自动选择 URL
-        val baseUrl = networkDetector.getBitShareBaseUrl()
         return Retrofit.Builder()
-            .baseUrl(baseUrl)
+            .baseUrl(BIT_SHARE_BASE_URL)
             .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
