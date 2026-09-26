@@ -25,6 +25,9 @@ class ChatSessionRepository @Inject constructor(
     suspend fun getLatestSessionForProvider(providerId: Long): ChatSessionEntity? =
         sessionDao.getLatestSessionForProvider(providerId)
 
+    suspend fun getSessionById(sessionId: Long): ChatSessionEntity? =
+        sessionDao.getSessionById(sessionId)
+
     suspend fun createSession(
         title: String,
         providerId: Long,
