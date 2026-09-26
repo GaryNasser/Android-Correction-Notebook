@@ -1,6 +1,5 @@
 package com.github.garynasser.correction_notebook.ui.screens.home
 
-import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -32,7 +31,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle as ComposeTextStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -73,7 +71,6 @@ import java.time.ZoneOffset
 import java.time.format.TextStyle
 import java.time.format.DateTimeFormatter
 import java.time.temporal.WeekFields
-import java.io.File
 import java.util.Locale
 import kotlinx.coroutines.launch
 
@@ -95,7 +92,6 @@ fun HomeScreen(
     var showCustomTimer by remember { mutableStateOf(false) }
     var startPomodoroAfterSettings by remember { mutableStateOf(false) }
     var activeMainTab by rememberSaveable { mutableStateOf(HomeMainTab.BIT) }
-    val context = LocalContext.current
     val listState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
     val snackbarScope = rememberCoroutineScope()
@@ -115,15 +111,7 @@ fun HomeScreen(
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
-        uri?.let {
-            val savedUri = saveBackgroundImageToAppStorage(context, it)
-            if (savedUri != null) {
-                homeViewModel.setBackgroundImage(savedUri)
-                showHomeMessage("背景图已更新")
-            } else {
-                showHomeMessage("背景图保存失败，请换一张图片试试")
-            }
-        }
+        uri?.let(homeViewModel::importBackgroundImage)
     }
     val icsPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -147,6 +135,12 @@ fun HomeScreen(
         val message = uiState.scheduleActionMessage ?: uiState.scheduleActionError ?: return@LaunchedEffect
         showHomeMessage(message)
         homeViewModel.consumeScheduleActionMessage()
+    }
+
+    LaunchedEffect(uiState.backgroundImageMessage, uiState.backgroundImageError) {
+        val message = uiState.backgroundImageMessage ?: uiState.backgroundImageError ?: return@LaunchedEffect
+        showHomeMessage(message)
+        homeViewModel.consumeBackgroundImageMessage()
     }
 
     // Handle immersive mode
@@ -334,6 +328,7 @@ fun HomeScreen(
     if (uiState.showModeSelector) {
         ModeSelectorDialog(
             currentBackgroundUri = uiState.backgroundImageUri,
+            isBackgroundBusy = uiState.isSavingBackgroundImage,
             onDismiss = { homeViewModel.hideModeSelector() },
             onModeSelected = { mode ->
                 homeViewModel.hideModeSelector()
@@ -355,8 +350,7 @@ fun HomeScreen(
                 imagePickerLauncher.launch("image/*")
             },
             onClearBackground = {
-                homeViewModel.setBackgroundImage(null)
-                showHomeMessage("背景图已清除")
+                homeViewModel.clearBackgroundImage()
             }
         )
     }
@@ -1810,24 +1804,6 @@ private fun adviceLines(advice: String): List<String> {
         .ifEmpty { listOf(advice.trim()) }
 }
 
-private fun saveBackgroundImageToAppStorage(context: Context, sourceUri: Uri): String? {
-    val backgroundsDir = File(context.filesDir, "immersive_backgrounds").apply {
-        mkdirs()
-    }
-    val targetFile = File(backgroundsDir, "background_${System.currentTimeMillis()}.jpg")
-    return runCatching {
-        context.contentResolver.openInputStream(sourceUri)?.use { input ->
-            targetFile.outputStream().use { output ->
-                input.copyTo(output)
-            }
-        } ?: return null
-        backgroundsDir.listFiles()
-            ?.filter { it != targetFile }
-            ?.forEach { it.delete() }
-        Uri.fromFile(targetFile).toString()
-    }.getOrNull()
-}
-
 @Composable
 fun TodayStudyWorkbench(
     timerState: TimerState,
@@ -2184,13 +2160,14 @@ fun EmptyTodoState(onAddClick: () -> Unit) {
 @Composable
 fun ModeSelectorDialog(
     currentBackgroundUri: String?,
+    isBackgroundBusy: Boolean,
     onDismiss: () -> Unit,
     onModeSelected: (String) -> Unit,
     onSelectBackground: () -> Unit,
     onClearBackground: () -> Unit
 ) {
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!isBackgroundBusy) onDismiss() },
         shape = RoundedCornerShape(8.dp),
         title = {
             Text(
@@ -2257,15 +2234,20 @@ fun ModeSelectorDialog(
                 ) {
                     OutlinedButton(
                         onClick = onSelectBackground,
+                        enabled = !isBackgroundBusy,
                         modifier = Modifier
                             .weight(1f)
                             .height(44.dp),
                         shape = RoundedCornerShape(8.dp)
                     ) {
-                        Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(18.dp))
+                        if (isBackgroundBusy) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(18.dp))
+                        }
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            if (currentBackgroundUri == null) "上传背景" else "更换背景",
+                            if (isBackgroundBusy) "保存中" else if (currentBackgroundUri == null) "上传背景" else "更换背景",
                             maxLines = 1
                         )
                     }
@@ -2273,6 +2255,7 @@ fun ModeSelectorDialog(
                     if (currentBackgroundUri != null) {
                         OutlinedButton(
                             onClick = onClearBackground,
+                            enabled = !isBackgroundBusy,
                             modifier = Modifier
                                 .weight(1f)
                                 .height(44.dp),
@@ -2291,7 +2274,7 @@ fun ModeSelectorDialog(
         },
         confirmButton = {},
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss, enabled = !isBackgroundBusy) {
                 Text("取消")
             }
         }
