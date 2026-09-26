@@ -41,7 +41,6 @@ class PlayerViewModel @Inject constructor(
     // 状态管理
     private var browserFuture: ListenableFuture<MediaController>? = null
     private var isCleared = false
-    private var resumeOnForeground = false
     var controller = mutableStateOf<MediaController?>(null)
     var playState by mutableStateOf<PlayState>(PlayState.Idle)
         private set
@@ -124,19 +123,6 @@ class PlayerViewModel @Inject constructor(
         mediaController.setMediaItem(mediaItem)
         mediaController.prepare()
         mediaController.play()
-    }
-
-    fun onHostPause() {
-        val currentController = controller.value
-        resumeOnForeground = currentController?.playWhenReady == true
-        currentController?.pause()
-    }
-
-    fun onHostResume() {
-        if (resumeOnForeground) {
-            controller.value?.play()
-            resumeOnForeground = false
-        }
     }
 
     fun retryPlayback() {
