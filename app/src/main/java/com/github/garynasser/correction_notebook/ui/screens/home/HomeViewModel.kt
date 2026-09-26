@@ -803,14 +803,10 @@ class HomeViewModel @Inject constructor(
         )
         viewModelScope.launch {
             try {
-                val todo = todoRepository.getTodoById(todoId)
-                    ?: throw IllegalStateException("待办不存在")
-                val wasCompleted = todo.isCompleted
+                val todo = todoRepository.toggleComplete(todoId)
 
-                todoRepository.toggleComplete(todoId)
-
-                if (!wasCompleted) {
-                    val completedAt = System.currentTimeMillis()
+                if (todo.isCompleted) {
+                    val completedAt = checkNotNull(todo.completedAt)
                     val historyItem = TodoHistoryItem(
                         id = java.util.UUID.randomUUID().toString(),
                         title = todo.title,
@@ -819,7 +815,9 @@ class HomeViewModel @Inject constructor(
                         dueDate = todo.dueDate,
                         createdAt = todo.createdAt,
                         completedAt = completedAt,
-                        completedDate = java.time.LocalDate.now()
+                        completedDate = java.time.Instant.ofEpochMilli(completedAt)
+                            .atZone(java.time.ZoneId.systemDefault())
+                            .toLocalDate()
                     )
                     try {
                         todoHistoryRepository.addHistoryItem(historyItem)
