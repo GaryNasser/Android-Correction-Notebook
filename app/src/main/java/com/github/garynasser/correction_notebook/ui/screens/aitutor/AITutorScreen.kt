@@ -116,6 +116,8 @@ fun AITutorScreen(
     var menuExpanded by remember { mutableStateOf(false) }
     val chatListState = rememberLazyListState()
     val hasCurrentSession = uiState.selectedSessionId != null
+    val canChangeSession = !uiState.isLoading && !uiState.isChatActionBusy
+    val canSendMessage = canChangeSession && uiState.isConfigured
 
     LaunchedEffect(uiState.messages.size, uiState.isLoading) {
         val targetIndex = when {
@@ -140,7 +142,7 @@ fun AITutorScreen(
                 actions = {
                     IconButton(
                         onClick = { viewModel.newSession() },
-                        enabled = uiState.isConfigured && !uiState.isChatActionBusy && !uiState.isLoading
+                        enabled = uiState.isConfigured && canChangeSession
                     ) {
                         Icon(Icons.Default.Add, contentDescription = "新建对话")
                     }
@@ -150,7 +152,10 @@ fun AITutorScreen(
                     ) {
                         Icon(Icons.Default.Memory, contentDescription = "记忆")
                     }
-                    IconButton(onClick = { showProviderDialog = true }) {
+                    IconButton(
+                        onClick = { showProviderDialog = true },
+                        enabled = !uiState.isLoading && !uiState.isProviderBusy
+                    ) {
                         Icon(Icons.Default.Settings, contentDescription = "设置")
                     }
                     Box {
@@ -206,7 +211,8 @@ fun AITutorScreen(
                 AiTutorHeader(
                     uiState = uiState,
                     onOpenSessions = { showSessionDialog = true },
-                    onKnowledgeModeChange = viewModel::setKnowledgeMode
+                    onKnowledgeModeChange = viewModel::setKnowledgeMode,
+                    enabled = canChangeSession
                 )
 
                 if (uiState.messages.isEmpty()) {
@@ -260,14 +266,14 @@ fun AITutorScreen(
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                             keyboardActions = KeyboardActions(
                                 onSend = {
-                                    if (inputText.isNotBlank() && !uiState.isLoading) {
+                                    if (inputText.isNotBlank() && canSendMessage) {
                                         viewModel.sendMessage(inputText)
                                         inputText = ""
                                     }
                                 }
                             ),
                             maxLines = 3,
-                            enabled = !uiState.isLoading,
+                            enabled = canSendMessage,
                             shape = RoundedCornerShape(8.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
@@ -276,7 +282,7 @@ fun AITutorScreen(
                                 viewModel.sendMessage(inputText)
                                 inputText = ""
                             },
-                            enabled = inputText.isNotBlank() && !uiState.isLoading,
+                            enabled = inputText.isNotBlank() && canSendMessage,
                             modifier = Modifier.size(42.dp),
                             shape = RoundedCornerShape(8.dp)
                         ) {
@@ -473,7 +479,8 @@ private fun EmptyAiState(onConfigure: () -> Unit) {
 private fun AiTutorHeader(
     uiState: AITutorUiState,
     onOpenSessions: () -> Unit,
-    onKnowledgeModeChange: (Boolean) -> Unit
+    onKnowledgeModeChange: (Boolean) -> Unit,
+    enabled: Boolean
 ) {
     val selectedSession = uiState.sessions.firstOrNull { it.id == uiState.selectedSessionId }
 
@@ -511,11 +518,16 @@ private fun AiTutorHeader(
                     )
                 }
             }
-            TextButton(onClick = onOpenSessions, shape = RoundedCornerShape(8.dp)) {
+            TextButton(
+                onClick = onOpenSessions,
+                enabled = enabled,
+                shape = RoundedCornerShape(8.dp)
+            ) {
                 Text("对话")
             }
             AssistChip(
                 onClick = { onKnowledgeModeChange(!uiState.isKnowledgeMode) },
+                enabled = enabled,
                 leadingIcon = { Icon(Icons.AutoMirrored.Filled.LibraryBooks, contentDescription = null, modifier = Modifier.size(18.dp)) },
                 label = { Text(if (uiState.isKnowledgeMode) "资料" else "普通") },
                 shape = RoundedCornerShape(8.dp)
@@ -531,9 +543,10 @@ private fun SessionPickerDialog(
     onSelectSession: (Long) -> Unit,
     onNewSession: () -> Unit
 ) {
+    val canChangeSession = !uiState.isLoading && !uiState.isChatActionBusy
     AlertDialog(
         onDismissRequest = {
-            if (!uiState.isProviderBusy) onDismiss()
+            if (!uiState.isChatActionBusy) onDismiss()
         },
         shape = RoundedCornerShape(8.dp),
         title = { Text("选择对话", style = MaterialTheme.typography.titleMedium) },
@@ -548,7 +561,7 @@ private fun SessionPickerDialog(
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { onSelectSession(session.id) },
+                            .clickable(enabled = canChangeSession) { onSelectSession(session.id) },
                         color = if (session.id == uiState.selectedSessionId) {
                             MaterialTheme.colorScheme.primaryContainer
                         } else {
@@ -575,10 +588,18 @@ private fun SessionPickerDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onNewSession, shape = RoundedCornerShape(8.dp)) { Text("新建对话") }
+            TextButton(
+                onClick = onNewSession,
+                enabled = canChangeSession,
+                shape = RoundedCornerShape(8.dp)
+            ) { Text("新建对话") }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, shape = RoundedCornerShape(8.dp)) { Text("关闭") }
+            TextButton(
+                onClick = onDismiss,
+                enabled = !uiState.isChatActionBusy,
+                shape = RoundedCornerShape(8.dp)
+            ) { Text("关闭") }
         }
     )
 }

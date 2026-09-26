@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
@@ -55,6 +56,12 @@ data class AITutorUiState(
     val isConfigured: Boolean get() = activeProvider != null
 }
 
+internal fun List<ChatSessionEntity>.forProvider(providerId: Long?): List<ChatSessionEntity> =
+    if (providerId == null) emptyList() else filter { it.providerId == providerId }
+
+internal fun ChatSessionEntity?.belongsToProvider(providerId: Long): Boolean =
+    this?.providerId == providerId
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class AITutorViewModel @Inject constructor(
@@ -75,11 +82,19 @@ class AITutorViewModel @Inject constructor(
     private val fetchedModels = MutableStateFlow<List<AiModelOption>>(emptyList())
     private val knowledgeMode = MutableStateFlow(false)
     private val error = MutableStateFlow<String?>(null)
+    private val activeProvider = providerRepository.observeActiveProvider()
+    private val activeProviderSessions = activeProvider.flatMapLatest { provider ->
+        if (provider == null) {
+            flowOf(emptyList())
+        } else {
+            chatSessionRepository.observeSessionsForProvider(provider.id)
+        }
+    }
 
     val uiState: StateFlow<AITutorUiState> = combine(
-        providerRepository.observeActiveProvider(),
+        activeProvider,
         providerRepository.observeProviders(),
-        chatSessionRepository.observeAllSessions(),
+        activeProviderSessions,
         selectedSessionId,
         selectedSessionId.flatMapLatest { id ->
             if (id == null) flowOf(emptyList()) else chatSessionRepository.observeMessagesForSession(id)
@@ -108,13 +123,15 @@ class AITutorViewModel @Inject constructor(
         val isLoading = values.typed<Boolean>(11)
         val isKnowledgeMode = values.typed<Boolean>(12)
         val currentError = values.typed<String?>(13)
+        val providerSessions = sessions.forProvider(activeProvider?.id)
+        val visibleMessages = if (providerSessions.any { it.id == selectedId }) messages else emptyList()
 
         AITutorUiState(
             activeProvider = activeProvider,
             providers = providers,
-            sessions = sessions,
+            sessions = providerSessions,
             selectedSessionId = selectedId,
-            messages = messages.map {
+            messages = visibleMessages.map {
                 ChatUiMessage(
                     id = it.id,
                     content = it.content,
@@ -145,21 +162,18 @@ class AITutorViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            providerRepository.observeActiveProvider().collect { provider ->
-                if (provider != null && selectedSessionId.value == null) {
-                    val latest = chatSessionRepository.getLatestSessionForProvider(provider.id)
-                    selectedSessionId.value = latest?.id ?: chatSessionRepository.createSession(
-                        title = "新的学习对话",
-                        providerId = provider.id,
-                        model = provider.defaultModel
-                    )
+            activeProvider.collectLatest { provider ->
+                selectedSessionId.value = if (provider == null) {
+                    null
+                } else {
+                    ensureSessionForProvider(provider, "新的学习对话")
                 }
             }
         }
     }
 
     fun sendMessage(content: String) {
-        if (loading.value) return
+        if (loading.value || chatActionBusy.value) return
         val text = content.trim()
         if (text.isBlank()) return
         loading.value = true
@@ -170,11 +184,8 @@ class AITutorViewModel @Inject constructor(
                     error.value = "请先配置 AI Provider"
                     return@launch
                 }
-                val sessionId = selectedSessionId.value ?: chatSessionRepository.createSession(
-                    title = titleFrom(text),
-                    providerId = provider.id,
-                    model = provider.defaultModel
-                ).also { selectedSessionId.value = it }
+                val sessionId = ensureSessionForProvider(provider, titleFrom(text))
+                selectedSessionId.value = sessionId
 
                 error.value = null
                 chatSessionRepository.saveMessage(sessionId, "user", text)
@@ -218,7 +229,18 @@ class AITutorViewModel @Inject constructor(
     }
 
     fun selectSession(sessionId: Long) {
-        selectedSessionId.value = sessionId
+        runChatAction("切换对话失败") {
+            val provider = providerRepository.getActiveProvider() ?: run {
+                error.value = "请先配置 AI Provider"
+                return@runChatAction
+            }
+            val session = chatSessionRepository.getSessionById(sessionId)
+            if (!session.belongsToProvider(provider.id)) {
+                error.value = "该对话不属于当前 Provider，请重新选择"
+                return@runChatAction
+            }
+            selectedSessionId.value = sessionId
+        }
     }
 
     fun clearMessages() {
@@ -327,18 +349,13 @@ class AITutorViewModel @Inject constructor(
     fun activateProvider(providerId: Long) {
         runProviderAction("切换 Provider 失败") {
             providerRepository.activateProvider(providerId)
-            selectedSessionId.value = null
             providerStatus.value = "已切换默认 Provider"
         }
     }
 
     fun deleteProvider(providerId: Long) {
         runProviderAction("删除 Provider 失败") {
-            val wasActive = providerRepository.getProviderById(providerId)?.isActive == true
             providerRepository.deleteProvider(providerId)
-            if (wasActive) {
-                selectedSessionId.value = null
-            }
             if (providerRepository.countProviders() == 0) {
                 aiSettingsManager.setAiEnabled(false)
                 providerStatus.value = "Provider 已删除，AI 导师已关闭"
@@ -373,7 +390,7 @@ class AITutorViewModel @Inject constructor(
         failureMessage: String,
         action: suspend () -> Unit
     ) {
-        if (providerBusy.value) return
+        if (providerBusy.value || loading.value) return
         providerBusy.value = true
         viewModelScope.launch {
             try {
@@ -393,7 +410,23 @@ class AITutorViewModel @Inject constructor(
         failureMessage: String,
         action: suspend () -> Unit
     ) {
+        if (loading.value) return
         runBusyAction(chatActionBusy, failureMessage, action)
+    }
+
+    private suspend fun ensureSessionForProvider(
+        provider: ProviderRecord,
+        newSessionTitle: String
+    ): Long {
+        val selectedSession = selectedSessionId.value?.let { chatSessionRepository.getSessionById(it) }
+        if (selectedSession.belongsToProvider(provider.id)) return requireNotNull(selectedSession).id
+
+        return chatSessionRepository.getLatestSessionForProvider(provider.id)?.id
+            ?: chatSessionRepository.createSession(
+                title = newSessionTitle,
+                providerId = provider.id,
+                model = provider.defaultModel
+            )
     }
 
     private fun runMemoryAction(
