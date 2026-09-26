@@ -72,6 +72,37 @@ class SchoolScheduleRemoteDataSourceTest {
     }
 
     @Test
+    fun parseCoursesIgnoresUnrelatedObjectArraysBeforeNestedScheduleRows() {
+        val root = JsonParser.parseString(
+            """
+            {
+              "metadata": [
+                { "label": "本科生", "value": "undergraduate" }
+              ],
+              "payload": {
+                "cxxszhxqkb": [
+                  {
+                    "KCMC": "计算机网络",
+                    "SKXQ": "2",
+                    "JCDM": "0304",
+                    "SKZC": "1-8周",
+                    "JASMC": "中心教学楼 301"
+                  }
+                ]
+              }
+            }
+            """.trimIndent()
+        ).asJsonObject
+
+        val courses = dataSource.parseCourses(root)
+
+        assertEquals(1, courses.size)
+        assertEquals("计算机网络", courses.first().courseName)
+        assertEquals(3, courses.first().startSection)
+        assertEquals(4, courses.first().endSection)
+    }
+
+    @Test
     fun parseCurrentTermKeepsDateWhenSchoolReturnsTimeSuffix() {
         val root = JsonParser.parseString(
             """

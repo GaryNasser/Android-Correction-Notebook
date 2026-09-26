@@ -122,7 +122,11 @@ class SchoolScheduleRemoteDataSource @Inject constructor(
     }
 
     private fun parseTerms(root: JsonObject, currentOnly: Boolean): List<SchoolTerm> {
-        val rows = findRows(root, listOf("dqxnxq", "xnxqcx", "rows"))
+        val rows = findRows(
+            root = root,
+            keys = listOf("dqxnxq", "xnxqcx", "rows"),
+            rowMarkerKeys = listOf("XNXQDM", "XNXQID", "xnxqdm")
+        )
             .ifEmpty { findObjectsByKeys(root, listOf("dqxnxq", "xnxqcx")) }
         return rows.mapNotNull { element ->
             val item = element.asJsonObjectOrNull() ?: return@mapNotNull null
@@ -140,7 +144,11 @@ class SchoolScheduleRemoteDataSource @Inject constructor(
     }
 
     internal fun parseCourses(root: JsonObject): List<SchoolCourseRaw> {
-        val rows = findRows(root, listOf("cxxszhxqkb", "rows"))
+        val rows = findRows(
+            root = root,
+            keys = listOf("cxxszhxqkb", "rows"),
+            rowMarkerKeys = listOf("KCM", "KCMC", "courseName", "kcmc", "kcm")
+        )
         return rows.mapNotNull { element ->
             val item = element.asJsonObjectOrNull() ?: return@mapNotNull null
             val courseName = item.firstString("KCM", "KCMC", "courseName", "kcmc", "kcm").orEmpty()
@@ -172,7 +180,11 @@ class SchoolScheduleRemoteDataSource @Inject constructor(
         }
     }
 
-    private fun findRows(root: JsonObject, keys: List<String>): List<JsonElement> {
+    private fun findRows(
+        root: JsonObject,
+        keys: List<String>,
+        rowMarkerKeys: List<String>
+    ): List<JsonElement> {
         val queue = ArrayDeque<JsonElement>()
         queue.add(root)
         while (queue.isNotEmpty()) {
@@ -180,7 +192,12 @@ class SchoolScheduleRemoteDataSource @Inject constructor(
             when {
                 current.isJsonArray -> {
                     val array = current.asJsonArray
-                    if (array.all { it.isJsonObject }) return array.toList()
+                    if (array.any { element ->
+                            element.isJsonObject && rowMarkerKeys.any(element.asJsonObject::has)
+                        }
+                    ) {
+                        return array.toList()
+                    }
                     array.forEach { queue.add(it) }
                 }
                 current.isJsonObject -> {
