@@ -11,7 +11,6 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.github.garynasser.correction_notebook.data.model.home.TodoItem
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private val Context.todoDataStore: DataStore<Preferences> by preferencesDataStore("todo_prefs")
@@ -52,26 +51,24 @@ class TodoRepository(private val context: Context) {
         }
     }
 
-    suspend fun getTodoById(todoId: String): TodoItem? {
-        val current = context.todoDataStore.data.first().let { prefs ->
-            prefs[todoItemsKey]?.let(TodoPreferenceCodec::parseTodoItems) ?: emptyList()
-        }
-        return current.find { it.id == todoId }
-    }
-
-    suspend fun toggleComplete(todoId: String) {
+    suspend fun toggleComplete(todoId: String): TodoItem {
+        var toggledTodo: TodoItem? = null
         context.todoDataStore.edit { prefs ->
             val current = prefs[todoItemsKey]?.let(TodoPreferenceCodec::parseTodoItems) ?: emptyList()
             val updated = current.map {
                 if (it.id == todoId) {
-                    if (it.isCompleted) {
+                    val toggled = if (it.isCompleted) {
                         it.copy(isCompleted = false, completedAt = null)
                     } else {
                         it.copy(isCompleted = true, completedAt = System.currentTimeMillis())
                     }
+                    toggledTodo = toggled
+                    toggled
                 } else it
             }
+            checkNotNull(toggledTodo) { "待办不存在" }
             prefs[todoItemsKey] = TodoPreferenceCodec.serializeTodoItems(updated)
         }
+        return checkNotNull(toggledTodo) { "待办状态更新失败" }
     }
 }
