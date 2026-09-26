@@ -8,6 +8,10 @@ import com.github.garynasser.correction_notebook.data.model.home.IcsDiffType
 import com.github.garynasser.correction_notebook.data.model.home.IcsImportPreview
 import com.github.garynasser.correction_notebook.data.model.home.ScheduleEvent
 import com.github.garynasser.correction_notebook.data.model.home.ScheduleSourceType
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
 import java.security.MessageDigest
 import java.time.LocalDateTime
 
@@ -16,9 +20,9 @@ class IcsImportRepository(
     private val scheduleRepository: ScheduleRepository
 ) {
 
-    suspend fun buildPreview(uri: Uri): IcsImportPreview {
+    suspend fun buildPreview(uri: Uri): IcsImportPreview = withContext(Dispatchers.IO) {
         val fileName = queryDisplayName(uri) ?: "calendar.ics"
-        val raw = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+        val raw = context.contentResolver.openInputStream(uri)?.use { input -> readIcsText(input) }
             ?: error("无法读取 ICS 文件")
         val unfoldedLines = unfoldLines(raw)
         val sourceCalendarId = buildIcsCalendarId(fileName, unfoldedLines)
@@ -31,7 +35,8 @@ class IcsImportRepository(
             sourceCalendarId = sourceCalendarId,
             incomingEvents = incomingEvents,
             importedEvents = importedEvents,
-            legacyExactCalendarId = buildLegacyIcsCalendarId(fileName, raw)
+            legacyExactCalendarId = buildLegacyIcsCalendarId(fileName, raw),
+            previousStableCalendarId = buildPreviousIcsCalendarId(fileName, unfoldedLines)
         )
         val existingEvents = importedEvents.filter { it.sourceCalendarId in replacedCalendarIds }
 
@@ -61,7 +66,7 @@ class IcsImportRepository(
             .filter { icsEventCompositeKey(it) !in incomingByKey }
             .map { it.toDiff(IcsDiffType.DELETED, "覆盖模式下会删除该导入日程") }
 
-        return IcsImportPreview(
+        IcsImportPreview(
             fileName = fileName,
             sourceCalendarId = sourceCalendarId,
             replacedCalendarIds = replacedCalendarIds,
@@ -136,6 +141,27 @@ internal fun unescapeIcsText(raw: String): String {
         }
     }
     return builder.toString().trim()
+}
+
+private const val MAX_ICS_FILE_BYTES = 4L * 1024L * 1024L
+
+internal fun readIcsText(
+    input: InputStream,
+    maxBytes: Long = MAX_ICS_FILE_BYTES
+): String {
+    val output = ByteArrayOutputStream()
+    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+    var totalBytes = 0L
+    while (true) {
+        val read = input.read(buffer)
+        if (read < 0) break
+        totalBytes += read
+        if (totalBytes > maxBytes) {
+            throw IllegalArgumentException("ICS 文件不能超过 4 MB")
+        }
+        output.write(buffer, 0, read)
+    }
+    return output.toString(Charsets.UTF_8.name()).removePrefix("\uFEFF")
 }
 
 internal fun parseIcsEvents(
@@ -234,22 +260,23 @@ private fun parseIcsEventBlock(
 }
 
 internal fun buildIcsCalendarId(fileName: String, lines: List<String>): String {
-    fun calendarProperty(name: String): String {
-        return lines.firstOrNull { line ->
-            line.substringBefore(':').substringBefore(';').equals(name, ignoreCase = true)
-        }?.substringAfter(':')?.let(::unescapeIcsText).orEmpty()
+    val calendarName = icsCalendarProperty(lines, "X-WR-CALNAME").lowercase()
+    val productId = icsCalendarProperty(lines, "PRODID").lowercase()
+    val identity = if (calendarName.isNotBlank()) {
+        "calendar::$calendarName::$productId"
+    } else {
+        "file::${fileName.trim().lowercase()}"
     }
+    return "ics_v3_${shortIcsDigest(identity)}"
+}
 
+internal fun buildPreviousIcsCalendarId(fileName: String, lines: List<String>): String {
     val identity = listOf(
         fileName.trim().lowercase(),
-        calendarProperty("X-WR-CALNAME").lowercase(),
-        calendarProperty("PRODID").lowercase()
+        icsCalendarProperty(lines, "X-WR-CALNAME").lowercase(),
+        icsCalendarProperty(lines, "PRODID").lowercase()
     ).joinToString("::")
-    val digest = MessageDigest.getInstance("SHA-256")
-        .digest(identity.toByteArray())
-        .take(16)
-        .joinToString("") { "%02x".format(it) }
-    return "ics_v2_$digest"
+    return "ics_v2_${shortIcsDigest(identity)}"
 }
 
 internal fun buildLegacyIcsCalendarId(fileName: String, raw: String): String {
@@ -263,7 +290,8 @@ internal fun resolveIcsReplacedCalendarIds(
     sourceCalendarId: String,
     incomingEvents: List<ScheduleEvent>,
     importedEvents: List<ScheduleEvent>,
-    legacyExactCalendarId: String? = null
+    legacyExactCalendarId: String? = null,
+    previousStableCalendarId: String? = null
 ): Set<String> {
     val incomingUids = incomingEvents
         .mapNotNull { event -> event.sourceEventUid?.trim()?.takeIf(String::isNotEmpty) }
@@ -279,5 +307,20 @@ internal fun resolveIcsReplacedCalendarIds(
         }
         .keys
         .filterNotNull()
-    return matchingLegacyIds.toSet() + sourceCalendarId + listOfNotNull(legacyExactCalendarId)
+    return matchingLegacyIds.toSet() +
+        sourceCalendarId +
+        listOfNotNull(legacyExactCalendarId, previousStableCalendarId)
+}
+
+private fun icsCalendarProperty(lines: List<String>, name: String): String {
+    return lines.firstOrNull { line ->
+        line.substringBefore(':').substringBefore(';').equals(name, ignoreCase = true)
+    }?.substringAfter(':')?.let(::unescapeIcsText).orEmpty()
+}
+
+private fun shortIcsDigest(identity: String): String {
+    return MessageDigest.getInstance("SHA-256")
+        .digest(identity.toByteArray(Charsets.UTF_8))
+        .take(16)
+        .joinToString("") { "%02x".format(it) }
 }
