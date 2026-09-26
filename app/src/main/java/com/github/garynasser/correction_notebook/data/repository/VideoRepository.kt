@@ -444,6 +444,8 @@ class VideoRepository @Inject constructor(
             }
 
             parseCourseSections(response.data)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e("VIDEO_REPO", "获取课程章节失败: courseId=$courseId", e)
             throw e

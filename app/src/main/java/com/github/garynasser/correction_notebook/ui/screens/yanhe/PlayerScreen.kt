@@ -72,7 +72,6 @@ fun PlayerScreen(
 
         Surface(
             modifier = Modifier
-                .statusBarsPadding()
                 .padding(horizontal = 8.dp, vertical = 8.dp)
                 .align(Alignment.TopStart)
                 .fillMaxWidth(),

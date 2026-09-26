@@ -34,7 +34,6 @@ fun CasScreen(
         topBar = {
             TopAppBar(
                 title = { Text("统一认证") },
-                windowInsets = WindowInsets(0, 0, 0, 0),
                 navigationIcon = {
                     IconButton(
                         onClick = onBackButtonClick,
