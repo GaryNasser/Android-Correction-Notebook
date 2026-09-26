@@ -1,5 +1,7 @@
 package com.github.garynasser.correction_notebook.ui.screens.home
 
+import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.garynasser.correction_notebook.data.local.StudyPreferencesManager
@@ -38,13 +40,20 @@ import com.github.garynasser.correction_notebook.data.repository.TodoRepository
 import com.github.garynasser.correction_notebook.domain.usecase.AiStudyUseCase
 import com.github.garynasser.correction_notebook.domain.usecase.StudyTimerManager
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.InputStream
+import java.io.OutputStream
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -108,7 +117,10 @@ data class HomeUiState(
     val aiReferencedMemories: List<String> = emptyList(),
     val isAiAdviceLoading: Boolean = false,
     val aiTodoBreakdown: String? = null,
-    val aiErrorMessage: String? = null
+    val aiErrorMessage: String? = null,
+    val isSavingBackgroundImage: Boolean = false,
+    val backgroundImageMessage: String? = null,
+    val backgroundImageError: String? = null
 )
 
 enum class ActiveTimerMode {
@@ -132,7 +144,8 @@ class HomeViewModel @Inject constructor(
     private val courseLearningRepository: CourseLearningRepository,
     private val knowledgeBaseRepository: KnowledgeBaseRepository,
     private val studySetRepository: StudySetRepository,
-    private val aiStudyUseCase: AiStudyUseCase
+    private val aiStudyUseCase: AiStudyUseCase,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
 
     val timerManager = StudyTimerManager(viewModelScope)
@@ -998,11 +1011,84 @@ class HomeViewModel @Inject constructor(
         refreshTodayStats()
     }
 
-    fun setBackgroundImage(uri: String?) {
+    fun importBackgroundImage(uri: Uri) {
+        if (_uiState.value.isSavingBackgroundImage) return
+        _uiState.value = _uiState.value.copy(
+            isSavingBackgroundImage = true,
+            backgroundImageMessage = null,
+            backgroundImageError = null
+        )
         viewModelScope.launch {
-            studyPreferencesManager.setBackgroundImage(uri)
-            _uiState.value = _uiState.value.copy(backgroundImageUri = uri)
+            var importedFile: File? = null
+            var isPreferenceCommitted = false
+            try {
+                importedFile = withContext(Dispatchers.IO) {
+                    importBackgroundImageFile(context, uri)
+                }
+                val storedUri = Uri.fromFile(importedFile).toString()
+                studyPreferencesManager.setBackgroundImage(storedUri)
+                isPreferenceCommitted = true
+                _uiState.value = _uiState.value.copy(
+                    backgroundImageUri = storedUri,
+                    backgroundImageMessage = "背景图已更新"
+                )
+                withContext(Dispatchers.IO) {
+                    deleteOtherBackgroundImages(context, importedFile)
+                }
+            } catch (error: CancellationException) {
+                if (!isPreferenceCommitted) {
+                    withContext(NonCancellable + Dispatchers.IO) {
+                        importedFile?.delete()
+                    }
+                }
+                throw error
+            } catch (error: Exception) {
+                if (!isPreferenceCommitted) {
+                    withContext(Dispatchers.IO) {
+                        importedFile?.delete()
+                    }
+                }
+                _uiState.value = _uiState.value.copy(
+                    backgroundImageError = error.message ?: "背景图保存失败，请换一张图片试试"
+                )
+            } finally {
+                _uiState.value = _uiState.value.copy(isSavingBackgroundImage = false)
+            }
         }
+    }
+
+    fun clearBackgroundImage() {
+        if (_uiState.value.isSavingBackgroundImage) return
+        _uiState.value = _uiState.value.copy(
+            isSavingBackgroundImage = true,
+            backgroundImageMessage = null,
+            backgroundImageError = null
+        )
+        viewModelScope.launch {
+            try {
+                studyPreferencesManager.setBackgroundImage(null)
+                _uiState.value = _uiState.value.copy(
+                    backgroundImageUri = null,
+                    backgroundImageMessage = "背景图已清除"
+                )
+                withContext(Dispatchers.IO) {
+                    deleteOtherBackgroundImages(context, keep = null)
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                _uiState.value = _uiState.value.copy(backgroundImageError = "背景图清除失败，请稍后再试")
+            } finally {
+                _uiState.value = _uiState.value.copy(isSavingBackgroundImage = false)
+            }
+        }
+    }
+
+    fun consumeBackgroundImageMessage() {
+        _uiState.value = _uiState.value.copy(
+            backgroundImageMessage = null,
+            backgroundImageError = null
+        )
     }
 
     fun setLandscapeOrientation(isLandscape: Boolean) {
@@ -1011,6 +1097,77 @@ class HomeViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(isLandscapeOrientation = isLandscape)
         }
     }
+}
+
+private const val MAX_BACKGROUND_IMAGE_BYTES = 32L * 1024L * 1024L
+
+private fun importBackgroundImageFile(context: Context, sourceUri: Uri): File {
+    val directory = File(context.filesDir, "immersive_backgrounds")
+    if (!directory.exists() && !directory.mkdirs()) {
+        throw IllegalStateException("无法创建背景图存储目录")
+    }
+
+    val extension = backgroundImageExtension(
+        mimeType = context.contentResolver.getType(sourceUri),
+        fallbackName = sourceUri.lastPathSegment
+    )
+    val temporaryFile = File.createTempFile("background_", ".tmp", directory)
+    val targetFile = File(directory, "background_${System.currentTimeMillis()}.$extension")
+    try {
+        context.contentResolver.openInputStream(sourceUri)?.use { input ->
+            temporaryFile.outputStream().use { output ->
+                copyBackgroundImage(input, output, MAX_BACKGROUND_IMAGE_BYTES)
+            }
+        } ?: throw IllegalArgumentException("无法读取所选图片")
+
+        if (!temporaryFile.renameTo(targetFile)) {
+            throw IllegalStateException("背景图保存失败")
+        }
+        return targetFile
+    } catch (error: Exception) {
+        temporaryFile.delete()
+        targetFile.delete()
+        throw error
+    }
+}
+
+private fun deleteOtherBackgroundImages(context: Context, keep: File?) {
+    File(context.filesDir, "immersive_backgrounds")
+        .listFiles()
+        ?.filter { it != keep }
+        ?.forEach(File::delete)
+}
+
+internal fun backgroundImageExtension(mimeType: String?, fallbackName: String?): String {
+    val fromMimeType = mimeType
+        ?.takeIf { it.startsWith("image/") }
+        ?.substringAfter('/')
+        ?.substringBefore('+')
+        ?.let { if (it == "jpeg") "jpg" else it }
+    val fromName = fallbackName?.substringAfterLast('.', missingDelimiterValue = "")
+    return sequenceOf(fromMimeType, fromName)
+        .mapNotNull { it?.lowercase()?.takeIf { value -> value.matches(Regex("[a-z0-9]{1,8}")) } }
+        .firstOrNull()
+        ?: "img"
+}
+
+internal fun copyBackgroundImage(
+    input: InputStream,
+    output: OutputStream,
+    maxBytes: Long
+): Long {
+    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+    var totalBytes = 0L
+    while (true) {
+        val read = input.read(buffer)
+        if (read < 0) break
+        totalBytes += read
+        if (totalBytes > maxBytes) {
+            throw IllegalArgumentException("图片大小不能超过 32 MB")
+        }
+        output.write(buffer, 0, read)
+    }
+    return totalBytes
 }
 
 private fun SessionType.defaultSubject(): String {
