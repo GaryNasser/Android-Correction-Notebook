@@ -14,8 +14,10 @@ import com.github.garynasser.correction_notebook.data.model.knowledgebase.Knowle
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.KnowledgeBaseFolderContent
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.KnowledgeBaseFolderSummary
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.withContext
 import com.github.garynasser.correction_notebook.utils.runCatchingCancellable
 import java.io.File
 import java.io.InputStream
@@ -167,15 +169,29 @@ class KnowledgeBaseRepository @Inject constructor(
 
     suspend fun moveFile(fileId: String, targetFolderId: String?): Result<Unit> = runCatchingCancellable {
         val file = requireNotNull(dao.getFileById(fileId)) { "文件不存在" }
+        if (file.folderId == targetFolderId) return@runCatchingCancellable
+
+        val originalFolderPathIds = getFolderPathIds(file.folderId)
         val newPath = fileStorage.moveFile(file.localPath, getFolderPathIds(targetFolderId))
 
-        dao.updateFile(
-            file.copy(
-                folderId = targetFolderId,
-                localPath = newPath,
-                updatedAt = System.currentTimeMillis()
+        try {
+            dao.updateFile(
+                file.copy(
+                    folderId = targetFolderId,
+                    localPath = newPath,
+                    updatedAt = System.currentTimeMillis()
+                )
             )
-        )
+        } catch (error: Throwable) {
+            try {
+                withContext(NonCancellable) {
+                    fileStorage.moveFile(newPath, originalFolderPathIds)
+                }
+            } catch (rollbackError: Throwable) {
+                error.addSuppressed(rollbackError)
+            }
+            throw error
+        }
     }
 
     suspend fun deleteFile(fileId: String): Result<Unit> = runCatchingCancellable {
@@ -213,7 +229,7 @@ class KnowledgeBaseRepository @Inject constructor(
             )
         } ?: error("无法读取所选文件")
 
-        dao.insertFile(
+        insertImportedFile(
             KnowledgeBaseFileEntity(
                 id = UUID.randomUUID().toString(),
                 folderId = resolvedFolderId,
@@ -254,7 +270,7 @@ class KnowledgeBaseRepository @Inject constructor(
             inputStream = inputStream
         )
 
-        dao.insertFile(
+        insertImportedFile(
             KnowledgeBaseFileEntity(
                 id = UUID.randomUUID().toString(),
                 folderId = resolvedFolderId,
@@ -275,6 +291,21 @@ class KnowledgeBaseRepository @Inject constructor(
                 updatedAt = now
             )
         )
+    }
+
+    private suspend fun insertImportedFile(file: KnowledgeBaseFileEntity) {
+        try {
+            dao.insertFile(file)
+        } catch (error: Throwable) {
+            try {
+                withContext(NonCancellable) {
+                    fileStorage.deleteFile(file.localPath)
+                }
+            } catch (cleanupError: Throwable) {
+                error.addSuppressed(cleanupError)
+            }
+            throw error
+        }
     }
 
     suspend fun getFolderName(folderId: String?): String {
