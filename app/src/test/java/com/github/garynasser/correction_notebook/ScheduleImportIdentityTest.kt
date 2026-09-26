@@ -7,6 +7,7 @@ import com.github.garynasser.correction_notebook.data.model.home.ScheduleOccurre
 import com.github.garynasser.correction_notebook.data.model.home.ScheduleSourceType
 import com.github.garynasser.correction_notebook.data.repository.buildIcsCalendarId
 import com.github.garynasser.correction_notebook.data.repository.buildLegacyIcsCalendarId
+import com.github.garynasser.correction_notebook.data.repository.buildPreviousIcsCalendarId
 import com.github.garynasser.correction_notebook.data.repository.applyIcsImport
 import com.github.garynasser.correction_notebook.data.repository.icsEventCompositeKey
 import com.github.garynasser.correction_notebook.data.repository.parseIcsEvents
@@ -44,6 +45,40 @@ class ScheduleImportIdentityTest {
         val examCalendar = buildIcsCalendarId("calendar.ics", listOf("X-WR-CALNAME:考试"))
 
         assertNotEquals(classCalendar, examCalendar)
+    }
+
+    @Test
+    fun calendarIdIgnoresRenamedExportWhenMetadataExists() {
+        val metadata = listOf("PRODID:-//BIT//Calendar//CN", "X-WR-CALNAME:课表")
+
+        assertEquals(
+            buildIcsCalendarId("calendar.ics", metadata),
+            buildIcsCalendarId("calendar (1).ics", metadata)
+        )
+        assertNotEquals(
+            buildIcsCalendarId("calendar.ics", emptyList()),
+            buildIcsCalendarId("calendar (1).ics", emptyList())
+        )
+        assertNotEquals(
+            buildIcsCalendarId("calendar.ics", listOf("PRODID:-//Generic//Calendar//EN")),
+            buildIcsCalendarId("other.ics", listOf("PRODID:-//Generic//Calendar//EN"))
+        )
+    }
+
+    @Test
+    fun replacementIncludesPreviousStableIdentity() {
+        val lines = listOf("PRODID:-//BIT//Calendar//CN", "X-WR-CALNAME:课表")
+        val previousId = buildPreviousIcsCalendarId("calendar.ics", lines)
+
+        assertEquals(
+            setOf("ics_v3_current", previousId),
+            resolveIcsReplacedCalendarIds(
+                sourceCalendarId = "ics_v3_current",
+                incomingEvents = emptyList(),
+                importedEvents = emptyList(),
+                previousStableCalendarId = previousId
+            )
+        )
     }
 
     @Test
