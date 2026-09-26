@@ -36,11 +36,11 @@ class CourseListViewModel @Inject constructor(
 
     // 搜索与筛选状态
     var searchQuery by mutableStateOf("")
-    var selectedSemester by mutableStateOf("全部学期")
+    var selectedSemester by mutableStateOf(ALL_SEMESTERS)
     var expanded by mutableStateOf(false)
     var isPersonalCoursesMode by mutableStateOf(true)
         private set
-    var semesters by mutableStateOf(listOf("全部学期"))
+    var semesters by mutableStateOf(listOf(ALL_SEMESTERS))
         private set
 
     // 分页控制
@@ -61,13 +61,7 @@ class CourseListViewModel @Inject constructor(
     var recentProgress by mutableStateOf<List<CourseProgress>>(emptyList())
         private set
 
-    // 全校课程筛选仍保留旧参数；我的课程学期来自接口返回的真实课程数据。
-    private val publicSemesters = listOf("全部学期", "2023-2024 秋季", "2023-2024 春季")
-    private val semesterToIdMap = mapOf(
-        "全部学期" to null,
-        "2023-2024 秋季" to 1,
-        "2023-2024 春季" to 2
-    )
+    private val publicSemesters = listOf(ALL_SEMESTERS)
 
     init {
         if (yanheRepository.getStudentCredential() != null) {
@@ -123,13 +117,12 @@ class CourseListViewModel @Inject constructor(
             }
 
             try {
-                val semesterId = semesterToIdMap[selectedSemester]
                 val keywordParam = searchQuery.ifBlank { null }
 
                 val result = if (isPersonalCoursesMode) {
-                    videoRepository.getPersonalCourse(semesterId, currentPage, 16, keywordParam)
+                    videoRepository.getPersonalCourse(null, currentPage, 16, keywordParam)
                 } else {
-                    videoRepository.getCourse(semesterId, currentPage, 16, keywordParam)
+                    videoRepository.getCourse(null, currentPage, 16, keywordParam)
                 }
 
                 if (result.isEmpty()) {
@@ -161,7 +154,7 @@ class CourseListViewModel @Inject constructor(
 
     fun toggleCourseMode() {
         isPersonalCoursesMode = !isPersonalCoursesMode
-        semesters = if (isPersonalCoursesMode) buildPersonalSemesters() else publicSemesters
+        semesters = if (isPersonalCoursesMode) buildCourseSemesters(personalCourses) else publicSemesters
         selectedSemester = semesters.firstOrNull { it == selectedSemester } ?: semesters.first()
         loadCourses(isNextPage = false)
     }
@@ -199,14 +192,14 @@ class CourseListViewModel @Inject constructor(
                     }
                 }.onSuccess { loadedCourses ->
                     personalCourses = loadedCourses
-                    semesters = buildPersonalSemesters()
+                    semesters = buildCourseSemesters(personalCourses)
                     selectedSemester = pickLatestSemester(semesters)
                     applyPersonalCourseFilters()
                 }.onFailure { throwable ->
                     if (throwable is CancellationException) throw throwable
                     personalCourses = emptyList()
-                    semesters = listOf("全部学期")
-                    selectedSemester = "全部学期"
+                    semesters = listOf(ALL_SEMESTERS)
+                    selectedSemester = ALL_SEMESTERS
                     uiState = CourseUiState.Error(formatYanheError(throwable))
                 }
             } catch (e: CancellationException) {
@@ -214,8 +207,8 @@ class CourseListViewModel @Inject constructor(
             } catch (e: Exception) {
                 personalCourses = emptyList()
                 courses.clear()
-                semesters = listOf("全部学期")
-                selectedSemester = "全部学期"
+                semesters = listOf(ALL_SEMESTERS)
+                selectedSemester = ALL_SEMESTERS
                 uiState = CourseUiState.Error(formatYanheError(e))
             } finally {
                 isRefreshingSchedule = false
@@ -241,7 +234,7 @@ class CourseListViewModel @Inject constructor(
         val keyword = searchQuery.trim()
         val filtered = personalCourses
             .asSequence()
-            .filter { selectedSemester == "全部学期" || it.semester == selectedSemester }
+            .filter { selectedSemester == ALL_SEMESTERS || it.semester == selectedSemester }
             .filter { course ->
                 keyword.isBlank() ||
                     course.nameZh.contains(keyword, ignoreCase = true) ||
@@ -255,8 +248,8 @@ class CourseListViewModel @Inject constructor(
 
     private fun clearPersonalCourseState() {
         personalCourses = emptyList()
-        semesters = listOf("全部学期")
-        selectedSemester = "全部学期"
+        semesters = listOf(ALL_SEMESTERS)
+        selectedSemester = ALL_SEMESTERS
         if (isPersonalCoursesMode) {
             courseLoadJob?.cancel()
             courses.clear()
@@ -264,35 +257,8 @@ class CourseListViewModel @Inject constructor(
         }
     }
 
-    private fun buildPersonalSemesters(): List<String> {
-        val courseSemesters = personalCourses
-            .map { it.semester.trim() }
-            .filter { it.isNotBlank() }
-            .distinct()
-            .sortedByDescending { semesterSortKey(it) }
-        return if (courseSemesters.isEmpty()) listOf("全部学期") else courseSemesters
-    }
-
     private fun pickLatestSemester(options: List<String>): String {
-        return options.firstOrNull { it != "全部学期" } ?: "全部学期"
-    }
-
-    private fun semesterSortKey(semester: String): Int {
-        val year = Regex("(\\d{4})\\D+(\\d{4})").find(semester)
-            ?.groupValues
-            ?.getOrNull(2)
-            ?.toIntOrNull()
-            ?: 0
-        val term = Regex("第\\s*(\\d+)\\s*学期").find(semester)
-            ?.groupValues
-            ?.getOrNull(1)
-            ?.toIntOrNull()
-            ?: when {
-                semester.contains("春") -> 2
-                semester.contains("秋") -> 1
-                else -> 0
-            }
-        return year * 10 + term
+        return options.firstOrNull { it != ALL_SEMESTERS } ?: ALL_SEMESTERS
     }
 
     private fun formatYanheError(throwable: Throwable): String {
@@ -302,4 +268,33 @@ class CourseListViewModel @Inject constructor(
             .replace(Regex("^com\\.google\\.gson\\.[A-Za-z]+Exception:\\s*"), "")
             .ifBlank { "延河课堂课程拉取失败" }
     }
+}
+
+internal const val ALL_SEMESTERS = "全部学期"
+
+internal fun buildCourseSemesters(courses: List<Course>): List<String> {
+    val courseSemesters = courses
+        .map { it.semester.trim() }
+        .filter { it.isNotBlank() }
+        .distinct()
+        .sortedByDescending(::semesterSortKey)
+    return listOf(ALL_SEMESTERS) + courseSemesters
+}
+
+private fun semesterSortKey(semester: String): Int {
+    val year = Regex("(\\d{4})\\D+(\\d{4})").find(semester)
+        ?.groupValues
+        ?.getOrNull(2)
+        ?.toIntOrNull()
+        ?: 0
+    val term = Regex("第\\s*(\\d+)\\s*学期").find(semester)
+        ?.groupValues
+        ?.getOrNull(1)
+        ?.toIntOrNull()
+        ?: when {
+            semester.contains("春") -> 2
+            semester.contains("秋") -> 1
+            else -> 0
+        }
+    return year * 10 + term
 }
