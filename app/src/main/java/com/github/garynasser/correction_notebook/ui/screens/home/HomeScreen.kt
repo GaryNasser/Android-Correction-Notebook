@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.EventNote
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -457,7 +458,9 @@ private fun BitSchedulePage(
     var selectedOccurrence by remember { mutableStateOf<ScheduleOccurrence?>(null) }
     var occurrenceToDelete by remember { mutableStateOf<ScheduleOccurrence?>(null) }
     var showDatePicker by remember { mutableStateOf(false) }
+    var showOtherSchedules by remember { mutableStateOf(false) }
     val sections = uiState.scheduleSections
+    val otherOccurrences = remember(sections) { weeklyOffGridOccurrences(sections) }
 
     Box(
         modifier = Modifier
@@ -484,7 +487,20 @@ private fun BitSchedulePage(
             onSyncSchoolSchedule = onSyncSchoolSchedule,
             onImportIcs = onImportIcs,
             onPickDate = { showDatePicker = true },
-            onToday = onToday
+            onToday = onToday,
+            otherScheduleCount = otherOccurrences.size,
+            onShowOtherSchedules = { showOtherSchedules = true }
+        )
+    }
+
+    if (showOtherSchedules) {
+        WeeklyOtherSchedulesDialog(
+            items = otherOccurrences,
+            onDismiss = { showOtherSchedules = false },
+            onItemClick = { item ->
+                showOtherSchedules = false
+                selectedOccurrence = item
+            }
         )
     }
 
@@ -712,7 +728,9 @@ private fun ScheduleSideControls(
     onSyncSchoolSchedule: () -> Unit,
     onImportIcs: () -> Unit,
     onPickDate: () -> Unit,
-    onToday: () -> Unit
+    onToday: () -> Unit,
+    otherScheduleCount: Int,
+    onShowOtherSchedules: () -> Unit
 ) {
     var showActions by remember { mutableStateOf(false) }
     val scheduleMutationBusy = isSyncing || isImporting || isEditing
@@ -764,6 +782,16 @@ private fun ScheduleSideControls(
                         onToday()
                     }
                 )
+                if (otherScheduleCount > 0) {
+                    DropdownMenuItem(
+                        text = { Text("课外日程（$otherScheduleCount）") },
+                        leadingIcon = { Icon(Icons.AutoMirrored.Filled.EventNote, contentDescription = null) },
+                        onClick = {
+                            showActions = false
+                            onShowOtherSchedules()
+                        }
+                    )
+                }
                 DropdownMenuItem(
                     text = { Text(if (isSyncing) "同步中" else "同步教务") },
                     leadingIcon = {
@@ -981,6 +1009,15 @@ internal fun ScheduleOccurrence.toCourseGridPlacement(): CourseGridPlacement? {
     )
 }
 
+internal fun weeklyOffGridOccurrences(sections: List<ScheduleSection>): List<ScheduleOccurrence> {
+    return sections
+        .asSequence()
+        .flatMap { it.items.asSequence() }
+        .filter { it.toCourseGridPlacement() == null }
+        .sortedWith(compareBy<ScheduleOccurrence> { it.startAt }.thenBy { it.title })
+        .toList()
+}
+
 @Composable
 private fun BitScheduleDayCard(
     section: ScheduleSection,
@@ -1191,6 +1228,77 @@ private fun ScheduleOccurrenceDialog(
 }
 
 @Composable
+private fun WeeklyOtherSchedulesDialog(
+    items: List<ScheduleOccurrence>,
+    onDismiss: () -> Unit,
+    onItemClick: (ScheduleOccurrence) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(8.dp),
+        title = { Text("本周课外日程", style = MaterialTheme.typography.titleMedium) },
+        text = {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 360.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                items(items, key = { it.occurrenceId }) { item ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { onItemClick(item) }
+                            .padding(horizontal = 8.dp, vertical = 9.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            modifier = Modifier.size(34.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            color = scheduleSourceColor(item.sourceType)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = if (item.allDay) Icons.Default.Today else Icons.Default.Schedule,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = item.title,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = fullScheduleTime(item),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Default.ChevronRight,
+                            contentDescription = "查看日程",
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("关闭") }
+        }
+    )
+}
+
+@Composable
 private fun StudyDashboardPage(
     listState: LazyListState,
     uiState: HomeUiState,
@@ -1301,7 +1409,7 @@ private fun compactScheduleTime(item: ScheduleOccurrence): String {
 
 private fun fullScheduleTime(item: ScheduleOccurrence): String {
     return if (item.allDay) {
-        "全天"
+        "${item.startAt.format(DateTimeFormatter.ofPattern("MM月dd日"))} · 全天"
     } else {
         "${item.startAt.format(DateTimeFormatter.ofPattern("MM月dd日 HH:mm"))} - ${item.endAt.format(DateTimeFormatter.ofPattern("HH:mm"))}"
     }

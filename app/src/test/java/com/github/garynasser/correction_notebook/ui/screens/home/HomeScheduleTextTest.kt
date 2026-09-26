@@ -1,6 +1,7 @@
 package com.github.garynasser.correction_notebook.ui.screens.home
 
 import com.github.garynasser.correction_notebook.data.model.home.ScheduleOccurrence
+import com.github.garynasser.correction_notebook.data.model.home.ScheduleSection
 import com.github.garynasser.correction_notebook.data.model.home.ScheduleSourceType
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -140,6 +141,32 @@ class HomeScheduleTextTest {
         ).toCourseGridPlacement()
 
         assertEquals(CourseGridPlacement(startIndex = 5, span = 2), placement)
+    }
+
+    @Test
+    fun weeklyOffGridOccurrencesKeepsAllDayAndNonClassTimeItemsInOrder() {
+        val inGrid = sampleOccurrence(
+            startAt = LocalDateTime.of(2026, 7, 3, 8, 0),
+            endAt = LocalDateTime.of(2026, 7, 3, 8, 45)
+        )
+        val evening = sampleOccurrence(
+            startAt = LocalDateTime.of(2026, 7, 3, 21, 10),
+            endAt = LocalDateTime.of(2026, 7, 3, 22, 0)
+        ).copy(occurrenceId = "evening", title = "晚间活动")
+        val allDay = sampleOccurrence(
+            startAt = LocalDateTime.of(2026, 7, 2, 0, 0),
+            endAt = LocalDateTime.of(2026, 7, 3, 0, 0),
+            allDay = true
+        ).copy(occurrenceId = "all-day", title = "全天事项")
+
+        val result = weeklyOffGridOccurrences(
+            listOf(
+                ScheduleSection("周五", LocalDate.of(2026, 7, 3), listOf(evening, inGrid)),
+                ScheduleSection("周四", LocalDate.of(2026, 7, 2), listOf(allDay))
+            )
+        )
+
+        assertEquals(listOf("all-day", "evening"), result.map { it.occurrenceId })
     }
 
     private fun sampleOccurrence(
