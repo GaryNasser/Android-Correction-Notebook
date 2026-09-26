@@ -77,12 +77,18 @@ class KnowledgeBaseFileStorage @Inject constructor(
         }
 
         sourceFile.copyTo(destinationFile, overwrite = true)
-        sourceFile.delete()
+        if (!sourceFile.delete()) {
+            destinationFile.delete()
+            throw IllegalStateException("无法删除移动前的原文件")
+        }
         destinationFile.absolutePath
     }
 
     suspend fun deleteFile(path: String) = withContext(Dispatchers.IO) {
-        File(path).takeIf { it.exists() }?.delete()
+        val file = File(path)
+        if (file.exists() && !file.delete()) {
+            throw IllegalStateException("无法删除本地文件")
+        }
     }
 
     suspend fun deleteFolder(folderPathIds: List<String>) = withContext(Dispatchers.IO) {
