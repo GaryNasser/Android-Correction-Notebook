@@ -72,10 +72,6 @@ class StatisticsViewModel @Inject constructor(
     private var statsJob: Job? = null
     private var aiInsightJob: Job? = null
 
-    init {
-        loadStats()
-    }
-
     fun setPeriod(period: StatsPeriod) {
         if (_uiState.value.period == period) return
         aiInsightJob?.cancel()
@@ -160,7 +156,7 @@ class StatisticsViewModel @Inject constructor(
                 val dailyMinutes = dailyStats.map { it.totalStudyMinutes }
                 val chartLabels = buildChartLabels(dateRange, selectedPeriod)
                 val subjectDistribution = sessions
-                    .groupBy { it.subject }
+                    .groupBy { normalizeStatsSubject(it.subject) }
                     .mapValues { (_, items) -> items.sumOf { it.durationMinutes } }
                     .filterValues { it > 0 }
                     .toMutableMap()
@@ -221,6 +217,10 @@ fun StatisticsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
+    LaunchedEffect(viewModel) {
+        viewModel.refreshStats()
+    }
+
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
@@ -234,7 +234,7 @@ fun StatisticsScreen(
                 actions = {
                     TextButton(
                         onClick = viewModel::generateAiInsight,
-                        enabled = !uiState.isAiInsightLoading
+                        enabled = !uiState.isAiInsightLoading && !uiState.isStatsLoading
                     ) {
                         if (uiState.isAiInsightLoading) {
                             CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
@@ -270,7 +270,7 @@ fun StatisticsScreen(
                                 Text(
                                     when (period) {
                                         StatsPeriod.DAY -> "今日"
-                                        StatsPeriod.WEEK -> "本周"
+                                        StatsPeriod.WEEK -> "近 7 天"
                                         StatsPeriod.MONTH -> "本月"
                                     }
                                 )
@@ -534,12 +534,16 @@ private fun StatsLoadingBlock(
     }
 }
 
-private fun periodLabel(period: StatsPeriod): String {
+internal fun periodLabel(period: StatsPeriod): String {
     return when (period) {
         StatsPeriod.DAY -> "今日"
-        StatsPeriod.WEEK -> "本周"
+        StatsPeriod.WEEK -> "近 7 天"
         StatsPeriod.MONTH -> "本月"
     }
+}
+
+internal fun normalizeStatsSubject(subject: String): String {
+    return subject.trim().ifBlank { "未分类" }
 }
 
 @Composable
