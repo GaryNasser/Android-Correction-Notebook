@@ -114,6 +114,8 @@ data class HomeUiState(
     val aiAdvice: String? = null,
     val aiPlanBlocks: List<AiPlanBlock> = emptyList(),
     val aiActions: List<AiAction> = emptyList(),
+    val applyingAiActionIds: Set<String> = emptySet(),
+    val appliedAiActionIds: Set<String> = emptySet(),
     val aiReferencedMemories: List<String> = emptyList(),
     val isAiAdviceLoading: Boolean = false,
     val aiTodoBreakdown: String? = null,
@@ -132,6 +134,12 @@ private fun currentWeekStart(): LocalDate {
 }
 
 internal fun shouldRefreshLocalPlan(aiAdvice: String?): Boolean = aiAdvice == null
+
+internal fun canStartAiAction(
+    actionId: String,
+    applyingActionIds: Set<String>,
+    appliedActionIds: Set<String>
+): Boolean = actionId !in applyingActionIds && actionId !in appliedActionIds
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
@@ -408,6 +416,8 @@ class HomeViewModel @Inject constructor(
                     aiAdvice = adviceResult.summary.ifBlank { adviceResult.rawText },
                     aiPlanBlocks = localPlanBlocks,
                     aiActions = adviceResult.actions,
+                    applyingAiActionIds = emptySet(),
+                    appliedAiActionIds = emptySet(),
                     aiReferencedMemories = adviceResult.referencedMemories,
                     isAiAdviceLoading = false
                 )
@@ -443,6 +453,8 @@ class HomeViewModel @Inject constructor(
                     _uiState.value = _uiState.value.copy(
                         aiTodoBreakdown = breakdown.summary.ifBlank { breakdown.rawText },
                         aiActions = breakdown.actions,
+                        applyingAiActionIds = emptySet(),
+                        appliedAiActionIds = emptySet(),
                         isAiAdviceLoading = false
                     )
                 }
@@ -484,8 +496,11 @@ class HomeViewModel @Inject constructor(
         when (action.type) {
             AiActionType.CREATE_TODO, AiActionType.CREATE_REVIEW_PLAN -> {
                 val content = action.payload["content"] ?: action.description.ifBlank { action.title }
-                if (content.isBlank()) return
-                viewModelScope.launch {
+                if (content.isBlank()) {
+                    _uiState.value = _uiState.value.copy(todoActionError = "AI 动作缺少待办内容")
+                    return
+                }
+                runPersistedAiAction(action, successMessage = "已创建待办", failureMessage = "创建待办失败") {
                     todoRepository.addTodo(
                         TodoItem(
                             title = action.title.take(40),
@@ -503,11 +518,12 @@ class HomeViewModel @Inject constructor(
             AiActionType.SAVE_MEMORY -> {
                 val content = action.payload["content"] ?: action.description
                 val category = action.payload["category"] ?: "学习偏好"
-                viewModelScope.launch {
-                    aiStudyUseCase.saveMemory(category, content)
-                        .onFailure {
-                            _uiState.value = _uiState.value.copy(aiErrorMessage = it.message ?: "保存记忆失败")
-                        }
+                if (content.isBlank()) {
+                    _uiState.value = _uiState.value.copy(todoActionError = "AI 动作缺少记忆内容")
+                    return
+                }
+                runPersistedAiAction(action, successMessage = "已保存 AI 记忆", failureMessage = "保存记忆失败") {
+                    aiStudyUseCase.saveMemory(category, content).getOrThrow()
                 }
             }
             AiActionType.OPEN_COURSE,
@@ -519,6 +535,38 @@ class HomeViewModel @Inject constructor(
             AiActionType.SCHEDULE_REVIEW,
             AiActionType.UPDATE_COURSE_GOAL -> {
                 _uiState.value = _uiState.value.copy(aiErrorMessage = "这个动作需要在对应课程或资料页面执行")
+            }
+        }
+    }
+
+    private fun runPersistedAiAction(
+        action: AiAction,
+        successMessage: String,
+        failureMessage: String,
+        operation: suspend () -> Unit
+    ) {
+        val state = _uiState.value
+        if (!canStartAiAction(action.id, state.applyingAiActionIds, state.appliedAiActionIds)) return
+        _uiState.value = state.copy(
+            applyingAiActionIds = state.applyingAiActionIds + action.id,
+            todoActionMessage = null,
+            todoActionError = null
+        )
+        viewModelScope.launch {
+            try {
+                operation()
+                _uiState.value = _uiState.value.copy(
+                    applyingAiActionIds = _uiState.value.applyingAiActionIds - action.id,
+                    appliedAiActionIds = _uiState.value.appliedAiActionIds + action.id,
+                    todoActionMessage = successMessage
+                )
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    applyingAiActionIds = _uiState.value.applyingAiActionIds - action.id,
+                    todoActionError = error.message?.takeIf(String::isNotBlank) ?: failureMessage
+                )
             }
         }
     }
