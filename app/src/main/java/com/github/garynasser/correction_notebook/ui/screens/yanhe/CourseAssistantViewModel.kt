@@ -13,6 +13,7 @@ import com.github.garynasser.correction_notebook.data.repository.TodoRepository
 import com.github.garynasser.correction_notebook.domain.usecase.AiStudyUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,6 +24,8 @@ import javax.inject.Inject
 data class CourseAssistantUiState(
     val isLoading: Boolean = false,
     val isActionBusy: Boolean = false,
+    val applyingActionKeys: Set<String> = emptySet(),
+    val appliedActionKeys: Set<String> = emptySet(),
     val result: String? = null,
     val actions: List<AiAction> = emptyList(),
     val error: String? = null,
@@ -38,10 +41,12 @@ class CourseAssistantViewModel @Inject constructor(
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(CourseAssistantUiState())
     val uiState: StateFlow<CourseAssistantUiState> = _uiState.asStateFlow()
+    private var generationJob: Job? = null
+    private var actionJob: Job? = null
 
     fun summarize(sectionTitle: String, note: String) {
-        viewModelScope.launch {
-            _uiState.value = CourseAssistantUiState(isLoading = true)
+        if (!beginGeneration()) return
+        generationJob = viewModelScope.launch {
             aiStudyUseCase.summarizeCourseSection(sectionTitle, note)
                 .onSuccess { _uiState.value = CourseAssistantUiState(result = it) }
                 .onFailure {
@@ -58,8 +63,8 @@ class CourseAssistantViewModel @Inject constructor(
         sectionTitle: String,
         note: String
     ) {
-        viewModelScope.launch {
-            _uiState.value = CourseAssistantUiState(isLoading = true)
+        if (!beginGeneration()) return
+        generationJob = viewModelScope.launch {
             aiStudyUseCase.summarizeCourseSectionStructured(courseId, courseName, sectionId, sectionTitle, note)
                 .onSuccess {
                     _uiState.value = CourseAssistantUiState(
@@ -75,6 +80,10 @@ class CourseAssistantViewModel @Inject constructor(
     }
 
     fun clear() {
+        generationJob?.cancel()
+        actionJob?.cancel()
+        generationJob = null
+        actionJob = null
         _uiState.value = CourseAssistantUiState()
     }
 
@@ -84,8 +93,15 @@ class CourseAssistantViewModel @Inject constructor(
 
     fun saveResultAsNote(courseId: Int, courseName: String, sectionId: Int, sectionTitle: String) {
         val content = _uiState.value.result?.trim().orEmpty()
-        if (content.isBlank()) return
-        runAssistantAction(successMessage = "已保存为课程笔记", failureMessage = "保存课程笔记失败") {
+        if (content.isBlank()) {
+            reportActionError("没有可保存的课程笔记")
+            return
+        }
+        runAssistantAction(
+            actionKey = courseAssistantResultNoteKey(courseId, sectionId),
+            successMessage = "已保存为课程笔记",
+            failureMessage = "保存课程笔记失败"
+        ) {
             courseLearningRepository.saveNote(
                 CourseNote(
                     courseId = courseId,
@@ -99,10 +115,17 @@ class CourseAssistantViewModel @Inject constructor(
         }
     }
 
-    fun saveResultAsTodo(courseId: Int, sectionTitle: String) {
+    fun saveResultAsTodo(courseId: Int, sectionId: Int, sectionTitle: String) {
         val content = _uiState.value.result?.trim().orEmpty()
-        if (content.isBlank()) return
-        runAssistantAction(successMessage = "已创建复习待办", failureMessage = "创建待办失败") {
+        if (content.isBlank()) {
+            reportActionError("没有可转为待办的内容")
+            return
+        }
+        runAssistantAction(
+            actionKey = courseAssistantResultTodoKey(courseId, sectionId),
+            successMessage = "已创建复习待办",
+            failureMessage = "创建待办失败"
+        ) {
             todoRepository.addTodo(
                 TodoItem(
                     title = "复习：${sectionTitle}".take(40),
@@ -119,8 +142,15 @@ class CourseAssistantViewModel @Inject constructor(
         when (action.type) {
             AiActionType.SAVE_COURSE_NOTE -> {
                 val content = action.payload["content"] ?: action.description.ifBlank { action.title }
-                if (content.isBlank()) return
-                runAssistantAction(successMessage = "已保存课程笔记", failureMessage = "保存课程笔记失败") {
+                if (content.isBlank()) {
+                    reportActionError("AI 动作缺少课程笔记内容")
+                    return
+                }
+                runAssistantAction(
+                    actionKey = courseAssistantAiActionKey(action.id),
+                    successMessage = "已保存课程笔记",
+                    failureMessage = "保存课程笔记失败"
+                ) {
                     courseLearningRepository.saveNote(
                         CourseNote(
                             courseId = courseId,
@@ -135,8 +165,15 @@ class CourseAssistantViewModel @Inject constructor(
             }
             AiActionType.CREATE_TODO, AiActionType.CREATE_REVIEW_PLAN -> {
                 val content = action.payload["content"] ?: action.description.ifBlank { action.title }
-                if (content.isBlank()) return
-                runAssistantAction(successMessage = "已创建待办", failureMessage = "创建待办失败") {
+                if (content.isBlank()) {
+                    reportActionError("AI 动作缺少待办内容")
+                    return
+                }
+                runAssistantAction(
+                    actionKey = courseAssistantAiActionKey(action.id),
+                    successMessage = "已创建待办",
+                    failureMessage = "创建待办失败"
+                ) {
                     todoRepository.addTodo(
                         TodoItem(
                             title = action.title.take(40),
@@ -148,34 +185,80 @@ class CourseAssistantViewModel @Inject constructor(
                     )
                 }
             }
-            else -> Unit
+            else -> reportActionError("当前课程页面暂不支持这个 AI 动作")
         }
     }
 
     private fun runAssistantAction(
+        actionKey: String,
         successMessage: String,
         failureMessage: String,
         action: suspend () -> Unit
     ) {
-        if (_uiState.value.isActionBusy) return
-        viewModelScope.launch {
-            _uiState.update { it.copy(isActionBusy = true, actionMessage = null, actionError = null) }
+        val state = _uiState.value
+        if (!canStartCourseAssistantAction(actionKey, state.isActionBusy, state.appliedActionKeys)) return
+        _uiState.value = state.copy(
+            isActionBusy = true,
+            applyingActionKeys = state.applyingActionKeys + actionKey,
+            actionMessage = null,
+            actionError = null
+        )
+        actionJob = viewModelScope.launch {
             try {
                 action()
-                _uiState.update { it.copy(isActionBusy = false, actionMessage = successMessage) }
+                _uiState.update {
+                    it.copy(
+                        isActionBusy = false,
+                        applyingActionKeys = it.applyingActionKeys - actionKey,
+                        appliedActionKeys = it.appliedActionKeys + actionKey,
+                        actionMessage = successMessage
+                    )
+                }
             } catch (error: CancellationException) {
+                _uiState.update {
+                    it.copy(
+                        isActionBusy = false,
+                        applyingActionKeys = it.applyingActionKeys - actionKey
+                    )
+                }
                 throw error
             } catch (error: Exception) {
                 _uiState.update {
                     it.copy(
                         isActionBusy = false,
+                        applyingActionKeys = it.applyingActionKeys - actionKey,
                         actionError = error.message?.takeIf(String::isNotBlank) ?: failureMessage
                     )
                 }
             }
         }
     }
+
+    private fun beginGeneration(): Boolean {
+        val state = _uiState.value
+        if (state.isLoading || state.isActionBusy) return false
+        _uiState.value = CourseAssistantUiState(isLoading = true)
+        return true
+    }
+
+    private fun reportActionError(message: String) {
+        _uiState.update { it.copy(actionMessage = null, actionError = message) }
+    }
 }
+
+internal fun courseAssistantAiActionKey(actionId: String): String = "ai:$actionId"
+
+internal fun courseAssistantResultNoteKey(courseId: Int, sectionId: Int): String =
+    "result-note:$courseId:$sectionId"
+
+internal fun courseAssistantResultTodoKey(courseId: Int, sectionId: Int): String =
+    "result-todo:$courseId:$sectionId"
+
+internal fun canStartCourseAssistantAction(
+    actionKey: String,
+    isActionBusy: Boolean,
+    appliedActionKeys: Set<String>
+): Boolean = actionKey.isNotBlank() && !isActionBusy && actionKey !in appliedActionKeys
 
 internal fun parseCourseAssistantPriority(raw: String?): Priority {
     return when (raw?.trim()?.uppercase()) {

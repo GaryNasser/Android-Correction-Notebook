@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -27,6 +28,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Camera
 import androidx.compose.material.icons.filled.AddTask
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.NoteAlt
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Psychology
@@ -265,8 +267,10 @@ fun CourseVideoListScreen(
     selectedSection?.let { section ->
         AlertDialog(
             onDismissRequest = {
-                selectedSection = null
-                assistantViewModel.clear()
+                if (!assistantState.isActionBusy) {
+                    selectedSection = null
+                    assistantViewModel.clear()
+                }
             },
             shape = RoundedCornerShape(8.dp),
             title = {
@@ -305,6 +309,7 @@ fun CourseVideoListScreen(
                         )
                     }
                     assistantState.actions.forEach { action ->
+                        val actionKey = courseAssistantAiActionKey(action.id)
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(8.dp),
@@ -325,7 +330,11 @@ fun CourseVideoListScreen(
                                         Text(action.description, style = MaterialTheme.typography.bodySmall, maxLines = 2)
                                     }
                                 }
-                                TextButton(
+                                CourseAssistantActionButton(
+                                    actionKey = actionKey,
+                                    idleLabel = "确认",
+                                    completedLabel = "已完成",
+                                    state = assistantState,
                                     onClick = {
                                         assistantViewModel.applyAction(
                                             action = action,
@@ -334,10 +343,8 @@ fun CourseVideoListScreen(
                                             sectionId = section.id,
                                             sectionTitle = section.title
                                         )
-                                    },
-                                    enabled = !assistantState.isActionBusy,
-                                    shape = RoundedCornerShape(8.dp)
-                                ) { Text(if (assistantState.isActionBusy) "处理中" else "确认") }
+                                    }
+                                )
                             }
                         }
                     }
@@ -349,7 +356,11 @@ fun CourseVideoListScreen(
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     if (assistantState.result != null) {
-                        TextButton(
+                        CourseAssistantActionButton(
+                            actionKey = courseAssistantResultNoteKey(viewModel.courseId, section.id),
+                            idleLabel = "存笔记",
+                            completedLabel = "已保存",
+                            state = assistantState,
                             onClick = {
                                 assistantViewModel.saveResultAsNote(
                                     viewModel.courseId,
@@ -357,17 +368,17 @@ fun CourseVideoListScreen(
                                     section.id,
                                     section.title
                                 )
-                            },
-                            enabled = !assistantState.isActionBusy,
-                            shape = RoundedCornerShape(8.dp)
-                        ) { Text("存笔记") }
-                        TextButton(
+                            }
+                        )
+                        CourseAssistantActionButton(
+                            actionKey = courseAssistantResultTodoKey(viewModel.courseId, section.id),
+                            idleLabel = "转待办",
+                            completedLabel = "已添加",
+                            state = assistantState,
                             onClick = {
-                                assistantViewModel.saveResultAsTodo(viewModel.courseId, section.title)
+                                assistantViewModel.saveResultAsTodo(viewModel.courseId, section.id, section.title)
                             },
-                            enabled = !assistantState.isActionBusy,
-                            shape = RoundedCornerShape(8.dp)
-                        ) { Text("转待办") }
+                        )
                     }
                     TextButton(
                         onClick = {
@@ -379,7 +390,7 @@ fun CourseVideoListScreen(
                                 noteInput
                             )
                         },
-                        enabled = !assistantState.isLoading,
+                        enabled = !assistantState.isLoading && !assistantState.isActionBusy,
                         shape = RoundedCornerShape(8.dp)
                     ) { Text(if (assistantState.result == null) "生成学习包" else "重新生成") }
                 }
@@ -388,9 +399,41 @@ fun CourseVideoListScreen(
                 TextButton(onClick = {
                     selectedSection = null
                     assistantViewModel.clear()
-                }, shape = RoundedCornerShape(8.dp)) { Text("关闭") }
+                }, enabled = !assistantState.isActionBusy, shape = RoundedCornerShape(8.dp)) { Text("关闭") }
             }
         )
+    }
+}
+
+@Composable
+private fun CourseAssistantActionButton(
+    actionKey: String,
+    idleLabel: String,
+    completedLabel: String,
+    state: CourseAssistantUiState,
+    onClick: () -> Unit
+) {
+    val isApplying = actionKey in state.applyingActionKeys
+    val isApplied = actionKey in state.appliedActionKeys
+    TextButton(
+        onClick = onClick,
+        enabled = !state.isActionBusy && !isApplied,
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier.widthIn(min = 82.dp)
+    ) {
+        when {
+            isApplying -> {
+                CircularProgressIndicator(modifier = Modifier.size(15.dp), strokeWidth = 2.dp)
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("处理中")
+            }
+            isApplied -> {
+                Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(completedLabel)
+            }
+            else -> Text(idleLabel)
+        }
     }
 }
 
