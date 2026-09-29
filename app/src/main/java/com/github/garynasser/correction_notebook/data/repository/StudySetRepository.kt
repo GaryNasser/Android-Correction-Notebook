@@ -16,7 +16,11 @@ import com.github.garynasser.correction_notebook.data.model.studyset.StudySetQui
 import com.github.garynasser.correction_notebook.data.model.studyset.StudySetDraft
 import com.github.garynasser.correction_notebook.data.model.studyset.StudySetSummary
 import com.github.garynasser.correction_notebook.utils.runCatchingCancellable
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import java.util.UUID
 import javax.inject.Inject
@@ -27,12 +31,12 @@ class StudySetRepository @Inject constructor(
     private val dao: KnowledgeBaseDao
 ) {
     fun observeStudySets(): Flow<List<StudySetSummary>> {
-        return dao.observeStudySetSummaries(System.currentTimeMillis())
+        return observeTimedQuery { now -> dao.observeStudySetSummaries(now) }
             .map { rows -> rows.map { it.toSummary() } }
     }
 
     fun observeDueReviewItems(limit: Int = 5): Flow<List<DueReviewItem>> {
-        return dao.observeDueReviewItems(System.currentTimeMillis(), limit)
+        return observeTimedQuery { now -> dao.observeDueReviewItems(now, limit) }
             .map { rows -> rows.map { it.toDueReviewItem() } }
     }
 
@@ -378,6 +382,23 @@ class StudySetRepository @Inject constructor(
         const val DAY_MILLIS = 24L * 60L * 60L * 1000L
     }
 }
+
+@OptIn(ExperimentalCoroutinesApi::class)
+internal fun <T> observeTimedQuery(
+    refreshIntervalMillis: Long = REVIEW_TIME_REFRESH_MILLIS,
+    currentTimeMillis: () -> Long = System::currentTimeMillis,
+    query: (Long) -> Flow<T>
+): Flow<T> {
+    require(refreshIntervalMillis > 0L) { "刷新间隔必须大于 0" }
+    return flow {
+        while (true) {
+            emit(currentTimeMillis())
+            delay(refreshIntervalMillis)
+        }
+    }.flatMapLatest(query)
+}
+
+private const val REVIEW_TIME_REFRESH_MILLIS = 60_000L
 
 private fun String.cleanCardText(): String {
     return trim()
