@@ -116,6 +116,8 @@ data class HomeUiState(
     val aiActions: List<AiAction> = emptyList(),
     val applyingAiActionIds: Set<String> = emptySet(),
     val appliedAiActionIds: Set<String> = emptySet(),
+    val savingAdviceTodoKeys: Set<String> = emptySet(),
+    val savedAdviceTodoKeys: Set<String> = emptySet(),
     val aiReferencedMemories: List<String> = emptyList(),
     val isAiAdviceLoading: Boolean = false,
     val aiTodoBreakdown: String? = null,
@@ -140,6 +142,19 @@ internal fun canStartAiAction(
     applyingActionIds: Set<String>,
     appliedActionIds: Set<String>
 ): Boolean = actionId !in applyingActionIds && actionId !in appliedActionIds
+
+internal fun normalizeAdviceTodoText(text: String): String = text.trim()
+    .trimStart('-', '•', '*')
+    .trim()
+
+internal fun canSaveAdviceTodo(
+    text: String,
+    savingKeys: Set<String>,
+    savedKeys: Set<String>
+): Boolean {
+    val key = normalizeAdviceTodoText(text)
+    return key.isNotBlank() && key !in savingKeys && key !in savedKeys
+}
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
@@ -400,7 +415,9 @@ class HomeViewModel @Inject constructor(
             val studyDate = LocalDate.now()
             _uiState.value = _uiState.value.copy(
                 isAiAdviceLoading = true,
-                aiErrorMessage = null
+                aiErrorMessage = null,
+                savingAdviceTodoKeys = emptySet(),
+                savedAdviceTodoKeys = emptySet()
             )
             val result = aiStudyUseCase.generateTodayPlan(studyDate)
             if (result.isSuccess) {
@@ -475,20 +492,41 @@ class HomeViewModel @Inject constructor(
     }
 
     fun saveAdviceAsTodo(text: String) {
-        val normalized = text.trim()
-            .trimStart('-', '•', '*')
-            .trim()
-        if (normalized.isBlank()) return
+        val normalized = normalizeAdviceTodoText(text)
+        val state = _uiState.value
+        if (!canSaveAdviceTodo(normalized, state.savingAdviceTodoKeys, state.savedAdviceTodoKeys)) return
+        _uiState.value = state.copy(
+            savingAdviceTodoKeys = state.savingAdviceTodoKeys + normalized,
+            todoActionMessage = null,
+            todoActionError = null
+        )
         viewModelScope.launch {
-            todoRepository.addTodo(
-                TodoItem(
-                    title = normalized.take(40),
-                    description = normalized,
-                    priority = Priority.MEDIUM,
-                    dueDate = LocalDate.now(),
-                    source = TodoSource.AI_TODAY_ADVICE
+            try {
+                todoRepository.addTodo(
+                    TodoItem(
+                        title = normalized.take(40),
+                        description = normalized,
+                        priority = Priority.MEDIUM,
+                        dueDate = LocalDate.now(),
+                        source = TodoSource.AI_TODAY_ADVICE
+                    )
                 )
-            )
+                _uiState.value = _uiState.value.copy(
+                    savingAdviceTodoKeys = _uiState.value.savingAdviceTodoKeys - normalized,
+                    savedAdviceTodoKeys = _uiState.value.savedAdviceTodoKeys + normalized,
+                    todoActionMessage = "已转为待办"
+                )
+            } catch (error: CancellationException) {
+                _uiState.value = _uiState.value.copy(
+                    savingAdviceTodoKeys = _uiState.value.savingAdviceTodoKeys - normalized
+                )
+                throw error
+            } catch (error: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    savingAdviceTodoKeys = _uiState.value.savingAdviceTodoKeys - normalized,
+                    todoActionError = error.message?.takeIf(String::isNotBlank) ?: "转为待办失败"
+                )
+            }
         }
     }
 
