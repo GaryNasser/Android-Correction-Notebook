@@ -36,8 +36,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.LibraryBooks
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ClearAll
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.MoreVert
@@ -147,28 +149,36 @@ fun AITutorScreen(
                     ) {
                         Icon(Icons.Default.Add, contentDescription = "新建对话")
                     }
-                    IconButton(
-                        onClick = { showMemoryDialog = true },
-                        enabled = !uiState.isMemoryBusy
-                    ) {
-                        Icon(Icons.Default.Memory, contentDescription = "记忆")
-                    }
-                    IconButton(
-                        onClick = { showProviderDialog = true },
-                        enabled = !uiState.isLoading && !uiState.isProviderBusy
-                    ) {
-                        Icon(Icons.Default.Settings, contentDescription = "设置")
-                    }
                     Box {
                         IconButton(
                             onClick = { menuExpanded = true },
-                            enabled = !uiState.isChatActionBusy && !uiState.isLoading
+                            enabled = !uiState.isChatActionBusy
                         ) {
                             Icon(Icons.Default.MoreVert, contentDescription = "更多")
                         }
                         DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
                             DropdownMenuItem(
+                                text = { Text("管理 AI 记忆") },
+                                leadingIcon = { Icon(Icons.Default.Memory, contentDescription = null) },
+                                enabled = !uiState.isMemoryBusy,
+                                onClick = {
+                                    menuExpanded = false
+                                    showMemoryDialog = true
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Provider 设置") },
+                                leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                                enabled = !uiState.isLoading && !uiState.isProviderBusy,
+                                onClick = {
+                                    menuExpanded = false
+                                    showProviderDialog = true
+                                }
+                            )
+                            HorizontalDivider()
+                            DropdownMenuItem(
                                 text = { Text("重命名当前对话") },
+                                leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
                                 enabled = hasCurrentSession && !uiState.isChatActionBusy && !uiState.isLoading,
                                 onClick = {
                                     menuExpanded = false
@@ -177,6 +187,7 @@ fun AITutorScreen(
                             )
                             DropdownMenuItem(
                                 text = { Text("清空当前对话") },
+                                leadingIcon = { Icon(Icons.Default.ClearAll, contentDescription = null) },
                                 enabled = hasCurrentSession && uiState.messages.isNotEmpty() &&
                                     !uiState.isChatActionBusy && !uiState.isLoading,
                                 onClick = {
@@ -186,6 +197,7 @@ fun AITutorScreen(
                             )
                             DropdownMenuItem(
                                 text = { Text("删除当前对话") },
+                                leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
                                 enabled = hasCurrentSession && !uiState.isChatActionBusy && !uiState.isLoading,
                                 onClick = {
                                     menuExpanded = false
