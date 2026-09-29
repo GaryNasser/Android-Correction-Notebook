@@ -49,6 +49,13 @@ class AITutorSessionSelectionTest {
         assertEquals(18, chatSessionTitleFrom("这是一段超过十八个字符且用于生成会话标题的学习问题").length)
     }
 
+    @Test
+    fun deletedProviderResetsOnlyAnExistingProviderForm() {
+        assertTrue(shouldResetProviderForm(formId = 2L, providerIds = listOf(1L, 3L)))
+        assertFalse(shouldResetProviderForm(formId = 2L, providerIds = listOf(1L, 2L)))
+        assertFalse(shouldResetProviderForm(formId = 0L, providerIds = emptyList()))
+    }
+
     private fun session(
         id: Long,
         providerId: Long,
