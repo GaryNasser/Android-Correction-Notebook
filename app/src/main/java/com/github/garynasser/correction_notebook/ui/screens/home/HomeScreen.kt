@@ -1423,6 +1423,8 @@ private fun StudyDashboardPage(
                 actions = uiState.aiActions,
                 applyingActionIds = uiState.applyingAiActionIds,
                 appliedActionIds = uiState.appliedAiActionIds,
+                savingAdviceTodoKeys = uiState.savingAdviceTodoKeys,
+                savedAdviceTodoKeys = uiState.savedAdviceTodoKeys,
                 referencedMemories = uiState.aiReferencedMemories,
                 selectedDate = studyDate,
                 isLoading = uiState.isAiAdviceLoading,
@@ -1626,6 +1628,8 @@ private fun AiStudyAdviceCard(
     actions: List<AiAction>,
     applyingActionIds: Set<String>,
     appliedActionIds: Set<String>,
+    savingAdviceTodoKeys: Set<String>,
+    savedAdviceTodoKeys: Set<String>,
     referencedMemories: List<String>,
     selectedDate: LocalDate,
     isLoading: Boolean,
@@ -1693,6 +1697,8 @@ private fun AiStudyAdviceCard(
                     planBlocks.forEach { block ->
                         AiPlanBlockRow(
                             block = block,
+                            savingAdviceTodoKeys = savingAdviceTodoKeys,
+                            savedAdviceTodoKeys = savedAdviceTodoKeys,
                             onStartFocus = onStartFocus,
                             onSaveAdvice = onSaveAdvice,
                             onOpenCourse = onOpenCourse,
@@ -1717,11 +1723,12 @@ private fun AiStudyAdviceCard(
                                 style = MaterialTheme.typography.bodyMedium,
                                 modifier = Modifier.weight(1f)
                             )
-                            TextButton(onClick = { onSaveAdvice(line) }) {
-                                Icon(Icons.Default.AddTask, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("转待办")
-                            }
+                            SaveAdviceTodoButton(
+                                text = line,
+                                savingKeys = savingAdviceTodoKeys,
+                                savedKeys = savedAdviceTodoKeys,
+                                onSave = onSaveAdvice
+                            )
                         }
                     }
                 }
@@ -1752,11 +1759,14 @@ private fun AiStudyAdviceCard(
 @OptIn(ExperimentalLayoutApi::class)
 private fun AiPlanBlockRow(
     block: AiPlanBlock,
+    savingAdviceTodoKeys: Set<String>,
+    savedAdviceTodoKeys: Set<String>,
     onStartFocus: () -> Unit,
     onSaveAdvice: (String) -> Unit,
     onOpenCourse: (Int, String) -> Unit,
     onOpenFile: (String) -> Unit
 ) {
+    val todoText = "${block.title}：${block.reason}"
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(8.dp),
@@ -1794,11 +1804,12 @@ private fun AiPlanBlockRow(
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("开始专注")
                 }
-                TextButton(onClick = { onSaveAdvice("${block.title}：${block.reason}") }) {
-                    Icon(Icons.Default.AddTask, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("转待办")
-                }
+                SaveAdviceTodoButton(
+                    text = todoText,
+                    savingKeys = savingAdviceTodoKeys,
+                    savedKeys = savedAdviceTodoKeys,
+                    onSave = onSaveAdvice
+                )
                 block.courseId?.let { courseId ->
                     TextButton(onClick = { onOpenCourse(courseId, block.title.removePrefix("继续学习 ")) }) {
                         Icon(Icons.Default.School, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -1813,6 +1824,41 @@ private fun AiPlanBlockRow(
                         Text("打开资料")
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SaveAdviceTodoButton(
+    text: String,
+    savingKeys: Set<String>,
+    savedKeys: Set<String>,
+    onSave: (String) -> Unit
+) {
+    val key = normalizeAdviceTodoText(text)
+    val isSaving = key in savingKeys
+    val isSaved = key in savedKeys
+    TextButton(
+        onClick = { onSave(text) },
+        enabled = !isSaving && !isSaved,
+        modifier = Modifier.widthIn(min = 88.dp)
+    ) {
+        when {
+            isSaving -> {
+                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("保存中")
+            }
+            isSaved -> {
+                Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(17.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("已添加")
+            }
+            else -> {
+                Icon(Icons.Default.AddTask, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("转待办")
             }
         }
     }
