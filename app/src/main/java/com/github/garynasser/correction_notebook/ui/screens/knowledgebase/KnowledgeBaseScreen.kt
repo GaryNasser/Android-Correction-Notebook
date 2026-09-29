@@ -50,6 +50,7 @@ import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SortByAlpha
 import androidx.compose.material.icons.filled.Style
 import androidx.compose.material.icons.filled.History
@@ -774,8 +775,7 @@ private fun FileManagementPage(
             Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
                 Row(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
+                        .fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (uiState.currentFolderId != null) {
@@ -804,32 +804,22 @@ private fun FileManagementPage(
                         Spacer(modifier = Modifier.size(6.dp))
                         Text("导入")
                     }
-                    OutlinedButton(
+                    IconButton(
                         onClick = onToggleSearch,
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
                     ) {
                         Icon(
-                            Icons.Default.Search,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
+                            if (isSearchExpanded) Icons.Default.Close else Icons.Default.Search,
+                            contentDescription = if (isSearchExpanded) "收起搜索" else "搜索当前目录"
                         )
-                        Spacer(modifier = Modifier.size(6.dp))
-                        Text(if (isSearchExpanded) "收起" else "搜索")
                     }
-                    OutlinedButton(
+                    IconButton(
                         onClick = onToggleSelectionMode,
-                        enabled = files.isNotEmpty() && !uiState.isLocalBusy,
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                        enabled = files.isNotEmpty() && !uiState.isLocalBusy
                     ) {
                         Icon(
                             if (isSelectionMode) Icons.Default.Close else Icons.Default.CheckCircle,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
+                            contentDescription = if (isSelectionMode) "退出多选" else "批量选择"
                         )
-                        Spacer(modifier = Modifier.size(6.dp))
-                        Text(if (isSelectionMode) "取消" else "多选")
                     }
                     Box {
                         IconButton(onClick = { menuExpanded = true }) {
@@ -880,7 +870,6 @@ private fun FileManagementPage(
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
@@ -888,17 +877,17 @@ private fun FileManagementPage(
                             style = MaterialTheme.typography.labelLarge,
                             modifier = Modifier.weight(1f)
                         )
-                        TextButton(onClick = onSelectAllFiles, enabled = files.isNotEmpty()) {
-                            Text("全选")
+                        IconButton(onClick = onSelectAllFiles, enabled = files.isNotEmpty()) {
+                            Icon(Icons.Default.CheckCircle, contentDescription = "全选当前目录")
                         }
-                        TextButton(onClick = onBatchMove, enabled = selectedFileIds.isNotEmpty() && !uiState.isLocalBusy) {
-                            Text("移动")
+                        IconButton(onClick = onBatchMove, enabled = selectedFileIds.isNotEmpty() && !uiState.isLocalBusy) {
+                            Icon(Icons.AutoMirrored.Filled.DriveFileMove, contentDescription = "移动所选文件")
                         }
-                        TextButton(onClick = onBatchShare, enabled = selectedFileIds.isNotEmpty()) {
-                            Text("分享")
+                        IconButton(onClick = onBatchShare, enabled = selectedFileIds.isNotEmpty()) {
+                            Icon(Icons.Default.Share, contentDescription = "分享所选文件")
                         }
-                        TextButton(onClick = onBatchDelete, enabled = selectedFileIds.isNotEmpty() && !uiState.isLocalBusy) {
-                            Text("删除")
+                        IconButton(onClick = onBatchDelete, enabled = selectedFileIds.isNotEmpty() && !uiState.isLocalBusy) {
+                            Icon(Icons.Default.Delete, contentDescription = "删除所选文件")
                         }
                     }
                 }
