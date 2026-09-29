@@ -3,6 +3,8 @@ package com.github.garynasser.correction_notebook
 import com.github.garynasser.correction_notebook.data.model.home.SessionType
 import com.github.garynasser.correction_notebook.data.model.home.StudySession
 import com.github.garynasser.correction_notebook.data.repository.StudySessionPreferenceCodec
+import com.github.garynasser.correction_notebook.data.repository.calculateCompletedPomodoros
+import com.github.garynasser.correction_notebook.data.repository.calculateStudyMinutes
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.time.LocalDateTime
@@ -101,5 +103,28 @@ class StudySessionPreferenceCodecTest {
 
         assertEquals(1, decoded.size)
         assertEquals("json-id", decoded.single().id)
+    }
+
+    @Test
+    fun statisticsIgnoreNegativeValuesFromCorruptRecords() {
+        val sessions = listOf(
+            StudySession(
+                subject = "高等数学",
+                startTime = LocalDateTime.of(2026, 9, 1, 8, 0),
+                durationMinutes = 25,
+                sessionType = SessionType.POMODORO,
+                pomodoroCount = 1
+            ),
+            StudySession(
+                subject = "损坏记录",
+                startTime = LocalDateTime.of(2026, 9, 1, 9, 0),
+                durationMinutes = -20,
+                sessionType = SessionType.POMODORO,
+                pomodoroCount = -2
+            )
+        )
+
+        assertEquals(25, calculateStudyMinutes(sessions))
+        assertEquals(1, calculateCompletedPomodoros(sessions))
     }
 }

@@ -34,4 +34,18 @@ class StatisticsDateRangeTest {
         assertEquals("高等数学", normalizeStatsSubject("  高等数学 "))
         assertEquals("未分类", normalizeStatsSubject("  "))
     }
+
+    @Test
+    fun chartSpacingAdaptsToPeriodDensity() {
+        assertEquals(8, statsChartSpacingDp(7))
+        assertEquals(4, statsChartSpacingDp(14))
+        assertEquals(2, statsChartSpacingDp(31))
+    }
+
+    @Test
+    fun zeroValuesDoNotRenderAsVisibleBars() {
+        assertEquals(0f, statsBarHeightFraction(0, 100), 0f)
+        assertEquals(0.08f, statsBarHeightFraction(1, 100), 0.0001f)
+        assertEquals(0.5f, statsBarHeightFraction(50, 100), 0.0001f)
+    }
 }
