@@ -6,6 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.InputStream
+import java.io.OutputStream
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -49,7 +50,7 @@ class KnowledgeBaseFileStorage @Inject constructor(
         try {
             inputStream.use { input ->
                 targetFile.outputStream().use { output ->
-                    input.copyTo(output)
+                    copyKnowledgeBaseFile(input, output)
                 }
             }
         } catch (error: Throwable) {
@@ -107,4 +108,32 @@ class KnowledgeBaseFileStorage @Inject constructor(
             .trim()
             .ifBlank { "file" }
     }
+}
+
+internal const val MAX_KNOWLEDGE_BASE_FILE_BYTES = 100L * 1024L * 1024L
+
+internal fun copyKnowledgeBaseFile(
+    input: InputStream,
+    output: OutputStream,
+    maxBytes: Long = MAX_KNOWLEDGE_BASE_FILE_BYTES
+): Long {
+    require(maxBytes > 0) { "文件大小上限必须大于 0" }
+    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+    var totalBytes = 0L
+    while (true) {
+        val read = input.read(buffer)
+        if (read < 0) break
+        if (totalBytes + read > maxBytes) {
+            val megabyte = 1024L * 1024L
+            val limitText = if (maxBytes >= megabyte && maxBytes % megabyte == 0L) {
+                "${maxBytes / megabyte} MB"
+            } else {
+                "$maxBytes 字节"
+            }
+            throw IllegalArgumentException("文件不能超过 $limitText")
+        }
+        output.write(buffer, 0, read)
+        totalBytes += read
+    }
+    return totalBytes
 }
