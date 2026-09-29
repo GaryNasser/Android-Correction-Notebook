@@ -306,6 +306,15 @@ interface KnowledgeBaseDao {
     @Query("DELETE FROM flashcard WHERE id = :flashcardId")
     suspend fun deleteFlashcard(flashcardId: String)
 
+    @Query("DELETE FROM ai_result_cache WHERE fileId = :fileId")
+    suspend fun deleteAiResultsForFile(fileId: String)
+
+    @Transaction
+    suspend fun deleteFileWithDerivedData(file: KnowledgeBaseFileEntity) {
+        deleteAiResultsForFile(file.id)
+        deleteFile(file)
+    }
+
     @Transaction
     suspend fun insertStudySetWithItems(
         studySet: StudySetEntity,
