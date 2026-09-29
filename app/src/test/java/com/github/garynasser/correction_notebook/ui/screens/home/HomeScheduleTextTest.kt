@@ -144,6 +144,41 @@ class HomeScheduleTextTest {
     }
 
     @Test
+    fun overlappingCoursesUseSeparateLanes() {
+        val first = sampleOccurrence(
+            startAt = LocalDateTime.of(2026, 7, 3, 8, 0),
+            endAt = LocalDateTime.of(2026, 7, 3, 9, 35)
+        ).copy(occurrenceId = "first", title = "高等数学")
+        val second = sampleOccurrence(
+            startAt = LocalDateTime.of(2026, 7, 3, 8, 50),
+            endAt = LocalDateTime.of(2026, 7, 3, 10, 40)
+        ).copy(occurrenceId = "second", title = "大学物理")
+
+        val layouts = layoutCourseGridItems(listOf(first, second))
+
+        assertEquals(listOf(0, 1), layouts.map { it.laneIndex })
+        assertEquals(listOf(2, 2), layouts.map { it.laneCount })
+    }
+
+    @Test
+    fun nonOverlappingCoursesKeepTheFullDayColumn() {
+        val morning = sampleOccurrence(
+            startAt = LocalDateTime.of(2026, 7, 3, 8, 0),
+            endAt = LocalDateTime.of(2026, 7, 3, 8, 45)
+        ).copy(occurrenceId = "morning")
+        val afternoon = sampleOccurrence(
+            startAt = LocalDateTime.of(2026, 7, 3, 13, 20),
+            endAt = LocalDateTime.of(2026, 7, 3, 14, 5)
+        ).copy(occurrenceId = "afternoon")
+
+        val layouts = layoutCourseGridItems(listOf(afternoon, morning))
+
+        assertEquals(listOf("morning", "afternoon"), layouts.map { it.item.occurrenceId })
+        assertEquals(listOf(1, 1), layouts.map { it.laneCount })
+        assertEquals(listOf(0, 0), layouts.map { it.laneIndex })
+    }
+
+    @Test
     fun weeklyOffGridOccurrencesKeepsAllDayAndNonClassTimeItemsInOrder() {
         val inGrid = sampleOccurrence(
             startAt = LocalDateTime.of(2026, 7, 3, 8, 0),

@@ -689,19 +689,23 @@ private fun WeeklyCourseGrid(
                 }
 
                 days.forEachIndexed { dayIndex, date ->
-                    itemsByDate[date].orEmpty().forEach { item ->
-                        val placement = item.toCourseGridPlacement() ?: return@forEach
+                    layoutCourseGridItems(itemsByDate[date].orEmpty()).forEach { layout ->
+                        val laneGap = if (layout.laneCount > 1) 1.dp else 0.dp
+                        val availableWidth = dayColumnWidth - 2.dp -
+                            laneGap * (layout.laneCount - 1).toFloat()
+                        val laneWidth = availableWidth / layout.laneCount.toFloat()
                         CourseGridBlock(
-                            item = item,
-                            span = placement.span,
+                            item = layout.item,
+                            span = layout.placement.span,
                             modifier = Modifier
-                                .width(dayColumnWidth - 2.dp)
-                                .height(rowHeight * placement.span.toFloat() - 2.dp)
+                                .width(laneWidth)
+                                .height(rowHeight * layout.placement.span.toFloat() - 2.dp)
                                 .offset(
-                                    x = leftColumnWidth + dayColumnWidth * dayIndex.toFloat() + 1.dp,
-                                    y = rowHeight * placement.startIndex.toFloat() + 1.dp
+                                    x = leftColumnWidth + dayColumnWidth * dayIndex.toFloat() + 1.dp +
+                                        (laneWidth + laneGap) * layout.laneIndex.toFloat(),
+                                    y = rowHeight * layout.placement.startIndex.toFloat() + 1.dp
                                 ),
-                            onClick = { onItemClick(item) }
+                            onClick = { onItemClick(layout.item) }
                         )
                     }
                 }
@@ -969,6 +973,13 @@ internal data class CourseGridPlacement(
     val span: Int
 )
 
+internal data class CourseGridBlockLayout(
+    val item: ScheduleOccurrence,
+    val placement: CourseGridPlacement,
+    val laneIndex: Int,
+    val laneCount: Int
+)
+
 private val COURSE_SECTIONS = listOf(
     CourseSectionSlot(1, java.time.LocalTime.of(8, 0), java.time.LocalTime.of(8, 45)),
     CourseSectionSlot(2, java.time.LocalTime.of(8, 50), java.time.LocalTime.of(9, 35)),
@@ -1001,6 +1012,55 @@ internal fun ScheduleOccurrence.toCourseGridPlacement(): CourseGridPlacement? {
         startIndex = startIndex,
         span = (endIndex - startIndex + 1).coerceAtLeast(1)
     )
+}
+
+internal fun layoutCourseGridItems(items: List<ScheduleOccurrence>): List<CourseGridBlockLayout> {
+    val candidates = items
+        .mapNotNull { item -> item.toCourseGridPlacement()?.let { item to it } }
+        .sortedWith(
+            compareBy<Pair<ScheduleOccurrence, CourseGridPlacement>> { it.second.startIndex }
+                .thenByDescending { it.second.span }
+                .thenBy { it.first.title }
+        )
+    if (candidates.isEmpty()) return emptyList()
+
+    val groups = mutableListOf<MutableList<Pair<ScheduleOccurrence, CourseGridPlacement>>>()
+    var groupEndExclusive = -1
+    candidates.forEach { candidate ->
+        val start = candidate.second.startIndex
+        val endExclusive = start + candidate.second.span
+        if (groups.isEmpty() || start >= groupEndExclusive) {
+            groups += mutableListOf(candidate)
+            groupEndExclusive = endExclusive
+        } else {
+            groups.last() += candidate
+            groupEndExclusive = maxOf(groupEndExclusive, endExclusive)
+        }
+    }
+
+    return groups.flatMap { group ->
+        val laneEndIndices = mutableListOf<Int>()
+        val assignments = group.map { (item, placement) ->
+            val laneIndex = laneEndIndices.indexOfFirst { endIndex ->
+                endIndex <= placement.startIndex
+            }.takeIf { it >= 0 } ?: laneEndIndices.size
+            val endExclusive = placement.startIndex + placement.span
+            if (laneIndex == laneEndIndices.size) {
+                laneEndIndices += endExclusive
+            } else {
+                laneEndIndices[laneIndex] = endExclusive
+            }
+            Triple(item, placement, laneIndex)
+        }
+        assignments.map { (item, placement, laneIndex) ->
+            CourseGridBlockLayout(
+                item = item,
+                placement = placement,
+                laneIndex = laneIndex,
+                laneCount = laneEndIndices.size
+            )
+        }
+    }
 }
 
 internal fun weeklyOffGridOccurrences(sections: List<ScheduleSection>): List<ScheduleOccurrence> {
