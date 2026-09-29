@@ -143,6 +143,8 @@ internal fun canStartAiAction(
     appliedActionIds: Set<String>
 ): Boolean = actionId !in applyingActionIds && actionId !in appliedActionIds
 
+internal fun canStartArticleRefresh(isLoading: Boolean): Boolean = !isLoading
+
 internal fun normalizeAdviceTodoText(text: String): String = text.trim()
     .trimStart('-', '•', '*')
     .trim()
@@ -303,26 +305,27 @@ class HomeViewModel @Inject constructor(
     }
 
     fun refreshArticles(forceRefresh: Boolean = true) {
-        if (_uiState.value.isArticlesLoading) return
+        val state = _uiState.value
+        if (!canStartArticleRefresh(state.isArticlesLoading)) return
+        _uiState.value = state.copy(
+            isArticlesLoading = true,
+            articleErrorMessage = null
+        )
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(
-                isArticlesLoading = true,
-                articleErrorMessage = null
-            )
             try {
                 val articles = articleRepository.getRecommendedArticles(forceRefresh = forceRefresh)
                 _uiState.value = _uiState.value.copy(
                     articles = articles,
-                    isArticlesLoading = false,
                     articleErrorMessage = null
                 )
             } catch (throwable: CancellationException) {
                 throw throwable
             } catch (throwable: Exception) {
                 _uiState.value = _uiState.value.copy(
-                    isArticlesLoading = false,
                     articleErrorMessage = throwable.message?.takeIf { it.isNotBlank() } ?: "推荐内容加载失败"
                 )
+            } finally {
+                _uiState.value = _uiState.value.copy(isArticlesLoading = false)
             }
         }
     }

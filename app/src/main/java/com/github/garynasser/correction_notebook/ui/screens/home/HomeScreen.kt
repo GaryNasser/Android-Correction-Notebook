@@ -122,6 +122,8 @@ fun HomeScreen(
     LaunchedEffect(activeMainTab) {
         if (activeMainTab == HomeMainTab.BIT) {
             homeViewModel.setSelectedWeek(uiState.selectedDate)
+        } else if (uiState.articles.isEmpty()) {
+            homeViewModel.refreshArticles(forceRefresh = false)
         }
     }
 
@@ -263,7 +265,9 @@ fun HomeScreen(
                         }
                     },
                     onOpenCourse = onOpenCourse,
-                    onOpenFile = onOpenKnowledgeFile
+                    onOpenFile = onOpenKnowledgeFile,
+                    onOpenArticle = onOpenArticle,
+                    onRefreshArticles = { homeViewModel.refreshArticles() }
                 )
             }
         }
@@ -1370,7 +1374,9 @@ private fun StudyDashboardPage(
     onSaveAdvice: (String) -> Unit,
     onApplyAction: (AiAction) -> Unit,
     onOpenCourse: (Int, String) -> Unit,
-    onOpenFile: (String) -> Unit
+    onOpenFile: (String) -> Unit,
+    onOpenArticle: (Article) -> Unit,
+    onRefreshArticles: () -> Unit
 ) {
     LazyColumn(
         state = listState,
@@ -1434,6 +1440,15 @@ private fun StudyDashboardPage(
                 onStartFocus = onImmersiveModeClick,
                 onOpenCourse = onOpenCourse,
                 onOpenFile = onOpenFile
+            )
+        }
+        item {
+            ArticlesSection(
+                articles = uiState.articles,
+                isLoading = uiState.isArticlesLoading,
+                errorMessage = uiState.articleErrorMessage,
+                onArticleClick = onOpenArticle,
+                onRefresh = onRefreshArticles
             )
         }
         item { Spacer(modifier = Modifier.height(24.dp)) }
