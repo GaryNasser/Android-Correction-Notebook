@@ -196,8 +196,24 @@ class KnowledgeBaseRepository @Inject constructor(
 
     suspend fun deleteFile(fileId: String): Result<Unit> = runCatchingCancellable {
         val file = requireNotNull(dao.getFileById(fileId)) { "文件不存在" }
-        fileStorage.deleteFile(file.localPath)
-        dao.deleteFile(file)
+        withContext(NonCancellable) {
+            val stagedDeletion = fileStorage.stageFileForDeletion(file.localPath)
+            try {
+                dao.deleteFileWithDerivedData(file)
+            } catch (error: Throwable) {
+                if (stagedDeletion != null) {
+                    try {
+                        fileStorage.restoreStagedFile(stagedDeletion)
+                    } catch (rollbackError: Throwable) {
+                        error.addSuppressed(rollbackError)
+                    }
+                }
+                throw error
+            }
+            if (stagedDeletion != null) {
+                fileStorage.commitStagedFileDeletion(stagedDeletion)
+            }
+        }
     }
 
     suspend fun getFileSummary(fileId: String): KnowledgeBaseFileSummary? {

@@ -17,6 +17,11 @@ data class StoredKnowledgeBaseFile(
     val sizeBytes: Long
 )
 
+internal data class PendingKnowledgeBaseFileDeletion(
+    val originalPath: String,
+    val pendingPath: String
+)
+
 @Singleton
 class KnowledgeBaseFileStorage @Inject constructor(
     @ApplicationContext private val context: Context
@@ -92,6 +97,18 @@ class KnowledgeBaseFileStorage @Inject constructor(
         }
     }
 
+    internal suspend fun stageFileForDeletion(path: String): PendingKnowledgeBaseFileDeletion? = withContext(Dispatchers.IO) {
+        stageKnowledgeBaseFileForDeletion(File(path))
+    }
+
+    internal suspend fun restoreStagedFile(deletion: PendingKnowledgeBaseFileDeletion) = withContext(Dispatchers.IO) {
+        restoreStagedKnowledgeBaseFile(deletion)
+    }
+
+    internal suspend fun commitStagedFileDeletion(deletion: PendingKnowledgeBaseFileDeletion) = withContext(Dispatchers.IO) {
+        commitStagedKnowledgeBaseFileDeletion(deletion)
+    }
+
     suspend fun deleteFolder(folderPathIds: List<String>) = withContext(Dispatchers.IO) {
         var folder = baseDirectory
         folderPathIds.forEach { folderId ->
@@ -111,6 +128,31 @@ class KnowledgeBaseFileStorage @Inject constructor(
 }
 
 internal const val MAX_KNOWLEDGE_BASE_FILE_BYTES = 100L * 1024L * 1024L
+
+internal fun stageKnowledgeBaseFileForDeletion(source: File): PendingKnowledgeBaseFileDeletion? {
+    if (!source.exists()) return null
+    val pending = File(source.parentFile, ".pending-delete-${UUID.randomUUID()}-${source.name}")
+    check(source.renameTo(pending)) { "无法准备删除本地文件" }
+    return PendingKnowledgeBaseFileDeletion(
+        originalPath = source.absolutePath,
+        pendingPath = pending.absolutePath
+    )
+}
+
+internal fun restoreStagedKnowledgeBaseFile(deletion: PendingKnowledgeBaseFileDeletion) {
+    val pending = File(deletion.pendingPath)
+    if (!pending.exists()) return
+    val original = File(deletion.originalPath)
+    check(!original.exists()) { "无法恢复本地文件：原路径已被占用" }
+    check(pending.renameTo(original)) { "无法恢复本地文件" }
+}
+
+internal fun commitStagedKnowledgeBaseFileDeletion(deletion: PendingKnowledgeBaseFileDeletion) {
+    val pending = File(deletion.pendingPath)
+    if (pending.exists() && !pending.delete()) {
+        throw IllegalStateException("无法删除本地文件")
+    }
+}
 
 internal fun copyKnowledgeBaseFile(
     input: InputStream,
