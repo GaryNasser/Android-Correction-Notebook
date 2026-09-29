@@ -12,13 +12,7 @@ class YanheRepository @Inject constructor(
     private val credentialManager: CredentialManager,
     private val bitCasClient: BitCasClient,
 ) {
-    fun saveStudentCredential(credential: UserCredential) {
-        credentialManager.saveCredentials(credential)
-    }
-
-    fun getStudentCredential(): UserCredential? {
-        return credentialManager.getCredentials();
-    }
+    fun getStudentCredential(): UserCredential? = credentialManager.getCredentials()
 
     fun removeStudentCredential() {
         credentialManager.removeCredentials()
@@ -29,22 +23,48 @@ class YanheRepository @Inject constructor(
         tokenManager.removeYanheLoginToken()
     }
 
+    suspend fun authenticateStudent(credential: UserCredential): Result<String> {
+        return authenticateBeforeCommit(
+            requestToken = {
+                bitCasClient.getYanheToken(
+                    studentId = credential.studentId,
+                    password = credential.password
+                )
+            },
+            commit = { token ->
+                tokenManager.saveYanheLoginTokens(token)
+                credentialManager.saveCredentials(credential)
+            }
+        )
+    }
+
     suspend fun getYanheLoginToken(): Result<String> {
         val credential = credentialManager.getCredentials()
             ?: return Result.failure(Exception("请先登录延河课堂"))
 
-        return try {
-            val token = bitCasClient.getYanheToken(
-                studentId = credential.studentId,
-                password = credential.password
-            )
-            tokenManager.saveYanheLoginTokens(token)
-            Result.success(token)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            tokenManager.removeYanheLoginToken()
-            Result.failure(e)
-        }
+        return authenticateBeforeCommit(
+            requestToken = {
+                bitCasClient.getYanheToken(
+                    studentId = credential.studentId,
+                    password = credential.password
+                )
+            },
+            commit = tokenManager::saveYanheLoginTokens
+        )
+    }
+}
+
+internal suspend fun authenticateBeforeCommit(
+    requestToken: suspend () -> String,
+    commit: suspend (String) -> Unit
+): Result<String> {
+    return try {
+        val token = requestToken()
+        commit(token)
+        Result.success(token)
+    } catch (error: CancellationException) {
+        throw error
+    } catch (error: Exception) {
+        Result.failure(error)
     }
 }

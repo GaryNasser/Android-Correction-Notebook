@@ -131,6 +131,8 @@ private fun currentWeekStart(): LocalDate {
     return LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
 }
 
+internal fun shouldRefreshLocalPlan(aiAdvice: String?): Boolean = aiAdvice == null
+
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val todoRepository: TodoRepository,
@@ -223,7 +225,7 @@ class HomeViewModel @Inject constructor(
                 _uiState.value = _uiState.value.copy(
                     todoItems = sortedTodos
                 )
-                if (_uiState.value.aiPlanBlocks.isEmpty()) refreshLocalPlan()
+                if (shouldRefreshLocalPlan(_uiState.value.aiAdvice)) refreshLocalPlan()
             }
         }
 
@@ -231,7 +233,7 @@ class HomeViewModel @Inject constructor(
             scheduleRepository.scheduleEvents.collect {
                 refreshScheduleSections()
                 refreshTodayScheduleCount()
-                if (_uiState.value.aiPlanBlocks.isEmpty()) refreshLocalPlan()
+                if (shouldRefreshLocalPlan(_uiState.value.aiAdvice)) refreshLocalPlan()
             }
         }
 
@@ -242,21 +244,21 @@ class HomeViewModel @Inject constructor(
                         .sortedByDescending { it.lastAccessedAt }
                         .take(3)
                 )
-                if (_uiState.value.aiPlanBlocks.isEmpty()) refreshLocalPlan()
+                if (shouldRefreshLocalPlan(_uiState.value.aiAdvice)) refreshLocalPlan()
             }
         }
 
         viewModelScope.launch {
             knowledgeBaseRepository.observeRecentFiles(limit = 3).collect { files ->
                 _uiState.value = _uiState.value.copy(recentKnowledgeFiles = files)
-                if (_uiState.value.aiPlanBlocks.isEmpty()) refreshLocalPlan()
+                if (shouldRefreshLocalPlan(_uiState.value.aiAdvice)) refreshLocalPlan()
             }
         }
 
         viewModelScope.launch {
             studySetRepository.observeDueReviewItems(limit = 5).collect { items ->
                 _uiState.value = _uiState.value.copy(dueReviewItems = items)
-                if (_uiState.value.aiPlanBlocks.isEmpty()) refreshLocalPlan()
+                if (shouldRefreshLocalPlan(_uiState.value.aiAdvice)) refreshLocalPlan()
             }
         }
 

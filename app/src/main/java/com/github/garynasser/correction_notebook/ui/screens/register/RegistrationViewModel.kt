@@ -12,9 +12,7 @@ import com.github.garynasser.correction_notebook.data.repository.VideoRepository
 import com.github.garynasser.correction_notebook.data.repository.YanheRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 @HiltViewModel
@@ -76,17 +74,16 @@ class RegistrationViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
+                yanheRepository.authenticateStudent(
+                    UserCredential(trimmedStudentId, casPassword)
+                ).getOrThrow()
                 videoRepository.clearSessionCache()
-                yanheRepository.saveStudentCredential(UserCredential(trimmedStudentId, casPassword))
-                yanheRepository.getYanheLoginToken().getOrThrow()
                 authStateManager.updateState(AuthState.Authenticated)
                 onSuccess()
             } catch (exception: CancellationException) {
-                clearFailedYanheLogin()
                 throw exception
             } catch (exception: Exception) {
                 errorMessage = formatCasError(exception)
-                clearFailedYanheLogin()
             } finally {
                 isCasLoading = false
             }
@@ -95,18 +92,6 @@ class RegistrationViewModel @Inject constructor(
 
     fun clearError() {
         errorMessage = null
-    }
-
-    private suspend fun clearFailedYanheLogin() {
-        withContext(NonCancellable) {
-            try {
-                yanheRepository.clearYanheSession()
-            } catch (_: Exception) {
-                // Credentials are removed before the token, so startup cannot restore a failed login.
-            }
-            videoRepository.clearSessionCache()
-            authStateManager.updateState(AuthState.Unauthenticated)
-        }
     }
 
     private fun formatCasError(error: Throwable): String {
