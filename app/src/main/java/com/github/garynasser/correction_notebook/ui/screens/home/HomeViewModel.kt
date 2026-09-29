@@ -120,6 +120,7 @@ data class HomeUiState(
     val savedAdviceTodoKeys: Set<String> = emptySet(),
     val aiReferencedMemories: List<String> = emptyList(),
     val isAiAdviceLoading: Boolean = false,
+    val breakingDownTodoId: String? = null,
     val aiTodoBreakdown: String? = null,
     val aiErrorMessage: String? = null,
     val isSavingBackgroundImage: Boolean = false,
@@ -144,6 +145,8 @@ internal fun canStartAiAction(
 ): Boolean = actionId !in applyingActionIds && actionId !in appliedActionIds
 
 internal fun canStartArticleRefresh(isLoading: Boolean): Boolean = !isLoading
+
+internal fun canStartAiGeneration(isLoading: Boolean): Boolean = !isLoading
 
 internal fun normalizeAdviceTodoText(text: String): String = text.trim()
     .trimStart('-', '•', '*')
@@ -414,41 +417,56 @@ class HomeViewModel @Inject constructor(
     }
 
     fun generateTodayAdvice() {
+        val state = _uiState.value
+        if (!canStartAiGeneration(state.isAiAdviceLoading)) return
+        _uiState.value = state.copy(
+            isAiAdviceLoading = true,
+            breakingDownTodoId = null,
+            aiErrorMessage = null,
+            savingAdviceTodoKeys = emptySet(),
+            savedAdviceTodoKeys = emptySet()
+        )
         viewModelScope.launch {
             val studyDate = LocalDate.now()
-            _uiState.value = _uiState.value.copy(
-                isAiAdviceLoading = true,
-                aiErrorMessage = null,
-                savingAdviceTodoKeys = emptySet(),
-                savedAdviceTodoKeys = emptySet()
-            )
-            val result = aiStudyUseCase.generateTodayPlan(studyDate)
-            if (result.isSuccess) {
-                val adviceResult = result.getOrThrow()
-                val localPlanBlocks = if (adviceResult.planBlocks.isEmpty()) {
-                    val scheduleItems = todayScheduleItems(studyDate)
-                    _uiState.value = _uiState.value.copy(todayScheduleCount = scheduleItems.size)
-                    buildLocalPlanBlocks(studyDate, scheduleItems)
+            try {
+                val result = aiStudyUseCase.generateTodayPlan(studyDate)
+                if (result.isSuccess) {
+                    val adviceResult = result.getOrThrow()
+                    val localPlanBlocks = if (adviceResult.planBlocks.isEmpty()) {
+                        val scheduleItems = todayScheduleItems(studyDate)
+                        _uiState.value = _uiState.value.copy(todayScheduleCount = scheduleItems.size)
+                        buildLocalPlanBlocks(studyDate, scheduleItems)
+                    } else {
+                        adviceResult.planBlocks
+                    }
+                    _uiState.value = _uiState.value.copy(
+                        aiAdvice = adviceResult.summary.ifBlank { adviceResult.rawText },
+                        aiPlanBlocks = localPlanBlocks,
+                        aiActions = adviceResult.actions,
+                        applyingAiActionIds = emptySet(),
+                        appliedAiActionIds = emptySet(),
+                        aiReferencedMemories = adviceResult.referencedMemories
+                    )
                 } else {
-                    adviceResult.planBlocks
+                    val throwable = result.exceptionOrNull()
+                    if (throwable is CancellationException) throw throwable
+                    val scheduleItems = todayScheduleItems(studyDate)
+                    _uiState.value = _uiState.value.copy(
+                        aiErrorMessage = throwable?.message ?: "AI 建议生成失败",
+                        todayScheduleCount = scheduleItems.size,
+                        aiPlanBlocks = buildLocalPlanBlocks(studyDate, scheduleItems)
+                    )
                 }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
                 _uiState.value = _uiState.value.copy(
-                    aiAdvice = adviceResult.summary.ifBlank { adviceResult.rawText },
-                    aiPlanBlocks = localPlanBlocks,
-                    aiActions = adviceResult.actions,
-                    applyingAiActionIds = emptySet(),
-                    appliedAiActionIds = emptySet(),
-                    aiReferencedMemories = adviceResult.referencedMemories,
-                    isAiAdviceLoading = false
+                    aiErrorMessage = error.message ?: "AI 建议生成失败"
                 )
-            } else {
-                val throwable = result.exceptionOrNull()
-                val scheduleItems = todayScheduleItems(studyDate)
+            } finally {
                 _uiState.value = _uiState.value.copy(
                     isAiAdviceLoading = false,
-                    aiErrorMessage = throwable?.message ?: "AI 建议生成失败",
-                    todayScheduleCount = scheduleItems.size,
-                    aiPlanBlocks = buildLocalPlanBlocks(studyDate, scheduleItems)
+                    breakingDownTodoId = null
                 )
             }
         }
@@ -463,27 +481,45 @@ class HomeViewModel @Inject constructor(
     }
 
     fun breakDownTodo(todo: TodoItem) {
+        val state = _uiState.value
+        if (!canStartAiGeneration(state.isAiAdviceLoading)) return
+        _uiState.value = state.copy(
+            isAiAdviceLoading = true,
+            breakingDownTodoId = todo.id,
+            aiTodoBreakdown = null,
+            aiErrorMessage = null
+        )
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(
-                isAiAdviceLoading = true,
-                aiErrorMessage = null
-            )
-            aiStudyUseCase.breakDownTodoStructured(todo.title, todo.description)
-                .onSuccess { breakdown ->
-                    _uiState.value = _uiState.value.copy(
-                        aiTodoBreakdown = breakdown.summary.ifBlank { breakdown.rawText },
-                        aiActions = breakdown.actions,
-                        applyingAiActionIds = emptySet(),
-                        appliedAiActionIds = emptySet(),
-                        isAiAdviceLoading = false
-                    )
-                }
-                .onFailure { throwable ->
+            try {
+                aiStudyUseCase.breakDownTodoStructured(todo.title, todo.description)
+                    .onSuccess { breakdown ->
+                        _uiState.value = _uiState.value.copy(
+                            aiTodoBreakdown = breakdown.summary.ifBlank { breakdown.rawText },
+                            aiActions = breakdown.actions,
+                            applyingAiActionIds = emptySet(),
+                            appliedAiActionIds = emptySet()
+                        )
+                    }
+                    .onFailure { throwable ->
+                        if (throwable is CancellationException) throw throwable
+                        _uiState.value = _uiState.value.copy(
+                            aiErrorMessage = throwable.message ?: "待办拆解失败"
+                        )
+                    }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    aiErrorMessage = error.message ?: "待办拆解失败"
+                )
+            } finally {
+                if (_uiState.value.breakingDownTodoId == todo.id) {
                     _uiState.value = _uiState.value.copy(
                         isAiAdviceLoading = false,
-                        aiErrorMessage = throwable.message ?: "待办拆解失败"
+                        breakingDownTodoId = null
                     )
                 }
+            }
         }
     }
 

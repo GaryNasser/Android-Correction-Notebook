@@ -1,6 +1,7 @@
 package com.github.garynasser.correction_notebook
 
 import com.github.garynasser.correction_notebook.ui.screens.home.canStartAiAction
+import com.github.garynasser.correction_notebook.ui.screens.home.canStartAiGeneration
 import com.github.garynasser.correction_notebook.ui.screens.home.canSaveAdviceTodo
 import com.github.garynasser.correction_notebook.ui.screens.home.normalizeAdviceTodoText
 import org.junit.Assert.assertEquals
@@ -26,5 +27,11 @@ class HomeAiActionStateTest {
         assertFalse(canSaveAdviceTodo(text, setOf(key), emptySet()))
         assertFalse(canSaveAdviceTodo(text, emptySet(), setOf(key)))
         assertFalse(canSaveAdviceTodo("   ", emptySet(), emptySet()))
+    }
+
+    @Test
+    fun aiGenerationCannotStartWhileAnotherRequestIsRunning() {
+        assertTrue(canStartAiGeneration(isLoading = false))
+        assertFalse(canStartAiGeneration(isLoading = true))
     }
 }
