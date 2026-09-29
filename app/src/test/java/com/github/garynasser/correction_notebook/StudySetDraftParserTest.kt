@@ -1,7 +1,11 @@
 package com.github.garynasser.correction_notebook
 
 import com.github.garynasser.correction_notebook.data.remote.ai.StudySetDraftParser
+import com.github.garynasser.correction_notebook.data.model.studyset.KnowledgeCardDraft
 import com.github.garynasser.correction_notebook.data.model.studyset.KnowledgeCardType
+import com.github.garynasser.correction_notebook.data.model.studyset.QuizQuestionDraft
+import com.github.garynasser.correction_notebook.data.model.studyset.StudySetDraft
+import com.github.garynasser.correction_notebook.data.model.studyset.hasUsableContent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -93,5 +97,37 @@ class StudySetDraftParserTest {
         assertEquals("Cache 命中率是什么？", card.front)
         assertEquals("命中率是访问 Cache 成功的次数占总访问次数的比例。", card.back)
         assertEquals("访问比例", card.hint)
+    }
+
+    @Test
+    fun onlyAcceptsDraftsWithSavableContent() {
+        assertTrue(
+            StudySetDraft(
+                title = "有效闪卡",
+                cards = listOf(
+                    KnowledgeCardDraft(
+                        title = "导数定义",
+                        front = "什么是导数？",
+                        back = "函数在一点的瞬时变化率。"
+                    )
+                )
+            ).hasUsableContent()
+        )
+        assertTrue(
+            StudySetDraft(
+                title = "有效测验",
+                quizQuestions = listOf(
+                    QuizQuestionDraft(question = "1 + 1 = ?", answer = "2")
+                )
+            ).hasUsableContent()
+        )
+        assertTrue(!StudySetDraft(title = "空草稿").hasUsableContent())
+        assertTrue(
+            !StudySetDraft(
+                title = "无效内容",
+                cards = listOf(KnowledgeCardDraft(title = "", front = "", back = "")),
+                quizQuestions = listOf(QuizQuestionDraft(question = "", answer = ""))
+            ).hasUsableContent()
+        )
     }
 }

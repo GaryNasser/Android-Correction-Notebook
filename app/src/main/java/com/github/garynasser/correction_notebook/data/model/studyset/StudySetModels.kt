@@ -6,6 +6,18 @@ data class StudySetDraft(
     val quizQuestions: List<QuizQuestionDraft> = emptyList()
 )
 
+internal fun StudySetDraft.hasUsableContent(): Boolean {
+    val hasCard = cards.any { card ->
+        card.title.isNotBlank() && (card.back.isNotBlank() || card.explanation.isNotBlank())
+    }
+    val hasQuestion = quizQuestions.any { question ->
+        question.question.isNotBlank() && question.answer.isNotBlank()
+    }
+    return hasCard || hasQuestion
+}
+
+internal const val EMPTY_STUDY_SET_MESSAGE = "学习集没有生成可保存的卡片或测验，请重试"
+
 enum class KnowledgeCardType {
     QA_FLASHCARD,
     KNOWLEDGE_CARD

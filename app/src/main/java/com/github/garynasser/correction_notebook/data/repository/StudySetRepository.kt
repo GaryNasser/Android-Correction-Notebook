@@ -15,6 +15,7 @@ import com.github.garynasser.correction_notebook.data.model.studyset.QuizQuestio
 import com.github.garynasser.correction_notebook.data.model.studyset.StudySetQuizItem
 import com.github.garynasser.correction_notebook.data.model.studyset.StudySetDraft
 import com.github.garynasser.correction_notebook.data.model.studyset.StudySetSummary
+import com.github.garynasser.correction_notebook.data.model.studyset.EMPTY_STUDY_SET_MESSAGE
 import com.github.garynasser.correction_notebook.utils.runCatchingCancellable
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
@@ -62,6 +63,15 @@ class StudySetRepository @Inject constructor(
     ): Result<String> = runCatchingCancellable {
         val now = System.currentTimeMillis()
         val studySetId = UUID.randomUUID().toString()
+        val cards = draft.cards
+            .filter { it.title.isNotBlank() && (it.back.isNotBlank() || it.explanation.isNotBlank()) }
+            .take(30)
+            .map { it.toEntity(studySetId, now, createdByAi) }
+        val questions = draft.quizQuestions
+            .filter { it.question.isNotBlank() && it.answer.isNotBlank() }
+            .take(20)
+            .map { it.toEntity(studySetId) }
+        require(cards.isNotEmpty() || questions.isNotEmpty()) { EMPTY_STUDY_SET_MESSAGE }
         val studySet = StudySetEntity(
             id = studySetId,
             courseId = file.courseId,
@@ -75,14 +85,8 @@ class StudySetRepository @Inject constructor(
         )
         dao.insertStudySetWithItems(
             studySet = studySet,
-            cards = draft.cards
-                .filter { it.title.isNotBlank() && (it.back.isNotBlank() || it.explanation.isNotBlank()) }
-                .take(30)
-                .map { it.toEntity(studySetId, now, createdByAi) },
-            questions = draft.quizQuestions
-                .filter { it.question.isNotBlank() && it.answer.isNotBlank() }
-                .take(20)
-                .map { it.toEntity(studySetId) }
+            cards = cards,
+            questions = questions
         )
         studySetId
     }
