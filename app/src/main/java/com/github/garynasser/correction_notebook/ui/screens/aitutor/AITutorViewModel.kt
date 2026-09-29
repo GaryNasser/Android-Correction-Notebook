@@ -62,6 +62,23 @@ internal fun List<ChatSessionEntity>.forProvider(providerId: Long?): List<ChatSe
 internal fun ChatSessionEntity?.belongsToProvider(providerId: Long): Boolean =
     this?.providerId == providerId
 
+internal const val DEFAULT_CHAT_SESSION_TITLE = "新的学习对话"
+
+internal fun chooseSessionIdForProvider(
+    providerId: Long,
+    selectedSession: ChatSessionEntity?,
+    latestSession: ChatSessionEntity?
+): Long? = selectedSession
+    .takeIf { it.belongsToProvider(providerId) }
+    ?.id
+    ?: latestSession.takeIf { it.belongsToProvider(providerId) }?.id
+
+internal fun chatSessionTitleFrom(text: String): String =
+    text.trim().take(18).ifBlank { DEFAULT_CHAT_SESSION_TITLE }
+
+internal fun shouldAutoTitleSession(session: ChatSessionEntity?, hasMessages: Boolean): Boolean =
+    !hasMessages && session?.title == DEFAULT_CHAT_SESSION_TITLE
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class AITutorViewModel @Inject constructor(
@@ -166,7 +183,13 @@ class AITutorViewModel @Inject constructor(
                 selectedSessionId.value = if (provider == null) {
                     null
                 } else {
-                    ensureSessionForProvider(provider, "新的学习对话")
+                    val selectedSession = selectedSessionId.value
+                        ?.let { chatSessionRepository.getSessionById(it) }
+                    chooseSessionIdForProvider(
+                        providerId = provider.id,
+                        selectedSession = selectedSession,
+                        latestSession = chatSessionRepository.getLatestSessionForProvider(provider.id)
+                    )
                 }
             }
         }
@@ -184,10 +207,15 @@ class AITutorViewModel @Inject constructor(
                     error.value = "请先配置 AI Provider"
                     return@launch
                 }
-                val sessionId = ensureSessionForProvider(provider, titleFrom(text))
+                val sessionId = ensureSessionForProvider(provider, chatSessionTitleFrom(text))
                 selectedSessionId.value = sessionId
 
                 error.value = null
+                val session = chatSessionRepository.getSessionById(sessionId)
+                val hasMessages = chatSessionRepository.getRecentMessages(sessionId, 1).isNotEmpty()
+                if (shouldAutoTitleSession(session, hasMessages)) {
+                    chatSessionRepository.renameSession(sessionId, chatSessionTitleFrom(text))
+                }
                 chatSessionRepository.saveMessage(sessionId, "user", text)
 
                 val recent = chatSessionRepository.getRecentMessages(sessionId, provider.contextMessageLimit)
@@ -221,7 +249,7 @@ class AITutorViewModel @Inject constructor(
                 return@runChatAction
             }
             selectedSessionId.value = chatSessionRepository.createSession(
-                title = "新的学习对话",
+                title = DEFAULT_CHAT_SESSION_TITLE,
                 providerId = provider.id,
                 model = provider.defaultModel
             )
@@ -382,9 +410,6 @@ class AITutorViewModel @Inject constructor(
     fun clearError() {
         error.value = null
     }
-
-    private fun titleFrom(text: String): String =
-        text.take(18).ifBlank { "新的学习对话" }
 
     private fun runProviderAction(
         failureMessage: String,
