@@ -44,6 +44,7 @@ fun ProfileScreen(
     val providers by viewModel.providers.collectAsStateWithLifecycle()
     val fetchedModels by viewModel.fetchedModels.collectAsStateWithLifecycle()
     val isProviderBusy by viewModel.isProviderBusy.collectAsStateWithLifecycle()
+    val isAiToggleBusy by viewModel.isAiToggleBusy.collectAsStateWithLifecycle()
     val providerStatusMessage by viewModel.providerStatusMessage.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val profileMessage by viewModel.profileMessage.collectAsStateWithLifecycle()
@@ -108,6 +109,7 @@ fun ProfileScreen(
                         activeProvider = activeProvider,
                         providerCount = providers.size,
                         isProviderBusy = isProviderBusy,
+                        isAiToggleBusy = isAiToggleBusy,
                         enabled = !isLoading,
                         onOpenSettings = { showAiSettingsDialog = true },
                         onCheckedChange = { enabled ->
@@ -170,7 +172,7 @@ fun ProfileScreen(
                 activeProvider = activeProvider,
                 providers = providers,
                 fetchedModels = fetchedModels,
-                isProviderBusy = isProviderBusy,
+                isProviderBusy = isProviderBusy || isAiToggleBusy,
                 providerStatusMessage = providerStatusMessage
             ),
             onDismiss = { showAiSettingsDialog = false },
@@ -363,6 +365,7 @@ private fun AiStatusCard(
     activeProvider: ProviderRecord?,
     providerCount: Int,
     isProviderBusy: Boolean,
+    isAiToggleBusy: Boolean,
     enabled: Boolean,
     onOpenSettings: () -> Unit,
     onCheckedChange: (Boolean) -> Unit
@@ -382,7 +385,7 @@ private fun AiStatusCard(
                     else -> "关闭后隐藏 AI 入口和智能学习建议"
                 },
                 checked = aiEnabled,
-                enabled = enabled && !isProviderBusy,
+                enabled = enabled && !isProviderBusy && !isAiToggleBusy,
                 onCheckedChange = onCheckedChange
             )
             HorizontalDivider(modifier = Modifier.padding(horizontal = 12.dp))
@@ -394,7 +397,7 @@ private fun AiStatusCard(
                     providerCount > 0 -> "已有配置但未激活，进入后选择默认 Provider"
                     else -> "添加 OpenAI 兼容、Anthropic 或自定义接口"
                 },
-                enabled = enabled,
+                enabled = enabled && !isAiToggleBusy,
                 onClick = onOpenSettings
             )
         }
