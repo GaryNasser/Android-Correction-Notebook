@@ -28,9 +28,34 @@ class AITutorSessionSelectionTest {
         assertFalse((null as ChatSessionEntity?).belongsToProvider(10L))
     }
 
-    private fun session(id: Long, providerId: Long) = ChatSessionEntity(
+    @Test
+    fun openingTutorSelectsExistingSessionWithoutCreatingAnEmptyOne() {
+        val selected = session(id = 1L, providerId = 10L)
+        val latest = session(id = 2L, providerId = 10L)
+
+        assertEquals(1L, chooseSessionIdForProvider(10L, selected, latest))
+        assertEquals(2L, chooseSessionIdForProvider(10L, session(3L, 20L), latest))
+        assertEquals(null, chooseSessionIdForProvider(10L, null, null))
+    }
+
+    @Test
+    fun emptyDefaultSessionUsesTheFirstMessageAsItsTitle() {
+        val emptySession = session(id = 1L, providerId = 10L, title = DEFAULT_CHAT_SESSION_TITLE)
+
+        assertTrue(shouldAutoTitleSession(emptySession, hasMessages = false))
+        assertFalse(shouldAutoTitleSession(emptySession, hasMessages = true))
+        assertFalse(shouldAutoTitleSession(emptySession.copy(title = "自定义标题"), hasMessages = false))
+        assertEquals("请帮我复习高等数学第一章", chatSessionTitleFrom("  请帮我复习高等数学第一章  "))
+        assertEquals(18, chatSessionTitleFrom("这是一段超过十八个字符且用于生成会话标题的学习问题").length)
+    }
+
+    private fun session(
+        id: Long,
+        providerId: Long,
+        title: String = "测试对话"
+    ) = ChatSessionEntity(
         id = id,
-        title = "测试对话",
+        title = title,
         providerId = providerId,
         model = "test-model"
     )
