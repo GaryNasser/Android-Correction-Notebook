@@ -6,7 +6,9 @@ import com.github.garynasser.correction_notebook.data.model.ai.MemoryCategory
 import com.github.garynasser.correction_notebook.data.model.ai.NormalizedChatMessage
 import com.github.garynasser.correction_notebook.data.model.home.ScheduleRange
 import com.github.garynasser.correction_notebook.data.model.home.SessionType
+import com.github.garynasser.correction_notebook.data.model.studyset.EMPTY_STUDY_SET_MESSAGE
 import com.github.garynasser.correction_notebook.data.model.studyset.StudySetDraft
+import com.github.garynasser.correction_notebook.data.model.studyset.hasUsableContent
 import com.github.garynasser.correction_notebook.data.remote.ai.AiActionParser
 import com.github.garynasser.correction_notebook.data.remote.ai.StudySetDraftParser
 import com.github.garynasser.correction_notebook.data.repository.AIRepository
@@ -124,7 +126,17 @@ class AiStudyUseCase @Inject constructor(
             messages = listOf(NormalizedChatMessage("user", prompt)),
             systemPrompt = DEFAULT_TUTOR_PROMPT,
             memorySummary = memorySummary()
-        ).map { raw -> StudySetDraftParser.parse(raw, fallbackTitle) }
+        ).fold(
+            onSuccess = { raw ->
+                val draft = StudySetDraftParser.parse(raw, fallbackTitle)
+                if (draft.hasUsableContent()) {
+                    Result.success(draft)
+                } else {
+                    Result.failure(IllegalStateException(EMPTY_STUDY_SET_MESSAGE))
+                }
+            },
+            onFailure = { Result.failure(it) }
+        )
     }
 
     suspend fun generateTodayPlan(targetDate: LocalDate = LocalDate.now()): Result<AiActionResult> {
