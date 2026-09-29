@@ -1,5 +1,6 @@
 package com.github.garynasser.correction_notebook.ui.screens.home
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -14,7 +15,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -32,20 +32,28 @@ fun ArticlesSection(
     onArticleClick: (Article) -> Unit,
     onRefresh: () -> Unit
 ) {
-    Column {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "学习推荐",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "学习推荐",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "看看校园动态和实用学习内容",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             TextButton(
                 onClick = onRefresh,
-                enabled = !isLoading
+                enabled = !isLoading,
+                modifier = Modifier.widthIn(min = 76.dp)
             ) {
                 if (isLoading) {
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
@@ -56,8 +64,6 @@ fun ArticlesSection(
                 Text("刷新")
             }
         }
-
-        Spacer(modifier = Modifier.height(8.dp))
         when {
             isLoading && articles.isEmpty() -> {
                 ArticleLoadingRow()
@@ -67,7 +73,8 @@ fun ArticlesSection(
                     title = "推荐内容加载失败",
                     description = errorMessage,
                     actionLabel = "重试",
-                    onAction = onRefresh
+                    onAction = onRefresh,
+                    isError = true
                 )
             }
             articles.isEmpty() -> {
@@ -108,7 +115,9 @@ private fun ArticleLoadingRow() {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         items(3) {
             Card(
-                modifier = Modifier.width(184.dp),
+                modifier = Modifier
+                    .width(184.dp)
+                    .height(220.dp),
                 shape = RoundedCornerShape(8.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
@@ -154,13 +163,15 @@ private fun ArticleMessageCard(
     isError: Boolean = false
 ) {
     Card(
+        shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (isError) {
                 MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.68f)
             } else {
                 MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
             }
-        )
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
     ) {
         Column(
             modifier = Modifier
@@ -202,6 +213,7 @@ fun ArticleCard(
     Card(
         modifier = Modifier
             .width(184.dp)
+            .height(220.dp)
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(
@@ -218,10 +230,11 @@ fun ArticleCard(
                     .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
                 contentAlignment = Alignment.Center
             ) {
-                if (article.imageUrl != null) {
+                val safeImageUrl = safeArticleWebUrl(article.imageUrl)
+                if (safeImageUrl != null) {
                     AsyncImage(
-                        model = article.imageUrl,
-                        contentDescription = null,
+                        model = safeImageUrl,
+                        contentDescription = article.title,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop
                     )
@@ -236,7 +249,9 @@ fun ArticleCard(
             }
 
             Column(
-                modifier = Modifier.padding(10.dp)
+                modifier = Modifier
+                    .padding(10.dp)
+                    .weight(1f)
             ) {
                 Text(
                     text = article.title,
@@ -256,7 +271,7 @@ fun ArticleCard(
                     overflow = TextOverflow.Ellipsis
                 )
 
-                Spacer(modifier = Modifier.height(7.dp))
+                Spacer(modifier = Modifier.weight(1f))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -265,9 +280,13 @@ fun ArticleCard(
                 ) {
                     Text(
                         text = article.source,
+                        modifier = Modifier.weight(1f),
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = formatTimeAgo(article.publishTime),
                         style = MaterialTheme.typography.labelSmall,
@@ -280,6 +299,7 @@ fun ArticleCard(
 }
 
 private fun formatTimeAgo(timestamp: Long): String {
+    if (timestamp <= 0L) return "日期未知"
     val now = System.currentTimeMillis()
     val diff = (now - timestamp).coerceAtLeast(0L)
     val minutes = diff / (1000 * 60)
