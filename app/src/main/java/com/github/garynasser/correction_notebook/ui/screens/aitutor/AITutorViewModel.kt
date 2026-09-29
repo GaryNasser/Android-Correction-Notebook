@@ -79,6 +79,9 @@ internal fun chatSessionTitleFrom(text: String): String =
 internal fun shouldAutoTitleSession(session: ChatSessionEntity?, hasMessages: Boolean): Boolean =
     !hasMessages && session?.title == DEFAULT_CHAT_SESSION_TITLE
 
+internal fun shouldResetProviderForm(formId: Long, providerIds: Collection<Long>): Boolean =
+    formId > 0 && formId !in providerIds
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class AITutorViewModel @Inject constructor(

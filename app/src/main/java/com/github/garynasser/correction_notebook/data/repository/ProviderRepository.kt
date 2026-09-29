@@ -43,6 +43,8 @@ class ProviderRepository @Inject constructor(
 
     suspend fun saveProvider(record: ProviderRecord): Long {
         val now = System.currentTimeMillis()
+        val existing = record.id.takeIf { it > 0 }?.let { dao.getProviderById(it) }
+        require(record.id == 0L || existing != null) { "Provider 已不存在，请重新选择" }
         val entity = AiProviderEntity(
             id = record.id,
             name = record.name,
@@ -55,11 +57,11 @@ class ProviderRepository @Inject constructor(
             maxTokens = record.maxTokens,
             contextMessageLimit = record.contextMessageLimit.coerceIn(1, 60),
             isActive = record.isActive,
-            createdAt = if (record.createdAt == 0L) now else record.createdAt,
+            createdAt = existing?.createdAt ?: record.createdAt.takeIf { it > 0 } ?: now,
             updatedAt = now
         )
         val providerId = if (record.id == 0L) dao.insertProvider(entity) else {
-            dao.updateProvider(entity)
+            require(dao.updateProvider(entity) == 1) { "Provider 已不存在，请重新选择" }
             record.id
         }
         if (record.isActive) {

@@ -1370,6 +1370,13 @@ fun ProviderDialog(
         form = next
     }
 
+    LaunchedEffect(uiState.providers.map { it.id }, uiState.activeProvider?.id) {
+        if (shouldResetProviderForm(form.id, uiState.providers.map { it.id })) {
+            form = uiState.activeProvider?.toForm() ?: AiProviderForm()
+            fetchedModelsScopeKey = null
+        }
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(8.dp),

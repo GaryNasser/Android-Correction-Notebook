@@ -29,7 +29,7 @@ interface AiProviderDao {
     suspend fun insertProvider(provider: AiProviderEntity): Long
 
     @Update
-    suspend fun updateProvider(provider: AiProviderEntity)
+    suspend fun updateProvider(provider: AiProviderEntity): Int
 
     @Query("DELETE FROM ai_provider WHERE id = :providerId")
     suspend fun deleteProviderById(providerId: Long)
