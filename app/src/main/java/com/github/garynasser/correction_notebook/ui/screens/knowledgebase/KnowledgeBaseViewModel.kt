@@ -24,6 +24,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -104,6 +105,12 @@ private data class StudyContentSnapshot(
     val quizQuestions: List<StudySetQuizItem>
 )
 
+internal fun shouldCancelRemoteSearch(activeQuery: String?, editedQuery: String): Boolean =
+    activeQuery != null && activeQuery != editedQuery.trim()
+
+internal fun isLatestRemoteSearch(requestId: Long, latestRequestId: Long): Boolean =
+    requestId == latestRequestId
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class KnowledgeBaseViewModel @Inject constructor(
@@ -130,6 +137,9 @@ class KnowledgeBaseViewModel @Inject constructor(
     private val isLocalBusy = MutableStateFlow(false)
     private val activeDownloadId = MutableStateFlow<String?>(null)
     private val snackbarMessage = MutableStateFlow<String?>(null)
+    private var remoteSearchJob: Job? = null
+    private var latestRemoteSearchRequestId = 0L
+    private var activeRemoteSearchQuery: String? = null
 
     private val folderContent: StateFlow<KnowledgeBaseFolderContent> = combine(
         currentFolderId,
@@ -308,7 +318,15 @@ class KnowledgeBaseViewModel @Inject constructor(
     }
 
     fun updateRemoteQuery(query: String) {
+        val queryChanged = remoteQuery.value.trim() != query.trim()
         remoteQuery.value = query
+        if (queryChanged) {
+            remoteResults.value = emptyList()
+            remoteErrorMessage.value = null
+        }
+        if (shouldCancelRemoteSearch(activeRemoteSearchQuery, query)) {
+            cancelRemoteSearch()
+        }
     }
 
     fun updateRemoteSort(sortOption: BitShareSortOption) {
@@ -318,32 +336,53 @@ class KnowledgeBaseViewModel @Inject constructor(
     fun searchRemoteResources() {
         val query = remoteQuery.value.trim()
         if (query.isBlank()) {
+            cancelRemoteSearch()
             remoteResults.value = emptyList()
             remoteErrorMessage.value = null
             return
         }
-        if (isRemoteSearching.value) return
 
         val sort = remoteSort.value
+        val requestId = ++latestRemoteSearchRequestId
+        remoteSearchJob?.cancel()
+        activeRemoteSearchQuery = query
         isRemoteSearching.value = true
-        viewModelScope.launch {
-            remoteErrorMessage.value = null
+        remoteErrorMessage.value = null
+        remoteSearchJob = viewModelScope.launch {
             try {
                 bitShareRepository.searchFiles(query, sort)
-                    .onSuccess {
-                        remoteResults.value = it
+                    .onSuccess { results ->
+                        if (isLatestRemoteSearch(requestId, latestRemoteSearchRequestId)) {
+                            remoteResults.value = results
+                        }
                     }
-                    .onFailure {
-                        remoteErrorMessage.value = it.message ?: "搜索失败"
+                    .onFailure { error ->
+                        if (isLatestRemoteSearch(requestId, latestRemoteSearchRequestId)) {
+                            remoteErrorMessage.value = error.message ?: "搜索失败"
+                        }
                     }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                remoteErrorMessage.value = e.message ?: "搜索失败"
+                if (isLatestRemoteSearch(requestId, latestRemoteSearchRequestId)) {
+                    remoteErrorMessage.value = e.message ?: "搜索失败"
+                }
             } finally {
-                isRemoteSearching.value = false
+                if (isLatestRemoteSearch(requestId, latestRemoteSearchRequestId)) {
+                    isRemoteSearching.value = false
+                    activeRemoteSearchQuery = null
+                    remoteSearchJob = null
+                }
             }
         }
+    }
+
+    private fun cancelRemoteSearch() {
+        latestRemoteSearchRequestId += 1
+        remoteSearchJob?.cancel()
+        remoteSearchJob = null
+        activeRemoteSearchQuery = null
+        isRemoteSearching.value = false
     }
 
     fun loadRemoteDetail(fileId: String) {
