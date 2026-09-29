@@ -1421,6 +1421,8 @@ private fun StudyDashboardPage(
                 advice = uiState.aiAdvice,
                 planBlocks = uiState.aiPlanBlocks,
                 actions = uiState.aiActions,
+                applyingActionIds = uiState.applyingAiActionIds,
+                appliedActionIds = uiState.appliedAiActionIds,
                 referencedMemories = uiState.aiReferencedMemories,
                 selectedDate = studyDate,
                 isLoading = uiState.isAiAdviceLoading,
@@ -1622,6 +1624,8 @@ private fun AiStudyAdviceCard(
     advice: String?,
     planBlocks: List<AiPlanBlock>,
     actions: List<AiAction>,
+    applyingActionIds: Set<String>,
+    appliedActionIds: Set<String>,
     referencedMemories: List<String>,
     selectedDate: LocalDate,
     isLoading: Boolean,
@@ -1731,7 +1735,12 @@ private fun AiStudyAdviceCard(
                 )
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     actions.forEach { action ->
-                        AiActionRow(action = action, onApply = { onApplyAction(action) })
+                        AiActionRow(
+                            action = action,
+                            isApplying = action.id in applyingActionIds,
+                            isApplied = action.id in appliedActionIds,
+                            onApply = { onApplyAction(action) }
+                        )
                     }
                 }
             }
@@ -1812,6 +1821,8 @@ private fun AiPlanBlockRow(
 @Composable
 private fun AiActionRow(
     action: AiAction,
+    isApplying: Boolean,
+    isApplied: Boolean,
     onApply: () -> Unit
 ) {
     Surface(
@@ -1851,7 +1862,25 @@ private fun AiActionRow(
                     )
                 }
             }
-            TextButton(onClick = onApply) { Text("确认") }
+            TextButton(
+                onClick = onApply,
+                enabled = !isApplying && !isApplied,
+                modifier = Modifier.widthIn(min = 76.dp)
+            ) {
+                when {
+                    isApplying -> {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("执行中")
+                    }
+                    isApplied -> {
+                        Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(17.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("已完成")
+                    }
+                    else -> Text("确认")
+                }
+            }
         }
     }
 }
