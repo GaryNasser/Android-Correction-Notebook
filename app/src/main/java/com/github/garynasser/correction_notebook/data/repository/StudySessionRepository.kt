@@ -64,19 +64,23 @@ class StudySessionRepository(private val context: Context) {
     }
 
     fun buildDailyStats(date: LocalDate, sessions: List<StudySession>): DailyStats {
-        val totalMinutes = sessions.sumOf { it.durationMinutes }
-        val pomodoros = sessions.sumOf { session ->
-            if (session.sessionType == SessionType.POMODORO) {
-                session.pomodoroCount
-            } else {
-                0
-            }
-        }
         return DailyStats(
             date = date,
-            totalStudyMinutes = totalMinutes,
-            completedPomodoros = pomodoros
+            totalStudyMinutes = calculateStudyMinutes(sessions),
+            completedPomodoros = calculateCompletedPomodoros(sessions)
         )
     }
 
 }
+
+internal fun calculateStudyMinutes(sessions: List<StudySession>): Int =
+    sessions.sumOf { it.durationMinutes.coerceAtLeast(0) }
+
+internal fun calculateCompletedPomodoros(sessions: List<StudySession>): Int =
+    sessions.sumOf { session ->
+        if (session.sessionType == SessionType.POMODORO) {
+            session.pomodoroCount.coerceAtLeast(0)
+        } else {
+            0
+        }
+    }

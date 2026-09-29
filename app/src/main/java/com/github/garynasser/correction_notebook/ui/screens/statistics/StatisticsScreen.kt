@@ -71,6 +71,7 @@ class StatisticsViewModel @Inject constructor(
     val uiState: StateFlow<StatsUiState> = _uiState.asStateFlow()
     private var statsJob: Job? = null
     private var aiInsightJob: Job? = null
+    private var statsRequestId: Long = 0L
 
     fun setPeriod(period: StatsPeriod) {
         if (_uiState.value.period == period) return
@@ -133,11 +134,12 @@ class StatisticsViewModel @Inject constructor(
     }
 
     private fun loadStats() {
+        val selectedPeriod = _uiState.value.period
+        val requestId = ++statsRequestId
         statsJob?.cancel()
+        _uiState.value = _uiState.value.copy(isStatsLoading = true, statsError = null)
         statsJob = viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isStatsLoading = true, statsError = null)
             try {
-                val selectedPeriod = _uiState.value.period
                 val today = LocalDate.now()
                 val (startDate, endDate) = statsDateRange(selectedPeriod, today)
 
@@ -157,11 +159,11 @@ class StatisticsViewModel @Inject constructor(
                 val chartLabels = buildChartLabels(dateRange, selectedPeriod)
                 val subjectDistribution = sessions
                     .groupBy { normalizeStatsSubject(it.subject) }
-                    .mapValues { (_, items) -> items.sumOf { it.durationMinutes } }
+                    .mapValues { (_, items) -> items.sumOf { it.durationMinutes.coerceAtLeast(0) } }
                     .filterValues { it > 0 }
                     .toMutableMap()
 
-                if (_uiState.value.period != selectedPeriod) return@launch
+                if (_uiState.value.period != selectedPeriod || requestId != statsRequestId) return@launch
                 _uiState.value = _uiState.value.copy(
                     totalStudyMinutes = totalMinutes,
                     averageDailyMinutes = avgMinutes,
@@ -169,16 +171,20 @@ class StatisticsViewModel @Inject constructor(
                     dailyMinutes = dailyMinutes,
                     chartLabels = chartLabels,
                     subjectDistribution = subjectDistribution,
-                    isStatsLoading = false,
                     statsError = null
                 )
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(
-                    isStatsLoading = false,
-                    statsError = e.message ?: "学习统计加载失败"
-                )
+                if (_uiState.value.period == selectedPeriod && requestId == statsRequestId) {
+                    _uiState.value = _uiState.value.copy(
+                        statsError = e.message ?: "学习统计加载失败"
+                    )
+                }
+            } finally {
+                if (_uiState.value.period == selectedPeriod && requestId == statsRequestId) {
+                    _uiState.value = _uiState.value.copy(isStatsLoading = false)
+                }
             }
         }
     }
@@ -546,6 +552,17 @@ internal fun normalizeStatsSubject(subject: String): String {
     return subject.trim().ifBlank { "未分类" }
 }
 
+internal fun statsChartSpacingDp(itemCount: Int): Int = when {
+    itemCount <= 7 -> 8
+    itemCount <= 14 -> 4
+    else -> 2
+}
+
+internal fun statsBarHeightFraction(value: Int, maxValue: Int): Float {
+    if (value <= 0 || maxValue <= 0) return 0f
+    return (value.toFloat() / maxValue).coerceIn(0.08f, 1f)
+}
+
 @Composable
 private fun StatsSummaryStrip(
     totalMinutes: Int,
@@ -658,12 +675,16 @@ private fun BarChart(
     labels: List<String>,
     modifier: Modifier = Modifier
 ) {
-    val maxValue = data.maxOrNull() ?: 0
+    val itemCount = min(data.size, labels.size)
+    val chartData = data.take(itemCount)
+    val chartLabels = labels.take(itemCount)
+    val maxValue = chartData.maxOrNull() ?: 0
     val hasData = maxValue > 0
     val chartColor = MaterialTheme.colorScheme.primary
     val mutedText = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.56f)
+    val itemSpacing = statsChartSpacingDp(itemCount).dp
 
-    if (data.isEmpty() || labels.isEmpty()) {
+    if (itemCount == 0) {
         EmptyChartState(modifier = modifier, message = "暂无趋势数据")
         return
     }
@@ -674,6 +695,26 @@ private fun BarChart(
     }
 
     Column(modifier = modifier) {
+        if (itemCount <= 7) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(itemSpacing)
+            ) {
+                chartData.forEach { value ->
+                    Text(
+                        text = value.takeIf { it > 0 }?.toString().orEmpty(),
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = mutedText,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+        }
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -705,38 +746,32 @@ private fun BarChart(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(horizontal = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(itemSpacing),
                     verticalAlignment = Alignment.Bottom
                 ) {
-                    data.forEachIndexed { index, value ->
-                        val heightFraction = (value.toFloat() / maxValue).coerceAtLeast(0.08f)
+                    chartData.forEach { value ->
+                        val heightFraction = statsBarHeightFraction(value, maxValue)
                         val isPeak = value == maxValue
                         Box(
                             modifier = Modifier
                                 .weight(1f)
-                                .fillMaxHeight(heightFraction),
+                                .fillMaxHeight(),
                             contentAlignment = Alignment.BottomCenter
                         ) {
-                            Canvas(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .fillMaxHeight()
-                            ) {
-                                drawRoundRect(
-                                    color = if (isPeak) chartColor else chartColor.copy(alpha = 0.78f),
-                                    topLeft = Offset(0f, 0f),
-                                    size = Size(size.width, size.height),
-                                    cornerRadius = CornerRadius(6.dp.toPx(), 6.dp.toPx())
-                                )
-                            }
-                            if (value > 0 && data.size <= 7) {
-                                Text(
-                                    text = value.toString(),
-                                    modifier = Modifier.padding(bottom = 8.dp),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color.White,
-                                    fontWeight = FontWeight.SemiBold
-                                )
+                            if (heightFraction > 0f) {
+                                Canvas(
+                                    modifier = Modifier
+                                        .fillMaxWidth(if (itemCount <= 7) 0.62f else 0.84f)
+                                        .fillMaxHeight(heightFraction)
+                                ) {
+                                    val radius = min(4.dp.toPx(), size.width / 2f)
+                                    drawRoundRect(
+                                        color = if (isPeak) chartColor else chartColor.copy(alpha = 0.78f),
+                                        topLeft = Offset.Zero,
+                                        size = Size(size.width, size.height),
+                                        cornerRadius = CornerRadius(radius, radius)
+                                    )
+                                }
                             }
                         }
                     }
@@ -747,10 +782,12 @@ private fun BarChart(
         Spacer(modifier = Modifier.height(12.dp))
 
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(itemSpacing)
         ) {
-            labels.forEach { label ->
+            chartLabels.forEach { label ->
                 Text(
                     text = label,
                     modifier = Modifier.weight(1f),
