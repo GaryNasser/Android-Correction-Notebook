@@ -25,6 +25,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
+internal fun canStartAiSettingsAction(
+    isAiToggleBusy: Boolean,
+    isProviderBusy: Boolean
+): Boolean = !isAiToggleBusy && !isProviderBusy
+
 @HiltViewModel
 class ProfileViewModel @Inject constructor(
     private val authStateManager: AuthStateManager,
@@ -56,6 +61,9 @@ class ProfileViewModel @Inject constructor(
     private val _isProviderBusy = MutableStateFlow(false)
     val isProviderBusy: StateFlow<Boolean> = _isProviderBusy.asStateFlow()
 
+    private val _isAiToggleBusy = MutableStateFlow(false)
+    val isAiToggleBusy: StateFlow<Boolean> = _isAiToggleBusy.asStateFlow()
+
     private val _providerStatusMessage = MutableStateFlow<String?>(null)
     val providerStatusMessage: StateFlow<String?> = _providerStatusMessage.asStateFlow()
 
@@ -66,6 +74,8 @@ class ProfileViewModel @Inject constructor(
     val profileMessage: StateFlow<String?> = _profileMessage.asStateFlow()
 
     fun setAiEnabled(enabled: Boolean) {
+        if (!canStartAiSettingsAction(_isAiToggleBusy.value, _isProviderBusy.value)) return
+        _isAiToggleBusy.value = true
         viewModelScope.launch {
             try {
                 aiSettingsManager.setAiEnabled(enabled)
@@ -78,6 +88,8 @@ class ProfileViewModel @Inject constructor(
                 throw error
             } catch (_: Exception) {
                 _profileMessage.value = "AI 导师设置失败，请稍后再试"
+            } finally {
+                _isAiToggleBusy.value = false
             }
         }
     }
@@ -117,7 +129,7 @@ class ProfileViewModel @Inject constructor(
     }
 
     fun fetchModels(form: AiProviderForm) {
-        if (_isProviderBusy.value) return
+        if (!canStartAiSettingsAction(_isAiToggleBusy.value, _isProviderBusy.value)) return
         _isProviderBusy.value = true
         viewModelScope.launch {
             try {
@@ -146,7 +158,7 @@ class ProfileViewModel @Inject constructor(
     }
 
     fun testProvider(form: AiProviderForm) {
-        if (_isProviderBusy.value) return
+        if (!canStartAiSettingsAction(_isAiToggleBusy.value, _isProviderBusy.value)) return
         _isProviderBusy.value = true
         viewModelScope.launch {
             try {
@@ -213,7 +225,7 @@ class ProfileViewModel @Inject constructor(
         failureMessage: String,
         action: suspend () -> Unit
     ) {
-        if (_isProviderBusy.value) return
+        if (!canStartAiSettingsAction(_isAiToggleBusy.value, _isProviderBusy.value)) return
         _isProviderBusy.value = true
         viewModelScope.launch {
             try {
