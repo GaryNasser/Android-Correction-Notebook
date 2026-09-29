@@ -55,6 +55,7 @@ import com.github.garynasser.correction_notebook.data.model.home.ScheduleOccurre
 import com.github.garynasser.correction_notebook.data.model.home.ScheduleSection
 import com.github.garynasser.correction_notebook.data.model.home.ScheduleSourceType
 import com.github.garynasser.correction_notebook.data.model.home.TimerState
+import com.github.garynasser.correction_notebook.data.model.home.TodoItem
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.KnowledgeBaseFileSummary
 import com.github.garynasser.correction_notebook.data.model.studyset.DueReviewItem
 import com.github.garynasser.correction_notebook.data.model.studyset.KnowledgeCardType
@@ -235,7 +236,14 @@ fun HomeScreen(
                     studyDate = LocalDate.now(),
                     onImmersiveModeClick = { homeViewModel.showModeSelector() },
                     onScheduleClick = { jumpToPlanner(PlannerTab.SCHEDULE) },
-                    onTodoClick = { homeViewModel.showAddTodoDialog() },
+                    onTodoClick = {
+                        snackbarScope.launch { listState.animateScrollToItem(STUDY_TODO_SECTION_INDEX) }
+                    },
+                    onAddTodo = { homeViewModel.showAddTodoDialog() },
+                    onShowTodoHistory = { homeViewModel.showTodoHistory() },
+                    onToggleTodo = { homeViewModel.toggleTodoComplete(it) },
+                    onBreakDownTodo = { homeViewModel.breakDownTodo(it) },
+                    onDeleteTodo = { homeViewModel.deleteTodo(it) },
                     onContinueLearningClick = { onNavigateToCourses(uiState.recentCourseProgress.firstOrNull()) },
                     onRecentFilesClick = onNavigateToKnowledgeBase,
                     onOpenStatistics = { homeViewModel.showStatistics() },
@@ -404,6 +412,8 @@ private enum class HomeMainTab {
     BIT,
     STUDY
 }
+
+private const val STUDY_TODO_SECTION_INDEX = 3
 
 @Composable
 private fun BitStudySwitcher(
@@ -1365,6 +1375,11 @@ private fun StudyDashboardPage(
     onImmersiveModeClick: () -> Unit,
     onScheduleClick: () -> Unit,
     onTodoClick: () -> Unit,
+    onAddTodo: () -> Unit,
+    onShowTodoHistory: () -> Unit,
+    onToggleTodo: (String) -> Unit,
+    onBreakDownTodo: (TodoItem) -> Unit,
+    onDeleteTodo: (String) -> Unit,
     onContinueLearningClick: () -> Unit,
     onRecentFilesClick: () -> Unit,
     onOpenStatistics: () -> Unit,
@@ -1410,6 +1425,19 @@ private fun StudyDashboardPage(
             )
         }
         item {
+            StudyTodoSection(
+                todos = uiState.todoItems,
+                mutatingTodoIds = uiState.mutatingTodoIds,
+                isAiLoading = uiState.isAiAdviceLoading,
+                breakingDownTodoId = uiState.breakingDownTodoId,
+                onAddTodo = onAddTodo,
+                onShowHistory = onShowTodoHistory,
+                onToggleTodo = onToggleTodo,
+                onBreakDownTodo = onBreakDownTodo,
+                onDeleteTodo = onDeleteTodo
+            )
+        }
+        item {
             DueReviewCard(
                 items = uiState.dueReviewItems,
                 onReviewDone = onReviewDone,
@@ -1452,6 +1480,63 @@ private fun StudyDashboardPage(
             )
         }
         item { Spacer(modifier = Modifier.height(24.dp)) }
+    }
+}
+
+@Composable
+private fun StudyTodoSection(
+    todos: List<TodoItem>,
+    mutatingTodoIds: Set<String>,
+    isAiLoading: Boolean,
+    breakingDownTodoId: String?,
+    onAddTodo: () -> Unit,
+    onShowHistory: () -> Unit,
+    onToggleTodo: (String) -> Unit,
+    onBreakDownTodo: (TodoItem) -> Unit,
+    onDeleteTodo: (String) -> Unit
+) {
+    val openCount = todos.count { !it.isCompleted }
+    val completedCount = todos.size - openCount
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("待办事项", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    text = "$openCount 项待完成 · $completedCount 项已完成",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            IconButton(onClick = onShowHistory, modifier = Modifier.size(38.dp)) {
+                Icon(Icons.Default.History, contentDescription = "完成历史", modifier = Modifier.size(20.dp))
+            }
+            FilledTonalIconButton(
+                onClick = onAddTodo,
+                modifier = Modifier.size(38.dp),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "添加待办", modifier = Modifier.size(20.dp))
+            }
+        }
+
+        if (todos.isEmpty()) {
+            EmptyTodoState(onAddClick = onAddTodo)
+        } else {
+            todos.forEach { todo ->
+                TodoItemCard(
+                    todo = todo,
+                    isBusy = todo.id in mutatingTodoIds,
+                    isAiActionEnabled = !isAiLoading,
+                    isAiBreakdownBusy = breakingDownTodoId == todo.id,
+                    onToggleComplete = { onToggleTodo(todo.id) },
+                    onDelete = { onDeleteTodo(todo.id) },
+                    onAiBreakdown = { onBreakDownTodo(todo) }
+                )
+            }
+        }
     }
 }
 

@@ -29,6 +29,8 @@ import java.time.format.DateTimeFormatter
 fun TodoItemCard(
     todo: TodoItem,
     isBusy: Boolean = false,
+    isAiActionEnabled: Boolean = true,
+    isAiBreakdownBusy: Boolean = false,
     onToggleComplete: () -> Unit,
     onDelete: () -> Unit,
     onAiBreakdown: (() -> Unit)? = null
@@ -162,15 +164,19 @@ fun TodoItemCard(
             onAiBreakdown?.let { breakdown ->
                 IconButton(
                     onClick = breakdown,
-                    enabled = !isBusy,
+                    enabled = !isBusy && isAiActionEnabled,
                     modifier = Modifier.size(32.dp)
                 ) {
-                    Icon(
-                        Icons.Default.Psychology,
-                        contentDescription = "AI 拆解",
-                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.75f),
-                        modifier = Modifier.size(18.dp)
-                    )
+                    if (isAiBreakdownBusy) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(
+                            Icons.Default.Psychology,
+                            contentDescription = "AI 拆解",
+                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.75f),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
             }
 
