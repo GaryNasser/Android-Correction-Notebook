@@ -124,7 +124,8 @@ class AIRepository @Inject constructor(
                 systemPrompt = if (compact) null else "你是接口连通性测试助手。只回复 OK。",
                 maxTokens = if (compact) null else config.maxTokens,
                 temperature = if (compact) null else 0.0
-            )
+            ),
+            isConnectionTest = true
         )
     }
 
@@ -155,8 +156,12 @@ class AIRepository @Inject constructor(
 
     private suspend fun sendNormalized(
         providerConfig: AIProviderConfig,
-        request: NormalizedChatRequest
+        request: NormalizedChatRequest,
+        isConnectionTest: Boolean = false
     ): Result<com.github.garynasser.correction_notebook.data.model.ai.NormalizedChatResponse> {
+        if (!isConnectionTest && !aiSettingsManager.aiEnabled.first()) {
+            return Result.failure(IllegalStateException("AI 功能已关闭，请在设置中启用"))
+        }
         val result = when (providerConfig.type) {
             AIProviderType.OPENAI_COMPATIBLE -> openAiCompatibleAdapter.send(providerConfig, request)
             AIProviderType.ANTHROPIC_COMPATIBLE -> anthropicCompatibleAdapter.send(providerConfig, request)

@@ -29,6 +29,7 @@ import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
 import com.github.garynasser.correction_notebook.data.local.AISettingsManager
 import com.github.garynasser.correction_notebook.ui.components.BottomBarTab
+import com.github.garynasser.correction_notebook.ui.components.LocalAiEnabled
 import com.github.garynasser.correction_notebook.ui.navigation.ArticleDetailRoute
 import com.github.garynasser.correction_notebook.ui.navigation.AITutor
 import com.github.garynasser.correction_notebook.ui.navigation.CourseList
@@ -61,7 +62,8 @@ fun MainContainer(
     val appUpdateViewModel: AppUpdateViewModel = hiltViewModel()
     val appUpdateUiState by appUpdateViewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
-    val aiEnabled by aiSettingsManager.aiEnabled.collectAsStateWithLifecycle(initialValue = false)
+    val aiEnabledSetting by aiSettingsManager.aiEnabled.collectAsStateWithLifecycle(initialValue = null)
+    val aiEnabled = aiEnabledSetting == true
     var hideBottomBar by remember { mutableStateOf(false) }
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -82,6 +84,16 @@ fun MainContainer(
         }
     }
 
+    LaunchedEffect(aiEnabledSetting, currentDestination) {
+        if (aiEnabledSetting == false && currentDestination?.hasRoute(AITutor::class) == true) {
+            navController.navigate(Home) {
+                popUpTo(navController.graph.findStartDestination().id)
+                launchSingleTop = true
+            }
+        }
+    }
+
+    CompositionLocalProvider(LocalAiEnabled provides aiEnabled) {
     Scaffold(
         contentWindowInsets = if (usesZeroContentInsets(
                 hideBottomBar = hideBottomBar,
@@ -359,6 +371,7 @@ fun MainContainer(
                 }
             )
         }
+    }
     }
 }
 

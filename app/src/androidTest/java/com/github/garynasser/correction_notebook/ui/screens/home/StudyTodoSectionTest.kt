@@ -2,6 +2,8 @@ package com.github.garynasser.correction_notebook.ui.screens.home
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.CompositionLocalProvider
+import com.github.garynasser.correction_notebook.ui.components.LocalAiEnabled
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
@@ -25,9 +27,12 @@ class StudyTodoSectionTest {
     private val todos = mutableStateOf(listOf(first, second))
     private val busyIds = mutableStateOf(emptySet<String>())
     private val deletedIds = mutableListOf<String>()
+    private val aiEnabled = mutableStateOf(false)
+    private val breakdownIds = mutableListOf<String>()
 
     private fun showSection() {
         compose.setContent {
+            CompositionLocalProvider(LocalAiEnabled provides aiEnabled.value) {
             MaterialTheme {
                 StudyTodoSection(
                     todos = todos.value,
@@ -41,9 +46,10 @@ class StudyTodoSectionTest {
                             if (it.id == id) it.copy(isCompleted = !it.isCompleted) else it
                         }
                     },
-                    onBreakDownTodo = {},
+                    onBreakDownTodo = { breakdownIds += it.id },
                     onDeleteTodo = { deletedIds += it }
                 )
+            }
             }
         }
     }
@@ -87,5 +93,20 @@ class StudyTodoSectionTest {
             .assertIsOff().assertIsNotEnabled()
         compose.onAllNodesWithContentDescription("删除")[0].assertIsNotEnabled()
         compose.onNodeWithContentDescription("完成待办：${second.title}").assertIsEnabled()
+    }
+
+    @Test
+    fun aiToggleOnlyHidesTheBreakdownAction() {
+        showSection()
+        compose.onNodeWithContentDescription("AI 拆解").assertDoesNotExist()
+        compose.runOnIdle { aiEnabled.value = true }
+        compose.onAllNodesWithContentDescription("AI 拆解")[0].performClick()
+        compose.runOnIdle {
+            assertEquals(listOf(first.id), breakdownIds)
+            aiEnabled.value = false
+        }
+        compose.onNodeWithContentDescription("AI 拆解").assertDoesNotExist()
+        compose.onNodeWithContentDescription("完成待办：${first.title}").assertIsEnabled()
+        compose.onAllNodesWithContentDescription("删除")[0].assertIsEnabled()
     }
 }

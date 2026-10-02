@@ -29,6 +29,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.garynasser.correction_notebook.data.repository.StudySessionRepository
 import com.github.garynasser.correction_notebook.domain.usecase.AiStudyUseCase
+import com.github.garynasser.correction_notebook.ui.components.LocalAiEnabled
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -221,6 +222,7 @@ fun StatisticsScreen(
     viewModel: StatisticsViewModel,
     onBack: () -> Unit
 ) {
+    val aiEnabled = LocalAiEnabled.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     LaunchedEffect(viewModel) {
@@ -238,6 +240,7 @@ fun StatisticsScreen(
                     }
                 },
                 actions = {
+                    if (aiEnabled) {
                     TextButton(
                         onClick = viewModel::generateAiInsight,
                         enabled = !uiState.isAiInsightLoading && !uiState.isStatsLoading
@@ -249,6 +252,7 @@ fun StatisticsScreen(
                             Spacer(modifier = Modifier.width(4.dp))
                             Text("AI 解读")
                         }
+                    }
                     }
                 }
             )
@@ -307,7 +311,7 @@ fun StatisticsScreen(
                 }
             }
 
-            if (uiState.aiInsight != null || uiState.aiInsightError != null || uiState.isAiInsightLoading) {
+            if (aiEnabled && (uiState.aiInsight != null || uiState.aiInsightError != null || uiState.isAiInsightLoading)) {
                 item {
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
