@@ -518,6 +518,15 @@ class KnowledgeBaseViewModel @Inject constructor(
         }
     }
 
+    fun exportFile(fileId: String, targetUri: Uri) {
+        viewModelScope.launch {
+            snackbarMessage.value = "正在导出文件..."
+            knowledgeBaseRepository.exportFile(fileId, targetUri)
+                .onSuccess { snackbarMessage.value = "已导出文件副本" }
+                .onFailure { snackbarMessage.value = it.toUiMessage("导出失败，请重试") }
+        }
+    }
+
     fun updateFileLearningContext(
         fileId: String,
         courseId: Int?,

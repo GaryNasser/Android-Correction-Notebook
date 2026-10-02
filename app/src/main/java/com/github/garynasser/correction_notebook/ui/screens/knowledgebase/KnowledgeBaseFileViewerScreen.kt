@@ -10,7 +10,6 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -99,19 +98,17 @@ fun KnowledgeBaseFileViewerScreen(
 ) {
     val aiEnabled = LocalAiEnabled.current
     val uiState = viewModel.uiState.value
+    val exportMessage = viewModel.exportMessage
     val context = LocalContext.current
     var fileToDelete by remember { mutableStateOf<KnowledgeBaseFileSummary?>(null) }
-    var fileToExport by remember { mutableStateOf<KnowledgeBaseFileSummary?>(null) }
     var showInfoDialog by remember { mutableStateOf(false) }
     var menuExpanded by remember { mutableStateOf(false) }
-    val exportLauncher = rememberLauncherForActivityResult(
-        contract = KnowledgeBaseExportContract()
-    ) { uri ->
-        val file = fileToExport
-        if (uri != null && file != null) {
-            exportFile(context, file, uri)
+    val launchExport = rememberKnowledgeBaseExportLauncher { fileId, uri ->
+        if (fileId != null) {
+            viewModel.exportFile(fileId, uri)
+        } else {
+            Toast.makeText(context, "待导出文件已丢失，请重新导出", Toast.LENGTH_SHORT).show()
         }
-        fileToExport = null
     }
 
     LaunchedEffect(uiState.isDeleted) {
@@ -271,8 +268,7 @@ fun KnowledgeBaseFileViewerScreen(
                                     enabled = !uiState.isDeletingFile,
                                     onClick = {
                                         menuExpanded = false
-                                        fileToExport = file
-                                        exportLauncher.launch(file)
+                                        launchExport(file)
                                     }
                                 )
                                 DropdownMenuItem(
@@ -311,7 +307,7 @@ fun KnowledgeBaseFileViewerScreen(
             )
             else -> {
                 val showIndexStatus = aiEnabled && (uiState.isIndexing || uiState.indexChunkCount != null)
-                val showStatusShelf = uiState.errorMessage != null ||
+                val showStatusShelf = uiState.errorMessage != null || exportMessage != null ||
                     (aiEnabled && uiState.isAiLoading) ||
                     uiState.isDeletingFile ||
                     showIndexStatus
@@ -330,6 +326,14 @@ fun KnowledgeBaseFileViewerScreen(
                                     icon = Icons.Default.Info,
                                     text = message,
                                     isError = true
+                                )
+                            }
+
+                            exportMessage?.let { message ->
+                                ViewerStatusBar(
+                                    icon = Icons.Default.Download,
+                                    text = message,
+                                    isError = viewModel.isExportError
                                 )
                             }
 
@@ -870,29 +874,6 @@ internal fun openFileExternally(
         context.startActivity(Intent.createChooser(viewIntent, "选择应用打开"))
     }.onFailure {
         Toast.makeText(context, "设备上没有可打开此文件的应用", Toast.LENGTH_SHORT).show()
-    }
-}
-
-private fun exportFile(
-    context: Context,
-    file: KnowledgeBaseFileSummary,
-    targetUri: android.net.Uri
-) {
-    val sourceFile = File(file.localPath)
-    if (!sourceFile.exists()) {
-        Toast.makeText(context, "文件不存在，无法导出", Toast.LENGTH_SHORT).show()
-        return
-    }
-
-    runCatching {
-        context.contentResolver.openOutputStream(targetUri)?.use { output ->
-            sourceFile.inputStream().use { input ->
-                input.copyTo(output)
-            }
-        } ?: error("无法写入导出位置")
-        Toast.makeText(context, "已导出文件副本", Toast.LENGTH_SHORT).show()
-    }.onFailure {
-        Toast.makeText(context, "导出失败，请重试", Toast.LENGTH_SHORT).show()
     }
 }
 

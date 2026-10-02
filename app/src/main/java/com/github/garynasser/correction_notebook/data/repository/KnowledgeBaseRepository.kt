@@ -15,6 +15,7 @@ import com.github.garynasser.correction_notebook.data.model.knowledgebase.Knowle
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.KnowledgeBaseFolderSummary
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.withContext
@@ -218,6 +219,18 @@ class KnowledgeBaseRepository @Inject constructor(
 
     suspend fun getFileSummary(fileId: String): KnowledgeBaseFileSummary? {
         return dao.getFileById(fileId)?.toSummary()
+    }
+
+    suspend fun exportFile(fileId: String, targetUri: Uri): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatchingCancellable {
+            val file = requireNotNull(dao.getFileById(fileId)) { "文件不存在，无法导出" }
+            File(file.localPath).inputStream().use { input ->
+                context.contentResolver.openOutputStream(targetUri, "wt")?.use { output ->
+                    input.copyTo(output)
+                } ?: error("无法写入导出位置")
+            }
+            Unit
+        }
     }
 
     suspend fun fileExists(fileId: String): Boolean {

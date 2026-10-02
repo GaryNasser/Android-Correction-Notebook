@@ -147,7 +147,6 @@ fun KnowledgeBaseScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
-    var fileToExport by remember { mutableStateOf<KnowledgeBaseFileSummary?>(null) }
     val importLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments()
     ) { uris: List<Uri> ->
@@ -155,14 +154,12 @@ fun KnowledgeBaseScreen(
             viewModel.importLocalFiles(uris)
         }
     }
-    val exportLauncher = rememberLauncherForActivityResult(
-        contract = KnowledgeBaseExportContract()
-    ) { uri: Uri? ->
-        val file = fileToExport
-        if (uri != null && file != null) {
-            exportFile(context, file, uri)
+    val launchExport = rememberKnowledgeBaseExportLauncher { fileId, uri ->
+        if (fileId != null) {
+            viewModel.exportFile(fileId, uri)
+        } else {
+            Toast.makeText(context, "待导出文件已丢失，请重新导出", Toast.LENGTH_SHORT).show()
         }
-        fileToExport = null
     }
 
     var showCreateFolderDialog by rememberSaveable { mutableStateOf(false) }
@@ -660,10 +657,7 @@ fun KnowledgeBaseScreen(
                         onFileDelete = { fileToDelete = it },
                         onFileMove = { fileToMove = it },
                         onFileContext = { fileToContext = it },
-                        onFileExport = {
-                            fileToExport = it
-                            exportLauncher.launch(it)
-                        },
+                        onFileExport = launchExport,
                         onCreateFolder = { showCreateFolderDialog = true },
                         onImportLocalFile = { importLauncher.launch(arrayOf("*/*")) },
                         onFileShare = {
@@ -3174,28 +3168,5 @@ internal fun shareFiles(
         context.startActivity(Intent.createChooser(shareIntent, "分享文件"))
     }.onFailure {
         Toast.makeText(context, "当前设备无法分享这些文件", Toast.LENGTH_SHORT).show()
-    }
-}
-
-private fun exportFile(
-    context: android.content.Context,
-    file: KnowledgeBaseFileSummary,
-    targetUri: Uri
-) {
-    val sourceFile = File(file.localPath)
-    if (!sourceFile.exists()) {
-        Toast.makeText(context, "文件不存在，无法导出", Toast.LENGTH_SHORT).show()
-        return
-    }
-
-    runCatching {
-        context.contentResolver.openOutputStream(targetUri)?.use { output ->
-            sourceFile.inputStream().use { input ->
-                input.copyTo(output)
-            }
-        } ?: error("无法写入导出位置")
-        Toast.makeText(context, "已导出文件副本", Toast.LENGTH_SHORT).show()
-    }.onFailure {
-        Toast.makeText(context, "导出失败，请重试", Toast.LENGTH_SHORT).show()
     }
 }
