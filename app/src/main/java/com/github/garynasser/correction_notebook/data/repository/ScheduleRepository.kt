@@ -19,6 +19,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -31,7 +33,6 @@ private val Context.scheduleDataStore: DataStore<Preferences> by preferencesData
 class ScheduleRepository(private val context: Context) {
 
     private val scheduleEventsKey = stringPreferencesKey("schedule_events")
-    private val formatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
 
     val scheduleEvents: Flow<List<ScheduleEvent>> = context.scheduleDataStore.data
         .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
@@ -66,10 +67,10 @@ class ScheduleRepository(private val context: Context) {
         return scheduleEvents.first().firstOrNull { it.id == eventId }
     }
 
-    suspend fun getEventsForRange(range: ScheduleRange, today: LocalDate = LocalDate.now()): List<ScheduleSection> {
+    suspend fun getEventsForRange(range: ScheduleRange, today: LocalDate = LocalDate.now()): List<ScheduleSection> = withContext(Dispatchers.Default) {
         val (startDate, endDate) = scheduleDateRange(range, today)
-        val occurrences = buildOccurrences(scheduleEvents.first(), startDate, endDate)
-        return (0..java.time.temporal.ChronoUnit.DAYS.between(startDate, endDate).toInt()).map { offset ->
+        val occurrences = buildScheduleOccurrences(scheduleEvents.first(), startDate, endDate)
+        (0..java.time.temporal.ChronoUnit.DAYS.between(startDate, endDate).toInt()).map { offset ->
             val date = startDate.plusDays(offset.toLong())
             val items = occurrences
                 .filter { occurrence -> scheduleOccurrenceOverlapsDate(occurrence, date) }
@@ -127,184 +128,6 @@ class ScheduleRepository(private val context: Context) {
 
     suspend fun getImportedEvents(): List<ScheduleEvent> {
         return scheduleEvents.first().filter { it.sourceType == ScheduleSourceType.ICS_IMPORT }
-    }
-
-    private fun buildOccurrences(
-        events: List<ScheduleEvent>,
-        startDate: LocalDate,
-        endDate: LocalDate
-    ): List<ScheduleOccurrence> {
-        val overrides = events
-            .filter { it.recurrenceId != null && !it.sourceEventUid.isNullOrBlank() }
-            .mapNotNull { event ->
-                val sourceEventUid = event.sourceEventUid ?: return@mapNotNull null
-                val recurrenceId = event.recurrenceId ?: return@mapNotNull null
-                overrideKey(sourceEventUid, recurrenceId) to event
-            }
-            .toMap()
-
-        return events
-            .filter { it.recurrenceId == null }
-            .flatMap { event ->
-                if (event.recurrenceRule.isNullOrBlank()) {
-                    val occurrence = event.toOccurrence(event.startAt, event.endAt)
-                    if (scheduleOccurrenceOverlapsRange(occurrence, startDate, endDate)) {
-                        listOf(occurrence)
-                    } else {
-                        emptyList()
-                    }
-                } else {
-                    expandRecurringEvent(event, overrides, startDate, endDate)
-                }
-            }
-            .sortedWith(compareBy<ScheduleOccurrence> { it.startAt }.thenBy { it.title })
-    }
-
-    private fun expandRecurringEvent(
-        event: ScheduleEvent,
-        overrides: Map<String, ScheduleEvent>,
-        startDate: LocalDate,
-        endDate: LocalDate
-    ): List<ScheduleOccurrence> {
-        val ruleParts = parseRecurrenceRule(event.recurrenceRule)
-        val freq = ruleParts["FREQ"] ?: return emptyList()
-        val interval = ruleParts["INTERVAL"]?.toLongOrNull()?.coerceAtLeast(1) ?: 1L
-        val countLimit = ruleParts["COUNT"]?.toIntOrNull()
-        val until = ruleParts["UNTIL"]?.let { raw ->
-            runCatching { parseIcsDateTime(raw, null).first }.getOrNull()
-        }
-        val byDays = ruleParts["BYDAY"]
-            ?.split(",")
-            ?.mapNotNull(::parseDayOfWeek)
-            .orEmpty()
-
-        val results = mutableListOf<ScheduleOccurrence>()
-        val duration = java.time.Duration.between(event.startAt, event.endAt)
-        var generated = 0
-
-        when (freq) {
-            "DAILY" -> {
-                var current = event.startAt
-                while (!current.toLocalDate().isAfter(endDate) && !isPastLimit(generated, countLimit, current, until)) {
-                    addOccurrenceIfNeeded(event, current, duration, overrides, startDate, endDate, results)
-                    generated++
-                    current = current.plusDays(interval)
-                }
-            }
-            "WEEKLY" -> {
-                if (byDays.isEmpty()) {
-                    var current = event.startAt
-                    while (!current.toLocalDate().isAfter(endDate) && !isPastLimit(generated, countLimit, current, until)) {
-                        addOccurrenceIfNeeded(event, current, duration, overrides, startDate, endDate, results)
-                        generated++
-                        current = current.plusWeeks(interval)
-                    }
-                } else {
-                    var weekStart = event.startAt.toLocalDate().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
-                    while (!weekStart.isAfter(endDate) && (countLimit == null || generated < countLimit)) {
-                        byDays.forEach { day ->
-                            val occurrenceDate = weekStart.with(TemporalAdjusters.nextOrSame(day))
-                            val weeksBetween = java.time.temporal.ChronoUnit.WEEKS.between(
-                                event.startAt.toLocalDate().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)),
-                                weekStart
-                            )
-                            if (weeksBetween % interval != 0L) return@forEach
-                            val current = LocalDateTime.of(occurrenceDate, event.startAt.toLocalTime())
-                            if (current.isBefore(event.startAt) || isPastLimit(generated, countLimit, current, until)) return@forEach
-                            if (occurrenceDate.isAfter(endDate)) return@forEach
-                            addOccurrenceIfNeeded(event, current, duration, overrides, startDate, endDate, results)
-                            generated++
-                        }
-                        weekStart = weekStart.plusWeeks(1)
-                    }
-                }
-            }
-            "MONTHLY" -> {
-                var current = event.startAt
-                while (!current.toLocalDate().isAfter(endDate) && !isPastLimit(generated, countLimit, current, until)) {
-                    addOccurrenceIfNeeded(event, current, duration, overrides, startDate, endDate, results)
-                    generated++
-                    current = current.plusMonths(interval)
-                }
-            }
-        }
-
-        return results
-    }
-
-    private fun addOccurrenceIfNeeded(
-        event: ScheduleEvent,
-        occurrenceStart: LocalDateTime,
-        duration: java.time.Duration,
-        overrides: Map<String, ScheduleEvent>,
-        startDate: LocalDate,
-        endDate: LocalDate,
-        output: MutableList<ScheduleOccurrence>
-    ) {
-        if (event.exDateList.any { it == occurrenceStart }) return
-        val override = event.sourceEventUid?.let { overrides[overrideKey(it, occurrenceStart)] }
-        val occurrence = if (override != null) {
-            override.toOccurrence(override.startAt, override.endAt)
-        } else {
-            event.toOccurrence(occurrenceStart, occurrenceStart.plus(duration))
-        }
-        if (scheduleOccurrenceOverlapsRange(occurrence, startDate, endDate)) {
-            output += occurrence
-        }
-    }
-
-    private fun parseRecurrenceRule(rrule: String?): Map<String, String> {
-        return rrule
-            ?.split(";")
-            ?.mapNotNull { part ->
-                val pieces = part.split("=")
-                if (pieces.size == 2) pieces[0] to pieces[1] else null
-            }
-            ?.toMap()
-            .orEmpty()
-    }
-
-    private fun parseDayOfWeek(value: String): DayOfWeek? {
-        return when (value.uppercase()) {
-            "MO" -> DayOfWeek.MONDAY
-            "TU" -> DayOfWeek.TUESDAY
-            "WE" -> DayOfWeek.WEDNESDAY
-            "TH" -> DayOfWeek.THURSDAY
-            "FR" -> DayOfWeek.FRIDAY
-            "SA" -> DayOfWeek.SATURDAY
-            "SU" -> DayOfWeek.SUNDAY
-            else -> null
-        }
-    }
-
-    private fun isPastLimit(
-        generated: Int,
-        countLimit: Int?,
-        current: LocalDateTime,
-        until: LocalDateTime?
-    ): Boolean {
-        return (countLimit != null && generated >= countLimit) || (until != null && current.isAfter(until))
-    }
-
-    private fun ScheduleEvent.toOccurrence(
-        occurrenceStart: LocalDateTime,
-        occurrenceEnd: LocalDateTime
-    ): ScheduleOccurrence {
-        return ScheduleOccurrence(
-            occurrenceId = "${id}_${occurrenceStart.format(formatter)}",
-            eventId = id,
-            title = title,
-            description = description,
-            location = location,
-            startAt = occurrenceStart,
-            endAt = occurrenceEnd,
-            allDay = allDay,
-            sourceType = sourceType
-        )
-    }
-
-    private fun overrideKey(uid: String, recurrenceId: LocalDateTime): String {
-        return listOf(uid, recurrenceId.format(formatter)).joinToString("#")
     }
 
     companion object {

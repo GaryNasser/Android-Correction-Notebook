@@ -92,6 +92,7 @@ class IcsImportRepository(
             lhs.startAt == rhs.startAt &&
             lhs.endAt == rhs.endAt &&
             lhs.allDay == rhs.allDay &&
+            lhs.timezoneId == rhs.timezoneId &&
             lhs.recurrenceRule == rhs.recurrenceRule &&
             lhs.exDateList == rhs.exDateList
     }
@@ -233,7 +234,7 @@ private fun parseIcsEventBlock(
             runCatching { ScheduleRepository.parseIcsDateTime(item, params["TZID"]).first }.getOrNull()
         }
     }
-    return ScheduleEvent(
+    val event = ScheduleEvent(
         title = fields["SUMMARY"]?.firstOrNull()?.second
             ?.let(::unescapeIcsText)
             ?.ifBlank { "未命名日程" }
@@ -243,7 +244,7 @@ private fun parseIcsEventBlock(
         startAt = startAt,
         endAt = endAt,
         allDay = inferredAllDay || explicitAllDay,
-        timezoneId = startField.first["TZID"],
+        timezoneId = startField.first["TZID"] ?: "UTC".takeIf { startField.second.trim().endsWith("Z") },
         sourceType = ScheduleSourceType.ICS_IMPORT,
         sourceCalendarId = sourceCalendarId,
         sourceEventUid = fields["UID"]?.firstOrNull()?.second?.trim()?.takeIf(String::isNotEmpty),
@@ -255,6 +256,8 @@ private fun parseIcsEventBlock(
         lastImportedAt = importedAt,
         updatedAt = importedAt
     )
+    if (!event.recurrenceRule.isNullOrBlank()) scheduleRecurrenceIterator(event)
+    return event
 }
 
 internal fun buildIcsCalendarId(fileName: String, lines: List<String>): String {
