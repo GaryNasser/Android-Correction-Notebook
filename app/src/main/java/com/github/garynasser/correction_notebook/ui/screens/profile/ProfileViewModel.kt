@@ -130,6 +130,7 @@ class ProfileViewModel @Inject constructor(
 
     fun fetchModels(form: AiProviderForm) {
         if (!canStartAiSettingsAction(_isAiToggleBusy.value, _isProviderBusy.value)) return
+        _fetchedModels.value = emptyList()
         _isProviderBusy.value = true
         viewModelScope.launch {
             try {
@@ -159,13 +160,14 @@ class ProfileViewModel @Inject constructor(
 
     fun testProvider(form: AiProviderForm) {
         if (!canStartAiSettingsAction(_isAiToggleBusy.value, _isProviderBusy.value)) return
+        _fetchedModels.value = emptyList()
         _isProviderBusy.value = true
         viewModelScope.launch {
             try {
                 _providerStatusMessage.value = null
                 aiRepository.testProvider(form)
                     .onSuccess { result ->
-                        if (result.models.isNotEmpty()) _fetchedModels.value = result.models
+                        _fetchedModels.value = result.models
                         _providerStatusMessage.value = result.message
                     }
                     .onFailure { throwable ->

@@ -82,7 +82,7 @@ class AIRepository @Inject constructor(
             val probeModel = form.model.trim().ifBlank { models.firstOrNull()?.id ?: config.defaultModel }
             val modelIds = models.map { it.id }.toSet()
             if (models.isNotEmpty() && probeModel !in modelIds) {
-                throw IllegalStateException("模型列表获取成功，但当前模型“$probeModel”不在服务端返回的模型列表中。请点“常用”或“获取模型”后选择列表中的模型，或确认代理允许手动模型名。")
+                throw IllegalStateException("模型列表获取成功，但当前模型“$probeModel”不在服务端返回的模型列表中。请选择服务端支持的模型，或确认代理允许手动模型名。")
             }
 
             val response = sendTestMessage(config, probeModel, compact = false).recoverCatching { firstError ->

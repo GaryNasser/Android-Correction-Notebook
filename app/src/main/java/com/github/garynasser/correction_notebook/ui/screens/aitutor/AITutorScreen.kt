@@ -36,16 +36,22 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.LibraryBooks
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ClearAll
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
@@ -64,10 +70,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -87,6 +93,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
@@ -1369,15 +1376,19 @@ fun ProviderDialog(
         emptyList()
     }
     val modelOptions = (fetchedModelOptions + modelOptionsFor(form.type)).distinct()
-    val isFormReady = form.baseUrl.trim().let { it.startsWith("http://") || it.startsWith("https://") } &&
-        form.model.trim().isNotEmpty() &&
+    val selectedPreset = providerPresets.firstOrNull {
+        it.type == form.type && it.baseUrl.trimEnd('/') == form.baseUrl.trim().trimEnd('/')
+    }
+    val canRequestModels = form.baseUrl.trim().let { it.startsWith("http://") || it.startsWith("https://") } &&
         (form.type != AIProviderType.ANTHROPIC_COMPATIBLE || form.apiKey.trim().isNotEmpty())
+    val isFormReady = canRequestModels && form.model.trim().isNotEmpty()
     val statusMessageIsError = uiState.providerStatusMessage?.let { message ->
         listOf("失败", "错误", "不能为空", "必须", "需要").any { marker -> marker in message }
     } == true
     fun updateForm(next: AiProviderForm) {
         if (next.modelScopeKey() != form.modelScopeKey()) {
             fetchedModelsScopeKey = null
+            onClearProviderStatus()
         }
         form = next
     }
@@ -1427,7 +1438,7 @@ fun ProviderDialog(
                         onExpandedChange = { presetExpanded = it }
                     ) {
                         OutlinedTextField(
-                            value = "选择常用服务商预设",
+                            value = selectedPreset?.label ?: "自定义",
                             onValueChange = {},
                             readOnly = true,
                                 label = { Text("服务商预设") },
@@ -1504,7 +1515,6 @@ fun ProviderDialog(
                         value = form.baseUrl,
                         onValueChange = { updateForm(form.copy(baseUrl = it)) },
                         label = { Text("Base URL") },
-                            supportingText = { Text(if (form.type == AIProviderType.OPENAI_COMPATIBLE) "示例：https://api.openai.com/v1 或兼容服务 /v1" else "示例：https://api.anthropic.com/v1") },
                             singleLine = true,
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier.fillMaxWidth()
@@ -1527,14 +1537,13 @@ fun ProviderDialog(
                             value = form.model,
                             onValueChange = { updateForm(form.copy(model = it)) },
                                 label = { Text("默认模型") },
-                                supportingText = { Text("可直接输入任意模型名，例如 gpt-4o-mini、deepseek-chat、claude-3-5-sonnet-20241022") },
                                 singleLine = true,
                                 shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier
                                 .fillMaxWidth(),
                             trailingIcon = {
-                                TextButton(onClick = { modelExpanded = true }) {
-                                    Text("常用")
+                                IconButton(onClick = { modelExpanded = true }, enabled = !uiState.isProviderBusy) {
+                                    Icon(Icons.Default.ArrowDropDown, contentDescription = "选择模型")
                                 }
                             }
                         )
@@ -1555,42 +1564,55 @@ fun ProviderDialog(
                     }
                 }
                 item {
-                    Row(
+                    FlowRow(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        maxItemsInEachRow = 2
                     ) {
-                        Button(
+                        OutlinedButton(
                             onClick = {
                                 onClearProviderStatus()
                                 fetchedModelsScopeKey = formScopeKey
                                 onFetchModels(form)
                             },
-                            enabled = !uiState.isProviderBusy && isFormReady,
+                            enabled = !uiState.isProviderBusy && canRequestModels,
                             modifier = Modifier
                                 .weight(1f)
+                                .widthIn(min = 132.dp)
                                 .heightIn(min = 48.dp),
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                             shape = RoundedCornerShape(8.dp)
                         ) {
-                            if (uiState.isProviderBusy) {
-                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                            } else {
-                                Text("获取模型")
-                            }
+                            Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("获取模型")
                         }
-                        Button(
+                        OutlinedButton(
                             onClick = {
                                 onClearProviderStatus()
+                                fetchedModelsScopeKey = formScopeKey
                                 onTestProvider(form)
                             },
                             enabled = !uiState.isProviderBusy && isFormReady,
                             modifier = Modifier
                                 .weight(1f)
+                                .widthIn(min = 132.dp)
                                 .heightIn(min = 48.dp),
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                             shape = RoundedCornerShape(8.dp)
                         ) {
-                            Text(if (uiState.isProviderBusy) "处理中" else "测试连接")
+                            Icon(Icons.Default.Link, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("测试连接")
+                        }
+                    }
+                }
+                if (uiState.isProviderBusy) {
+                    item {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                            Text("处理中", style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }
@@ -1619,20 +1641,13 @@ fun ProviderDialog(
                     }
                 }
                 item {
-                    Row(
+                    TextButton(
+                        onClick = { showAdvanced = !showAdvanced },
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        contentPadding = PaddingValues(horizontal = 0.dp, vertical = 8.dp)
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("高级参数", style = MaterialTheme.typography.titleSmall)
-                            Text(
-                                "Headers、温度、最大输出、上下文长度",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Switch(checked = showAdvanced, onCheckedChange = { showAdvanced = it })
+                        Text("高级参数", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                        Icon(if (showAdvanced) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = null)
                     }
                 }
                 if (showAdvanced) {
@@ -1641,31 +1656,37 @@ fun ProviderDialog(
                                 value = form.customHeaders,
                             onValueChange = { updateForm(form.copy(customHeaders = it)) },
                             label = { Text("自定义 Headers") },
-                                supportingText = { Text("支持 JSON：{\"HTTP-Referer\":\"...\"}，或每行 Key: Value") },
                                 minLines = 3,
                                 shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier.fillMaxWidth()
                         )
                     }
                     item {
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            maxItemsInEachRow = 2
+                        ) {
                             OutlinedTextField(
                                 value = form.temperature,
                                 onValueChange = { updateForm(form.copy(temperature = it)) },
-                                    label = { Text("Temperature") },
+                                    label = { Text("温度") },
                                     placeholder = { Text("0.7") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                     singleLine = true,
                                     shape = RoundedCornerShape(8.dp),
-                                    modifier = Modifier.weight(1f)
+                                    modifier = Modifier.weight(1f).widthIn(min = 132.dp)
                             )
                             OutlinedTextField(
                                 value = form.maxTokens,
                                 onValueChange = { updateForm(form.copy(maxTokens = it)) },
-                                    label = { Text("Max Tokens") },
+                                    label = { Text("最大输出") },
                                     placeholder = { Text("2048") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                     singleLine = true,
                                     shape = RoundedCornerShape(8.dp),
-                                    modifier = Modifier.weight(1f)
+                                    modifier = Modifier.weight(1f).widthIn(min = 132.dp)
                             )
                         }
                     }
@@ -1674,7 +1695,7 @@ fun ProviderDialog(
                             value = form.contextMessageLimit,
                             onValueChange = { updateForm(form.copy(contextMessageLimit = it)) },
                                 label = { Text("上下文消息数") },
-                                supportingText = { Text("建议 8-20，较大值会增加费用和上下文长度") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 singleLine = true,
                                 shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier.fillMaxWidth()
@@ -1756,10 +1777,15 @@ fun ProviderDialog(
             }
         },
         confirmButton = {
-            TextButton(
+            Button(
                 onClick = { onSave(form) },
-                enabled = !uiState.isProviderBusy && isFormReady
-            ) { Text(if (uiState.isProviderBusy) "保存中" else "保存") }
+                enabled = !uiState.isProviderBusy && isFormReady,
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("保存")
+            }
         },
         dismissButton = {
             TextButton(

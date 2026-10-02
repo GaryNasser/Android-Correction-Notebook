@@ -4,8 +4,6 @@ import android.graphics.Bitmap
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
-import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasText
@@ -13,6 +11,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import androidx.test.platform.app.InstrumentationRegistry
@@ -44,9 +43,12 @@ class ProviderDialogLayoutTest {
             }
         }
         compose.onNodeWithText("新增").assertIsDisplayed()
-        compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("获取模型"))
+        compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("高级参数"))
         capture(dark)
-        listOf("获取模型", "测试连接", "保存", "取消", "新增").forEach { text ->
+        listOf("获取模型", "测试连接", "保存", "取消", "新增", "高级参数").forEach { text ->
+            if (text in listOf("获取模型", "测试连接", "高级参数")) {
+                compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(text))
+            }
             compose.onNodeWithText(text).assertIsDisplayed()
             val layouts = mutableListOf<TextLayoutResult>()
             compose.onNodeWithText(text).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
@@ -60,18 +62,19 @@ class ProviderDialogLayoutTest {
                 }
             }
         }
-        val description = compose.onNodeWithText("Headers、温度、最大输出、上下文长度")
-            .fetchSemanticsNode().boundsInRoot
-        val toggle = compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsProperties.ToggleableState))
-            .fetchSemanticsNode().boundsInRoot
-        assertTrue("Advanced description must not overlap its switch", description.right <= toggle.left + 1f)
+        compose.onNodeWithText("高级参数").performClick()
+        listOf("自定义 Headers", "温度", "最大输出", "上下文消息数").forEach { label ->
+            compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(label))
+            compose.onNodeWithText(label).assertIsDisplayed()
+        }
+        capture(dark, advanced = true)
     }
 
-    private fun capture(dark: Boolean) {
+    private fun capture(dark: Boolean, advanced: Boolean = false) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val bitmap = instrumentation.uiAutomation.takeScreenshot()
         try {
-            File(instrumentation.targetContext.getExternalFilesDir(null), "qa-provider-${if (dark) "dark" else "light"}.png")
+            File(instrumentation.targetContext.getExternalFilesDir(null), "qa-provider-${if (dark) "dark" else "light"}${if (advanced) "-advanced" else ""}.png")
                 .outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         } finally { bitmap.recycle() }
     }
