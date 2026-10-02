@@ -321,6 +321,7 @@ class AITutorViewModel @Inject constructor(
 
     fun fetchModels(form: AiProviderForm) {
         if (providerBusy.value) return
+        fetchedModels.value = emptyList()
         providerBusy.value = true
         viewModelScope.launch {
             try {
@@ -350,13 +351,14 @@ class AITutorViewModel @Inject constructor(
 
     fun testProvider(form: AiProviderForm) {
         if (providerBusy.value) return
+        fetchedModels.value = emptyList()
         providerBusy.value = true
         viewModelScope.launch {
             try {
                 providerStatus.value = null
                 aiRepository.testProvider(form)
                     .onSuccess { result ->
-                        if (result.models.isNotEmpty()) fetchedModels.value = result.models
+                        fetchedModels.value = result.models
                         providerStatus.value = result.message
                     }
                     .onFailure { throwable ->

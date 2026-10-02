@@ -9,6 +9,7 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextReplacement
@@ -109,7 +110,7 @@ class ProviderDialogFlowTest {
     fun changingServicePresetNeverSendsTheOldApiKeyToTheNewEndpoint() {
         showDialog()
         scrollTo("服务商预设")
-        compose.onNodeWithText("选择常用服务商预设").performClick()
+        compose.onNodeWithText("服务商预设").performClick()
         compose.onNodeWithText("DeepSeek").performClick()
         scrollTo("测试连接")
         compose.onNodeWithText("测试连接").performClick()
@@ -130,7 +131,7 @@ class ProviderDialogFlowTest {
         compose.onNodeWithText("获取模型").performClick()
         edit("API Key", "qa-key-different-abcdef")
         scrollTo("默认模型")
-        compose.onNodeWithText("常用").performClick()
+        compose.onNodeWithContentDescription("选择模型").performClick()
         compose.onNodeWithText("private-old-model").assertDoesNotExist()
     }
 
