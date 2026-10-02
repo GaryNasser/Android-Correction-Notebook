@@ -13,10 +13,15 @@ import java.io.IOException
 import androidx.core.net.toUri
 
 @OptIn(UnstableApi::class)
-class YanheDataSource(
-    private val repository: VideoRepository,
+class YanheDataSource internal constructor(
+    private val authorize: suspend (String) -> VideoRepository.YanheAuthData,
     private val baseDataSource: DataSource,
 ) : DataSource {
+    constructor(repository: VideoRepository, baseDataSource: DataSource) :
+        this(repository::getYanheAuthData, baseDataSource)
+
+    private var originalUri: Uri? = null
+    private var authenticatedUri: Uri? = null
 
     override fun addTransferListener(transferListener: TransferListener) {
         baseDataSource.addTransferListener(transferListener)
@@ -24,19 +29,22 @@ class YanheDataSource(
 
     @Throws(IOException::class)
     override fun open(dataSpec: DataSpec): Long {
-        val originalUrl = dataSpec.uri.toString()
-
-        // 在这里执行你的逆向授权逻辑
-        // 使用 runBlocking 阻塞当前加载线程（ExoPlayer 的后台线程）
-        val authData = runBlocking(Dispatchers.IO) {
-            repository.getYanheAuthData(originalUrl)
+        originalUri = null
+        authenticatedUri = null
+        val authData = try {
+            runBlocking(Dispatchers.IO) { authorize(dataSpec.uri.toString()) }
+        } catch (error: IOException) {
+            throw error
+        } catch (error: Exception) {
+            throw IOException("视频授权失败", error)
         }
 
-        // 构造新的请求
-        // 注意：setHttpRequestHeaders 是在 DataSpec.Builder 上调用的
+        val requestUri = authData.authenticatedUrl.toUri()
+        originalUri = dataSpec.uri
+        authenticatedUri = requestUri
         val newDataSpec = dataSpec.buildUpon()
-            .setUri(authData.authenticatedUrl.toUri())
-            .setHttpRequestHeaders(authData.headers)
+            .setUri(requestUri)
+            .setHttpRequestHeaders(dataSpec.httpRequestHeaders + authData.headers)
             .build()
 
         return baseDataSource.open(newDataSpec)
@@ -48,11 +56,20 @@ class YanheDataSource(
     }
 
     override fun getUri(): Uri? {
-        return baseDataSource.uri
+        val loadedUri = baseDataSource.uri ?: return null
+        // Authorization rewrites are not redirects: HLS must resolve relative paths from the original URL.
+        return if (loadedUri == authenticatedUri) originalUri else loadedUri
     }
+
+    override fun getResponseHeaders(): Map<String, List<String>> = baseDataSource.responseHeaders
 
     @Throws(IOException::class)
     override fun close() {
-        baseDataSource.close()
+        try {
+            baseDataSource.close()
+        } finally {
+            originalUri = null
+            authenticatedUri = null
+        }
     }
 }
