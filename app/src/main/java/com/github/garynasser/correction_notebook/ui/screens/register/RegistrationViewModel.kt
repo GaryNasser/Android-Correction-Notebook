@@ -12,6 +12,7 @@ import com.github.garynasser.correction_notebook.data.repository.VideoRepository
 import com.github.garynasser.correction_notebook.data.repository.YanheRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -21,6 +22,8 @@ class RegistrationViewModel @Inject constructor(
     private val authStateManager: AuthStateManager,
     private val videoRepository: VideoRepository,
 ): ViewModel() {
+    private var loginJob: Job? = null
+    private var loginAttempt = 0L
     var username by mutableStateOf("")
     var password by mutableStateOf("")
     var studentId by mutableStateOf("")
@@ -71,8 +74,9 @@ class RegistrationViewModel @Inject constructor(
         val trimmedStudentId = studentId.trim()
         if (trimmedStudentId.isBlank() || casPassword.isBlank()) return
         isCasLoading = true
+        val attempt = ++loginAttempt
 
-        viewModelScope.launch {
+        loginJob = viewModelScope.launch {
             try {
                 yanheRepository.authenticateStudent(
                     UserCredential(trimmedStudentId, casPassword)
@@ -85,9 +89,20 @@ class RegistrationViewModel @Inject constructor(
             } catch (exception: Exception) {
                 errorMessage = formatCasError(exception)
             } finally {
-                isCasLoading = false
+                if (attempt == loginAttempt) {
+                    isCasLoading = false
+                    loginJob = null
+                }
             }
         }
+    }
+
+    fun cancelYanheLogin() {
+        loginAttempt++
+        loginJob?.cancel()
+        loginJob = null
+        isCasLoading = false
+        errorMessage = null
     }
 
     fun clearError() {
