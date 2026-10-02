@@ -6,9 +6,9 @@ import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitSha
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitShareFolderDetail
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitShareFolderSummary
 import com.github.garynasser.correction_notebook.data.remote.api.BitShareApiService
+import com.github.garynasser.correction_notebook.data.remote.network.awaitStreamingResponse
 import com.github.garynasser.correction_notebook.utils.BitShareNetworkDetector
 import com.github.garynasser.correction_notebook.utils.runCatchingCancellable
-import kotlinx.coroutines.runInterruptible
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.ResponseBody
@@ -16,11 +16,14 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class BitShareRepository @Inject constructor(
+class BitShareRepository internal constructor(
     private val apiService: BitShareApiService,
     private val okHttpClient: OkHttpClient,
-    private val networkDetector: BitShareNetworkDetector
+    private val detectEnvironment: suspend () -> BitShareNetworkDetector.NetworkEnvironment
 ) {
+    @Inject
+    constructor(apiService: BitShareApiService, okHttpClient: OkHttpClient, networkDetector: BitShareNetworkDetector) :
+        this(apiService, okHttpClient, { networkDetector.detectEnvironmentWithRetry(maxRetries = 1) })
     /**
      * 搜索 BITShare 资源（文件或目录）
      * 注意：由于 /api/public/files?folder_id= 接口返回 404，无法按目录获取文件列表，
@@ -126,14 +129,19 @@ class BitShareRepository @Inject constructor(
         )
     }
 
-    suspend fun downloadFile(fileId: String): Result<ResponseBody> {
-        val primaryAttempt = runCatchingCancellable {
-            val body = apiService.downloadFile(fileId)
-            validateDownloadBody(body)
-            body
+    suspend fun <T> downloadFile(fileId: String, consume: suspend (ResponseBody) -> T): Result<T> {
+        var consuming = false
+        suspend fun download(request: Request): Result<T> = runCatchingCancellable {
+            okHttpClient.newCall(request).awaitStreamingResponse { response ->
+                check(response.isSuccessful) { "HTTP ${response.code}" }
+                val body = checkNotNull(response.body) { "下载响应为空" }
+                validateDownloadBody(body)
+                consuming = true
+                consume(body)
+            }
         }
-
-        if (primaryAttempt.isSuccess) {
+        val primaryAttempt = runCatchingCancellable { download(apiService.downloadFile(fileId).request()).getOrThrow() }
+        if (primaryAttempt.isSuccess || consuming) {
             return primaryAttempt
         }
 
@@ -141,28 +149,8 @@ class BitShareRepository @Inject constructor(
         primaryAttempt.exceptionOrNull()?.message?.let(fallbackErrorMessages::add)
 
         buildDownloadCandidateUrls(fileId).forEach { url ->
-            val attempt = runCatchingCancellable {
-                val response = runInterruptible {
-                    okHttpClient.newCall(
-                        Request.Builder()
-                            .url(url)
-                            .get()
-                            .build()
-                    ).execute()
-                }
-                if (!response.isSuccessful) {
-                    response.close()
-                    error("HTTP ${response.code}")
-                }
-                val body = response.body ?: run {
-                    response.close()
-                    error("下载响应为空")
-                }
-                validateDownloadBody(body)
-                body
-            }
-
-            if (attempt.isSuccess) {
+            val attempt = download(Request.Builder().url(url).get().build())
+            if (attempt.isSuccess || consuming) {
                 return attempt
             }
 
@@ -185,7 +173,7 @@ class BitShareRepository @Inject constructor(
     }
 
     private suspend fun buildDownloadCandidateUrls(fileId: String): List<String> {
-        val environment = networkDetector.detectEnvironmentWithRetry(maxRetries = 1)
+        val environment = detectEnvironment()
         return bitShareDownloadFallbackUrls(environment, fileId)
     }
 

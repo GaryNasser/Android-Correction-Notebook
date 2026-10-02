@@ -138,6 +138,7 @@ class KnowledgeBaseViewModel @Inject constructor(
     private val activeDownloadId = MutableStateFlow<String?>(null)
     private val snackbarMessage = MutableStateFlow<String?>(null)
     private var remoteSearchJob: Job? = null
+    private var downloadJob: Job? = null
     private var latestRemoteSearchRequestId = 0L
     private var activeRemoteSearchQuery: String? = null
 
@@ -715,7 +716,7 @@ class KnowledgeBaseViewModel @Inject constructor(
     ) {
         if (activeDownloadId.value != null) return
         activeDownloadId.value = result.id
-        viewModelScope.launch {
+        downloadJob = viewModelScope.launch {
             snackbarMessage.value = "开始下载 ${result.originalName.ifBlank { result.title }}"
             remoteErrorMessage.value = null
             try {
@@ -736,11 +737,13 @@ class KnowledgeBaseViewModel @Inject constructor(
                 selectedRemoteDetail.value = detail
                 performRemoteDownload(folderId, detail)
             } catch (e: CancellationException) {
+                snackbarMessage.value = "已取消下载"
                 throw e
             } catch (e: Exception) {
                 snackbarMessage.value = e.message ?: "下载失败"
             } finally {
                 activeDownloadId.value = null
+                downloadJob = null
             }
         }
     }
@@ -749,19 +752,25 @@ class KnowledgeBaseViewModel @Inject constructor(
         val detail = selectedRemoteDetail.value ?: return
         if (activeDownloadId.value != null) return
         activeDownloadId.value = detail.id
-        viewModelScope.launch {
+        downloadJob = viewModelScope.launch {
             snackbarMessage.value = "开始下载 ${detail.originalName}"
             remoteErrorMessage.value = null
             try {
                 performRemoteDownload(folderId, detail)
             } catch (e: CancellationException) {
+                snackbarMessage.value = "已取消下载"
                 throw e
             } catch (e: Exception) {
                 snackbarMessage.value = e.message ?: "下载失败"
             } finally {
                 activeDownloadId.value = null
+                downloadJob = null
             }
         }
+    }
+
+    fun cancelRemoteDownload() {
+        downloadJob?.cancel()
     }
 
     private suspend fun performRemoteDownload(
@@ -769,20 +778,15 @@ class KnowledgeBaseViewModel @Inject constructor(
         detail: BitShareFileDetail
     ) {
         val downloadResult = withContext(Dispatchers.IO) {
-            bitShareRepository.downloadFile(detail.id)
+            bitShareRepository.downloadFile(detail.id) { body ->
+                knowledgeBaseRepository.importDownloadedFile(
+                    detail = detail,
+                    targetFolderId = folderId ?: KnowledgeBaseRepository.ROOT_FOLDER_ID,
+                    inputStream = body.byteStream()
+                ).getOrThrow()
+            }
         }
         downloadResult
-            .mapCatching { body ->
-                withContext(Dispatchers.IO) {
-                    body.use { responseBody ->
-                        knowledgeBaseRepository.importDownloadedFile(
-                            detail = detail,
-                            targetFolderId = folderId ?: KnowledgeBaseRepository.ROOT_FOLDER_ID,
-                            inputStream = responseBody.byteStream()
-                        ).getOrThrow()
-                    }
-                }
-            }
             .onSuccess {
                 val folderName = knowledgeBaseRepository.getFolderName(folderId)
                 snackbarMessage.value = "已保存到 $folderName"
