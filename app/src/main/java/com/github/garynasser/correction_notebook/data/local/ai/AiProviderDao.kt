@@ -45,6 +45,7 @@ interface AiProviderDao {
 
     @Transaction
     suspend fun activateProvider(providerId: Long, updatedAt: Long = System.currentTimeMillis()) {
+        require(getProviderById(providerId) != null) { "Provider 已不存在，请重新选择" }
         clearActiveProvider()
         setActiveProvider(providerId, updatedAt)
     }

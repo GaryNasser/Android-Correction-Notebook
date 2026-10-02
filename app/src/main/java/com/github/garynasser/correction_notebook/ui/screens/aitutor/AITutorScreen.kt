@@ -1360,7 +1360,7 @@ fun ProviderDialog(
     var presetExpanded by remember { mutableStateOf(false) }
     var modelExpanded by remember { mutableStateOf(false) }
     var showAdvanced by remember { mutableStateOf(false) }
-    var fetchedModelsScopeKey by remember { mutableStateOf<String?>(null) }
+    var fetchedModelsScopeKey by remember { mutableStateOf<ProviderModelScope?>(null) }
     var providerToDelete by remember { mutableStateOf<ProviderRecord?>(null) }
     val formScopeKey = form.modelScopeKey()
     val fetchedModelOptions = if (fetchedModelsScopeKey == formScopeKey) {
@@ -1393,10 +1393,25 @@ fun ProviderDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(8.dp),
         title = {
-            Text(
-                text = "AI Provider 配置",
-                style = MaterialTheme.typography.titleMedium
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("AI Provider", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                TextButton(
+                    onClick = {
+                        updateForm(AiProviderForm())
+                        fetchedModelsScopeKey = null
+                        onClearProviderStatus()
+                    },
+                    enabled = !uiState.isProviderBusy
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("新增")
+                }
+            }
         },
         text = {
             LazyColumn(
@@ -1431,6 +1446,7 @@ fun ProviderDialog(
                                             name = preset.label,
                                             type = preset.type,
                                             baseUrl = preset.baseUrl,
+                                            apiKey = if (form.baseUrl.trim().trimEnd('/') == preset.baseUrl.trimEnd('/')) form.apiKey else "",
                                             model = preset.defaultModel,
                                             customHeaders = preset.customHeaders
                                         ))
@@ -1552,7 +1568,8 @@ fun ProviderDialog(
                             enabled = !uiState.isProviderBusy && isFormReady,
                             modifier = Modifier
                                 .weight(1f)
-                                .height(42.dp),
+                                .heightIn(min = 48.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                             shape = RoundedCornerShape(8.dp)
                         ) {
                             if (uiState.isProviderBusy) {
@@ -1569,7 +1586,8 @@ fun ProviderDialog(
                             enabled = !uiState.isProviderBusy && isFormReady,
                             modifier = Modifier
                                 .weight(1f)
-                                .height(42.dp),
+                                .heightIn(min = 48.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                             shape = RoundedCornerShape(8.dp)
                         ) {
                             Text(if (uiState.isProviderBusy) "处理中" else "测试连接")
@@ -1606,7 +1624,7 @@ fun ProviderDialog(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text("高级参数", style = MaterialTheme.typography.titleSmall)
                             Text(
                                 "Headers、温度、最大输出、上下文长度",
@@ -1984,8 +2002,15 @@ private fun ProviderRecord.toForm(): AiProviderForm =
         isActive = isActive
     )
 
-private fun AiProviderForm.modelScopeKey(): String =
-    "${type.name}|${baseUrl.trim().trimEnd('/')}|${apiKey.trim().takeLast(6)}|${customHeaders.trim()}"
+private data class ProviderModelScope(
+    val type: AIProviderType,
+    val baseUrl: String,
+    val apiKey: String,
+    val customHeaders: String
+)
+
+private fun AiProviderForm.modelScopeKey(): ProviderModelScope =
+    ProviderModelScope(type, baseUrl.trim().trimEnd('/'), apiKey.trim(), customHeaders.trim())
 
 private data class ProviderPreset(
     val label: String,
