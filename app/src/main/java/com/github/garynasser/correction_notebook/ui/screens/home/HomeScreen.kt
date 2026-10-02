@@ -63,6 +63,7 @@ import com.github.garynasser.correction_notebook.data.model.yanhe.CourseProgress
 import com.github.garynasser.correction_notebook.ui.components.FreshCard
 import com.github.garynasser.correction_notebook.ui.components.FreshScreen
 import com.github.garynasser.correction_notebook.ui.components.MetricTile
+import com.github.garynasser.correction_notebook.ui.components.LocalAiEnabled
 import com.github.garynasser.correction_notebook.ui.components.SectionHeader
 import com.github.garynasser.correction_notebook.ui.screens.statistics.StatisticsScreen
 import com.github.garynasser.correction_notebook.ui.screens.statistics.StatisticsViewModel
@@ -326,7 +327,7 @@ fun HomeScreen(
         )
     }
 
-    if (uiState.aiTodoBreakdown != null || uiState.aiErrorMessage != null) {
+    if (LocalAiEnabled.current && (uiState.aiTodoBreakdown != null || uiState.aiErrorMessage != null)) {
         CompactMessageDialog(
             title = if (uiState.aiTodoBreakdown != null) "AI 待办拆解" else "AI 提示",
             message = uiState.aiTodoBreakdown ?: uiState.aiErrorMessage.orEmpty(),
@@ -1392,6 +1393,7 @@ private fun StudyDashboardPage(
     onOpenArticle: (Article) -> Unit,
     onRefreshArticles: () -> Unit
 ) {
+    val aiEnabled = LocalAiEnabled.current
     LazyColumn(
         state = listState,
         modifier = Modifier
@@ -1443,6 +1445,7 @@ private fun StudyDashboardPage(
                 onOpenKnowledgeBase = onOpenKnowledgeBase
             )
         }
+        if (aiEnabled) {
         item {
             SectionHeader(
                 title = "AI 学习建议",
@@ -1469,6 +1472,7 @@ private fun StudyDashboardPage(
                 onOpenFile = onOpenFile
             )
         }
+        }
         item {
             ArticlesSection(
                 articles = uiState.articles,
@@ -1494,6 +1498,7 @@ internal fun StudyTodoSection(
     onBreakDownTodo: (TodoItem) -> Unit,
     onDeleteTodo: (String) -> Unit
 ) {
+    val aiEnabled = LocalAiEnabled.current
     val openCount = todos.count { !it.isCompleted }
     val completedCount = todos.size - openCount
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1533,7 +1538,7 @@ internal fun StudyTodoSection(
                         isAiBreakdownBusy = breakingDownTodoId == todo.id,
                         onToggleComplete = { onToggleTodo(todo.id) },
                         onDelete = { onDeleteTodo(todo.id) },
-                        onAiBreakdown = { onBreakDownTodo(todo) }
+                        onAiBreakdown = if (aiEnabled) ({ onBreakDownTodo(todo) }) else null
                     )
                 }
             }

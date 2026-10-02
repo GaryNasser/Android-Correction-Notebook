@@ -57,6 +57,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import com.github.garynasser.correction_notebook.ui.components.LocalAiEnabled
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -320,7 +321,7 @@ private fun TodoPlannerContent(
                         todo = todo,
                         isBusy = todo.id in mutatingTodoIds,
                         onToggleComplete = { onToggleTodo(todo.id) },
-                        onAiBreakdown = { onBreakDownTodo(todo) },
+                        onAiBreakdown = if (LocalAiEnabled.current) ({ onBreakDownTodo(todo) }) else null,
                         onDelete = { onDeleteTodo(todo.id) }
                     )
                 }

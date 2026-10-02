@@ -70,6 +70,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.garynasser.correction_notebook.data.model.yanhe.CourseSection
 import com.github.garynasser.correction_notebook.data.model.ai.AiActionType
+import com.github.garynasser.correction_notebook.ui.components.LocalAiEnabled
 import com.github.garynasser.correction_notebook.ui.components.FreshScreen
 
 
@@ -245,10 +246,10 @@ fun CourseVideoListScreen(
                                     onCompletedChange = { checked ->
                                         viewModel.setSectionCompleted(video, checked)
                                     },
-                                    onAiAssistantClick = {
+                                    onAiAssistantClick = if (LocalAiEnabled.current) ({
                                         selectedSection = video
                                         noteInput = ""
-                                    },
+                                    }) else null,
                                     onCameraPlayClick = {
                                         viewModel.playSection(video, preferScreen = false)
                                     },
@@ -264,7 +265,7 @@ fun CourseVideoListScreen(
         }
     }
 
-    selectedSection?.let { section ->
+    selectedSection?.takeIf { LocalAiEnabled.current }?.let { section ->
         AlertDialog(
             onDismissRequest = {
                 if (!assistantState.isActionBusy) {
@@ -564,7 +565,7 @@ fun VideoCard(
     isResolvingVideo: Boolean,
     isUpdatingCompletion: Boolean,
     onCompletedChange: (Boolean) -> Unit,
-    onAiAssistantClick: () -> Unit,
+    onAiAssistantClick: (() -> Unit)?,
     onCameraPlayClick: () -> Unit,
     onScreenPlayClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -634,8 +635,9 @@ fun VideoCard(
                     isCompleted = isCompleted,
                     modifier = Modifier.weight(1f)
                 )
+                onAiAssistantClick?.let { openAssistant ->
                 FilledIconButton(
-                    onClick = onAiAssistantClick,
+                    onClick = openAssistant,
                     modifier = Modifier.size(34.dp),
                     shape = RoundedCornerShape(8.dp)
                 ) {
@@ -644,6 +646,7 @@ fun VideoCard(
                         contentDescription = "课程助手",
                         modifier = Modifier.size(18.dp)
                     )
+                }
                 }
 
                 FilledIconButton(

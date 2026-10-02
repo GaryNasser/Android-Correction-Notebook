@@ -86,6 +86,7 @@ import com.github.garynasser.correction_notebook.data.model.knowledgebase.Knowle
 import com.github.garynasser.correction_notebook.data.model.studyset.KnowledgeCardType
 import com.github.garynasser.correction_notebook.data.model.studyset.StudySetDraft
 import com.github.garynasser.correction_notebook.domain.usecase.KnowledgeAiMode
+import com.github.garynasser.correction_notebook.ui.components.LocalAiEnabled
 import java.io.File
 import java.util.Locale
 
@@ -96,6 +97,7 @@ fun KnowledgeBaseFileViewerScreen(
     onDeleted: () -> Unit,
     viewModel: KnowledgeBaseFileViewerViewModel = hiltViewModel()
 ) {
+    val aiEnabled = LocalAiEnabled.current
     val uiState = viewModel.uiState.value
     val context = LocalContext.current
     var fileToDelete by remember { mutableStateOf<KnowledgeBaseFileSummary?>(null) }
@@ -171,6 +173,7 @@ fun KnowledgeBaseFileViewerScreen(
                             onDismissRequest = { menuExpanded = false }
                         ) {
                             uiState.file?.let { file ->
+                                if (aiEnabled) {
                                 DropdownMenuItem(
                                     text = { Text("AI 生成学习集") },
                                     leadingIcon = { Icon(Icons.Default.Style, contentDescription = null) },
@@ -243,6 +246,7 @@ fun KnowledgeBaseFileViewerScreen(
                                         viewModel.rebuildIndex()
                                     }
                                 )
+                                }
                                 DropdownMenuItem(
                                     text = { Text("其他应用打开") },
                                     leadingIcon = { Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null) },
@@ -306,9 +310,9 @@ fun KnowledgeBaseFileViewerScreen(
                 onAction = viewModel::refresh
             )
             else -> {
-                val showIndexStatus = uiState.isIndexing || uiState.indexChunkCount != null
+                val showIndexStatus = aiEnabled && (uiState.isIndexing || uiState.indexChunkCount != null)
                 val showStatusShelf = uiState.errorMessage != null ||
-                    uiState.isAiLoading ||
+                    (aiEnabled && uiState.isAiLoading) ||
                     uiState.isDeletingFile ||
                     showIndexStatus
                 Column(
@@ -329,7 +333,7 @@ fun KnowledgeBaseFileViewerScreen(
                                 )
                             }
 
-                            if (uiState.isAiLoading) {
+                            if (aiEnabled && uiState.isAiLoading) {
                                 ViewerStatusBar(
                                     icon = Icons.Default.Psychology,
                                     text = "AI 正在阅读这份资料..."
@@ -389,7 +393,7 @@ fun KnowledgeBaseFileViewerScreen(
         }
     }
 
-    uiState.aiResult?.let { result ->
+    uiState.aiResult?.takeIf { aiEnabled }?.let { result ->
         AlertDialog(
             onDismissRequest = viewModel::clearAiResult,
             title = { Text("AI 学习助手") },
@@ -404,7 +408,7 @@ fun KnowledgeBaseFileViewerScreen(
         )
     }
 
-    uiState.studySetDraft?.let { draft ->
+    uiState.studySetDraft?.takeIf { aiEnabled }?.let { draft ->
         StudySetDraftDialog(
             draft = draft,
             isSaving = uiState.isSavingStudySetDraft,
