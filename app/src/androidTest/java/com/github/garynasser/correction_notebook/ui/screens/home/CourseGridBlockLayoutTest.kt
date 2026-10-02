@@ -1,0 +1,85 @@
+package com.github.garynasser.correction_notebook.ui.screens.home
+
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
+import com.github.garynasser.correction_notebook.data.model.home.ScheduleOccurrence
+import com.github.garynasser.correction_notebook.data.model.home.ScheduleSourceType
+import com.github.garynasser.correction_notebook.ui.theme.CorrectionNotebookTheme
+import java.time.LocalDateTime
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Rule
+import org.junit.Test
+
+class CourseGridBlockLayoutTest {
+    @get:Rule
+    val compose = createComposeRule()
+
+    @Test
+    fun longCourseNameAndFirstAddressLineFitAtLargeFontScale() {
+        assertCourseFits(
+            title = "毛泽东思想和中国特色社会主义理论体系概论",
+            location = "文萃楼 M134\n良乡校区备用教室",
+            expectedLocation = "文萃楼\nM134",
+            span = 3
+        )
+    }
+
+    @Test
+    fun multiPartFirstAddressLineFitsWithoutIncludingTheSecondLine() {
+        assertCourseFits(
+            title = "体育/游泳（初级）",
+            location = "游泳馆 浅水区 南侧\n良乡校区",
+            expectedLocation = "游泳馆\n浅水区\n南侧",
+            span = 2
+        )
+    }
+
+    private fun assertCourseFits(title: String, location: String, expectedLocation: String, span: Int) {
+        val course = ScheduleOccurrence(
+            occurrenceId = "course",
+            eventId = "event",
+            title = title,
+            description = "",
+            location = location,
+            startAt = LocalDateTime.of(2026, 10, 2, 9, 55),
+            endAt = LocalDateTime.of(2026, 10, 2, 12, 20),
+            allDay = false,
+            sourceType = ScheduleSourceType.ICS_IMPORT
+        )
+        compose.setContent {
+            val density = LocalDensity.current.density
+            CompositionLocalProvider(LocalDensity provides Density(density, fontScale = 1.3f)) {
+                CorrectionNotebookTheme {
+                    CourseGridBlock(
+                        item = course,
+                        span = span,
+                        modifier = Modifier.width(38.dp).height((span * 35).dp),
+                        onClick = {}
+                    )
+                }
+            }
+        }
+
+        val results = mutableListOf<TextLayoutResult>()
+        compose.onNodeWithText("$title\n$expectedLocation")
+            .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
+        assertTrue("The rendered course must expose its text layout", results.isNotEmpty())
+        results.forEach {
+            assertFalse("Course name and address must not be clipped", it.hasVisualOverflow)
+            assertEquals(TextAlign.Center, it.layoutInput.style.textAlign)
+        }
+    }
+}
