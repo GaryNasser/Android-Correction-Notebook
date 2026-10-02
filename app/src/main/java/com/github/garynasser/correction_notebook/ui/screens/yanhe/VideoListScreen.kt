@@ -42,6 +42,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -63,6 +64,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -112,35 +115,11 @@ fun CourseVideoListScreen(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            TopAppBar(
-                title = {
-                    Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                        Text(
-                            text = viewModel.courseName.ifBlank { "视频列表" },
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        if (viewModel.courseName.isNotBlank()) {
-                            Text(
-                                text = "延河课堂视频",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                },
-                windowInsets = WindowInsets(0, 0, 0, 0),
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0.92f),
-                    scrolledContainerColor = MaterialTheme.colorScheme.surface
-                ),
-                navigationIcon = {
-                    IconButton(onClick = onBackButtonClick) {
-                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                }
+            VideoListTopBar(
+                courseName = viewModel.courseName,
+                isLoading = viewModel.uiState is VideoUIState.Loading,
+                onBack = onBackButtonClick,
+                onRefresh = { viewModel.getVideoList(viewModel.courseId) }
             )
         }
     ) { innerPadding ->
@@ -185,7 +164,7 @@ fun CourseVideoListScreen(
                             }
                             when (val playState = viewModel.playState) {
                                 is PlayState.Loading -> {
-                                    item { VideoResolvingStatus() }
+                                    item { VideoResolvingStatus(onCancel = viewModel::cancelPlayback) }
                                 }
                                 is PlayState.Error -> {
                                     item {
@@ -406,6 +385,42 @@ fun CourseVideoListScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun VideoListTopBar(courseName: String, isLoading: Boolean, onBack: () -> Unit, onRefresh: () -> Unit) {
+    TopAppBar(
+        title = {
+            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                Text(
+                    text = courseName.ifBlank { "视频列表" },
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (courseName.isNotBlank()) {
+                    Text("延河课堂视频", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        },
+        windowInsets = WindowInsets(0, 0, 0, 0),
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0.92f),
+            scrolledContainerColor = MaterialTheme.colorScheme.surface
+        ),
+        navigationIcon = {
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+            }
+        },
+        actions = {
+            IconButton(onClick = onRefresh, enabled = !isLoading) {
+                Icon(Icons.Default.Refresh, contentDescription = "刷新课程视频")
+            }
+        }
+    )
+}
+
 @Composable
 private fun CourseAssistantActionButton(
     actionKey: String,
@@ -439,7 +454,7 @@ private fun CourseAssistantActionButton(
 }
 
 @Composable
-private fun VideoResolvingStatus() {
+internal fun VideoResolvingStatus(onCancel: () -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(8.dp),
@@ -456,9 +471,13 @@ private fun VideoResolvingStatus() {
             )
             Text(
                 text = "正在获取视频地址...",
+                modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSecondaryContainer
             )
+            IconButton(onClick = onCancel) {
+                Icon(Icons.Default.Close, contentDescription = "取消获取视频地址", modifier = Modifier.size(18.dp))
+            }
         }
     }
 }
@@ -586,7 +605,8 @@ fun VideoCard(
             .fillMaxWidth(),
         shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+            contentColor = MaterialTheme.colorScheme.onSurface
         ),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
@@ -618,7 +638,7 @@ fun VideoCard(
                     checked = isCompleted,
                     onCheckedChange = onCompletedChange,
                     enabled = !isUpdatingCompletion,
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier.size(32.dp).semantics { contentDescription = "章节完成状态" }
                 )
             }
 
@@ -630,15 +650,15 @@ fun VideoCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                VideoMetaPill(
+                VideoMeta(
                     text = if (hasTitle) timeInfo else "课程录像",
                     isCompleted = isCompleted,
                     modifier = Modifier.weight(1f)
                 )
                 onAiAssistantClick?.let { openAssistant ->
-                FilledIconButton(
+                FilledTonalIconButton(
                     onClick = openAssistant,
-                    modifier = Modifier.size(34.dp),
+                    modifier = Modifier.size(40.dp),
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Icon(
@@ -649,10 +669,10 @@ fun VideoCard(
                 }
                 }
 
-                FilledIconButton(
+                FilledTonalIconButton(
                     onClick = onCameraPlayClick,
                     enabled = canClickPlay,
-                    modifier = Modifier.size(34.dp),
+                    modifier = Modifier.size(40.dp),
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Icon(
@@ -665,7 +685,7 @@ fun VideoCard(
                 FilledIconButton(
                     onClick = onScreenPlayClick,
                     enabled = canClickPlay,
-                    modifier = Modifier.size(34.dp),
+                    modifier = Modifier.size(40.dp),
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Icon(
@@ -680,32 +700,23 @@ fun VideoCard(
 }
 
 @Composable
-private fun VideoMetaPill(
+private fun VideoMeta(
     text: String,
     isCompleted: Boolean,
     modifier: Modifier = Modifier
 ) {
-    Surface(
-        modifier = modifier.heightIn(min = 30.dp),
-        shape = RoundedCornerShape(7.dp),
-        color = if (isCompleted) {
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.56f)
-        } else {
-            MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.36f)
-        },
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.38f))
-    ) {
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        if (isCompleted) {
+            Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+        }
         Text(
             text = if (isCompleted) "已完成 · $text" else text,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
             style = MaterialTheme.typography.labelSmall,
             color = if (isCompleted) {
-                MaterialTheme.colorScheme.onPrimaryContainer
+                MaterialTheme.colorScheme.primary
             } else {
-                MaterialTheme.colorScheme.onSecondaryContainer
-            },
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+                MaterialTheme.colorScheme.onSurfaceVariant
+            }
         )
     }
 }

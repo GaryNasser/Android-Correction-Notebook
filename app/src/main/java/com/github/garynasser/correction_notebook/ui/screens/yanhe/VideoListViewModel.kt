@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.navigation.toRoute
 import com.github.garynasser.correction_notebook.data.model.yanhe.CourseSection
 import com.github.garynasser.correction_notebook.data.model.yanhe.CourseProgress
+import com.github.garynasser.correction_notebook.data.model.yanhe.Video
 import com.github.garynasser.correction_notebook.data.repository.CourseLearningRepository
 import com.github.garynasser.correction_notebook.data.repository.VideoRepository
 import com.github.garynasser.correction_notebook.ui.navigation.VideoList
@@ -62,10 +63,15 @@ class VideoListViewModel @Inject constructor(
 
     init {
         getVideoList(courseId)
-        loadProgress()
     }
 
     fun resetPlayState() {
+        playState = PlayState.Idle
+    }
+
+    fun cancelPlayback() {
+        playJob?.cancel()
+        playJob = null
         playState = PlayState.Idle
     }
 
@@ -74,6 +80,7 @@ class VideoListViewModel @Inject constructor(
     }
 
     fun getVideoList(courseId: Int) {
+        cancelPlayback()
         videoListJob?.cancel()
         videoListJob = viewModelScope.launch {
             uiState = VideoUIState.Loading
@@ -84,7 +91,7 @@ class VideoListViewModel @Inject constructor(
                 }
 
                 uiState = VideoUIState.Success(results)
-                progress = courseLearningRepository.getProgressForCourse(courseId)
+                loadProgress()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -99,7 +106,7 @@ class VideoListViewModel @Inject constructor(
         playJob = viewModelScope.launch {
             playState = PlayState.Loading
             try {
-                val playableSection = if (section.videos.any { it.mainUrl.isNotBlank() || it.vgaUrl.isNotBlank() }) {
+                val playableSection = if (selectCourseVideoUrl(section, preferScreen) != null) {
                     section
                 } else {
                     awaitYanheResource(12_000, "视频地址获取超时，请重新选择播放") {
@@ -113,13 +120,15 @@ class VideoListViewModel @Inject constructor(
                     videoTitle = playableSection.displayTitle(),
                     courseName = courseName
                 )
-                try {
-                    recordWatchInternal(playableSection, videoUrl)
-                    progress = courseLearningRepository.getProgressForCourse(courseId)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    sectionActionMessage = "视频已打开，但学习进度记录失败：${e.message ?: "请稍后再试"}"
+                viewModelScope.launch {
+                    try {
+                        recordWatchInternal(playableSection, videoUrl)
+                        progress = courseLearningRepository.getProgressForCourse(courseId)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        sectionActionMessage = "视频已打开，但学习进度记录失败：${e.message ?: "请稍后再试"}"
+                    }
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -155,15 +164,13 @@ class VideoListViewModel @Inject constructor(
         }
     }
 
-    private fun loadProgress() {
-        viewModelScope.launch {
-            try {
-                progress = courseLearningRepository.getProgressForCourse(courseId)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                sectionActionMessage = "学习进度加载失败：${e.message ?: "请稍后再试"}"
-            }
+    private suspend fun loadProgress() {
+        try {
+            progress = courseLearningRepository.getProgressForCourse(courseId)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            sectionActionMessage = "学习进度加载失败：${e.message ?: "请稍后再试"}"
         }
     }
 
@@ -191,12 +198,12 @@ class VideoListViewModel @Inject constructor(
 }
 
 internal fun selectCourseVideoUrl(section: CourseSection, preferScreen: Boolean): String? {
-    section.videos.forEach { video ->
-        val preferred = if (preferScreen) video.vgaUrl else video.mainUrl
-        val fallback = if (preferScreen) video.mainUrl else video.vgaUrl
-        listOf(preferred, fallback, video.room, video.path)
-            .firstOrNull { it.isNotBlank() }
-            ?.let { return it }
+    val sourceOrder = if (preferScreen) {
+        listOf(Video::vgaUrl, Video::mainUrl, Video::room, Video::path)
+    } else {
+        listOf(Video::mainUrl, Video::vgaUrl, Video::room, Video::path)
     }
-    return null
+    return sourceOrder.firstNotNullOfOrNull { source ->
+        section.videos.firstNotNullOfOrNull { source(it).trim().takeIf(String::isNotEmpty) }
+    }
 }
