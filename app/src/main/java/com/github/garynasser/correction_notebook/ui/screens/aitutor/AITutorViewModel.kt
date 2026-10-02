@@ -18,6 +18,7 @@ import com.github.garynasser.correction_notebook.domain.usecase.AiStudyUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -95,6 +96,7 @@ class AITutorViewModel @Inject constructor(
 
     private val selectedSessionId = MutableStateFlow<Long?>(null)
     private val loading = MutableStateFlow(false)
+    private var replyJob: Job? = null
     private val providerBusy = MutableStateFlow(false)
     private val chatActionBusy = MutableStateFlow(false)
     private val memoryBusy = MutableStateFlow(false)
@@ -203,13 +205,14 @@ class AITutorViewModel @Inject constructor(
         val text = content.trim()
         if (text.isBlank()) return
         loading.value = true
-        viewModelScope.launch {
+        replyJob = viewModelScope.launch {
             try {
                 val provider = providerRepository.getActiveProvider()
                 if (provider == null) {
                     error.value = "请先配置 AI Provider"
                     return@launch
                 }
+                val providerConfig = aiRepository.buildProviderConfig(provider)
                 val sessionId = ensureSessionForProvider(provider, chatSessionTitleFrom(text))
                 selectedSessionId.value = sessionId
 
@@ -225,9 +228,9 @@ class AITutorViewModel @Inject constructor(
                     .asReversed()
                     .map { NormalizedChatMessage(role = it.role, content = it.content) }
                 val result = if (knowledgeMode.value) {
-                    aiStudyUseCase.askKnowledgeBase(text)
+                    aiStudyUseCase.askKnowledgeBase(text, providerConfig = providerConfig)
                 } else {
-                    aiStudyUseCase.chat(recent)
+                    aiStudyUseCase.chat(recent, providerConfig = providerConfig)
                 }
                 result.onSuccess { answer ->
                     chatSessionRepository.saveMessage(sessionId, "assistant", answer)
@@ -243,6 +246,10 @@ class AITutorViewModel @Inject constructor(
                 loading.value = false
             }
         }
+    }
+
+    fun cancelReply() {
+        replyJob?.cancel()
     }
 
     fun newSession() {

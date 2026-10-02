@@ -42,19 +42,20 @@ class AIRepository @Inject constructor(
         messages: List<NormalizedChatMessage>,
         systemPrompt: String? = null,
         memorySummary: String? = null,
-        modelOverride: String? = null
+        modelOverride: String? = null,
+        providerConfig: AIProviderConfig? = null
     ): Result<String> {
-        val providerConfig = loadProviderConfig()
+        val config = providerConfig ?: loadProviderConfig()
             ?: return Result.failure(Exception("API Key 未配置"))
         val request = NormalizedChatRequest(
-            model = modelOverride?.takeIf { it.isNotBlank() } ?: providerConfig.defaultModel,
+            model = modelOverride?.takeIf { it.isNotBlank() } ?: config.defaultModel,
             messages = compactMessages(messages),
             systemPrompt = systemPrompt,
             memorySummary = memorySummary?.take(MAX_MEMORY_CHARS),
-            temperature = providerConfig.temperature,
-            maxTokens = providerConfig.maxTokens
+            temperature = config.temperature,
+            maxTokens = config.maxTokens
         )
-        return sendNormalized(providerConfig, request).map { it.content }
+        return sendNormalized(config, request).map { it.content }
     }
 
     suspend fun activeProviderConfig(): AIProviderConfig? = loadProviderConfig()
@@ -159,8 +160,14 @@ class AIRepository @Inject constructor(
         request: NormalizedChatRequest,
         isConnectionTest: Boolean = false
     ): Result<com.github.garynasser.correction_notebook.data.model.ai.NormalizedChatResponse> {
-        if (!isConnectionTest && !aiSettingsManager.aiEnabled.first()) {
-            return Result.failure(IllegalStateException("AI 功能已关闭，请在设置中启用"))
+        if (!isConnectionTest) {
+            val providerId = providerConfig.id?.takeIf { it > 0 }
+            if (providerId != null && providerRepository.getProviderById(providerId) == null) {
+                return Result.failure(IllegalStateException("请求使用的 Provider 已删除，请重新选择配置"))
+            }
+            if (!aiSettingsManager.aiEnabled.first()) {
+                return Result.failure(IllegalStateException("AI 功能已关闭，请在设置中启用"))
+            }
         }
         val result = when (providerConfig.type) {
             AIProviderType.OPENAI_COMPATIBLE -> openAiCompatibleAdapter.send(providerConfig, request)
@@ -195,6 +202,19 @@ class AIRepository @Inject constructor(
 
     fun buildProviderConfig(form: AiProviderForm): AIProviderConfig = form.toProviderConfig()
 
+    fun buildProviderConfig(provider: ProviderRecord): AIProviderConfig = AIProviderConfig(
+        id = provider.id,
+        name = provider.name,
+        type = provider.type,
+        baseUrl = provider.baseUrl,
+        apiKey = provider.apiKey,
+        defaultModel = provider.defaultModel,
+        customHeaders = AiProviderConfigMapper.parseHeaders(provider.customHeadersJson, gson),
+        temperature = provider.temperature,
+        maxTokens = provider.maxTokens,
+        contextMessageLimit = provider.contextMessageLimit
+    )
+
     fun validateProviderForm(form: AiProviderForm): String? {
         validateHeadersText(form.customHeaders)?.let { return it }
         return validateConfig(form.toProviderConfig())
@@ -208,18 +228,7 @@ class AIRepository @Inject constructor(
 
     private suspend fun loadProviderConfig(): AIProviderConfig? {
         providerRepository.getActiveProvider()?.let { provider ->
-            return AIProviderConfig(
-                id = provider.id,
-                name = provider.name,
-                type = provider.type,
-                baseUrl = provider.baseUrl,
-                apiKey = provider.apiKey,
-                defaultModel = provider.defaultModel,
-                customHeaders = AiProviderConfigMapper.parseHeaders(provider.customHeadersJson, gson),
-                temperature = provider.temperature,
-                maxTokens = provider.maxTokens,
-                contextMessageLimit = provider.contextMessageLimit
-            )
+            return buildProviderConfig(provider)
         }
 
         val apiKey = aiSettingsManager.apiKey.first().trim()
