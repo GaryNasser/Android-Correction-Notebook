@@ -1580,7 +1580,7 @@ private fun fullScheduleTime(item: ScheduleOccurrence): String {
 }
 
 @Composable
-private fun DueReviewCard(
+internal fun DueReviewCard(
     items: List<DueReviewItem>,
     onReviewDone: (String) -> Unit,
     onOpenKnowledgeBase: () -> Unit
@@ -1612,23 +1612,17 @@ private fun DueReviewCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Text("今日待复习", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Text(
-                        if (items.isEmpty()) "暂无到期闪卡，可以从资料页生成学习集" else "${items.size} 张闪卡需要主动回忆",
+                        if (items.isEmpty()) "暂无到期闪卡" else "${items.size} 张闪卡需要主动回忆",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 TextButton(onClick = onOpenKnowledgeBase) {
-                    Text(if (items.isEmpty()) "去生成" else "资料")
+                    Text("知识库")
                 }
             }
 
-            if (items.isEmpty()) {
-                Text(
-                    text = "从知识库文件菜单选择“AI 生成学习集”，BITStudy 会把资料变成闪卡和测验，并安排复习。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
-                )
-            } else {
+            if (items.isNotEmpty()) {
                 items.take(3).forEach { item ->
                     Surface(
                         modifier = Modifier

@@ -1,5 +1,6 @@
 package com.github.garynasser.correction_notebook.ui.screens.knowledgebase
 
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -10,7 +11,6 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -105,7 +105,7 @@ fun KnowledgeBaseFileViewerScreen(
     var showInfoDialog by remember { mutableStateOf(false) }
     var menuExpanded by remember { mutableStateOf(false) }
     val exportLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("*/*")
+        contract = KnowledgeBaseExportContract()
     ) { uri ->
         val file = fileToExport
         if (uri != null && file != null) {
@@ -272,7 +272,7 @@ fun KnowledgeBaseFileViewerScreen(
                                     onClick = {
                                         menuExpanded = false
                                         fileToExport = file
-                                        exportLauncher.launch(file.displayName)
+                                        exportLauncher.launch(file)
                                     }
                                 )
                                 DropdownMenuItem(
@@ -839,7 +839,7 @@ private fun FallbackPreview(file: KnowledgeBaseFileSummary) {
     }
 }
 
-private fun openFileExternally(
+internal fun openFileExternally(
     context: Context,
     file: KnowledgeBaseFileSummary
 ) {
@@ -853,7 +853,8 @@ private fun openFileExternally(
         val uri = FileProvider.getUriForFile(
             context,
             "${context.packageName}.fileprovider",
-            targetFile
+            targetFile,
+            file.displayName
         )
 
         val viewIntent = Intent(Intent.ACTION_VIEW).apply {
@@ -895,7 +896,7 @@ private fun exportFile(
     }
 }
 
-private fun shareViewerFile(
+internal fun shareViewerFile(
     context: Context,
     localPath: String,
     mimeType: String,
@@ -911,7 +912,8 @@ private fun shareViewerFile(
         val uri = FileProvider.getUriForFile(
             context,
             "${context.packageName}.fileprovider",
-            file
+            file,
+            title
         )
 
         val shareIntent = Intent(Intent.ACTION_SEND).apply {
@@ -922,6 +924,7 @@ private fun shareViewerFile(
             }
             putExtra(Intent.EXTRA_STREAM, uri)
             putExtra(Intent.EXTRA_SUBJECT, title)
+            clipData = ClipData.newUri(context.contentResolver, title, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
 

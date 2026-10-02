@@ -26,7 +26,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -35,6 +34,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.DriveFileMove
@@ -111,6 +111,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -155,7 +156,7 @@ fun KnowledgeBaseScreen(
         }
     }
     val exportLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("*/*")
+        contract = KnowledgeBaseExportContract()
     ) { uri: Uri? ->
         val file = fileToExport
         if (uri != null && file != null) {
@@ -603,15 +604,10 @@ fun KnowledgeBaseScreen(
                     }
                 )
             } else {
-                PrimaryTabRow(selectedTabIndex = uiState.selectedTabIndex) {
-                    listOf("文件管理", "知识空间", "BITShare 下载").forEachIndexed { index, title ->
-                        Tab(
-                            selected = uiState.selectedTabIndex == index,
-                            onClick = { viewModel.selectTab(index) },
-                            text = { Text(title) }
-                        )
-                    }
-                }
+                KnowledgeBaseTabs(
+                    selectedTabIndex = uiState.selectedTabIndex,
+                    onSelectTab = viewModel::selectTab
+                )
 
                 when (uiState.selectedTabIndex) {
                     0 -> FileManagementPage(
@@ -666,7 +662,7 @@ fun KnowledgeBaseScreen(
                         onFileContext = { fileToContext = it },
                         onFileExport = {
                             fileToExport = it
-                            exportLauncher.launch(it.displayName)
+                            exportLauncher.launch(it)
                         },
                         onCreateFolder = { showCreateFolderDialog = true },
                         onImportLocalFile = { importLauncher.launch(arrayOf("*/*")) },
@@ -924,7 +920,7 @@ private fun FileManagementPage(
                         description = if (isSearching) {
                             "当前目录里没有匹配“${uiState.localSearchQuery}”的文件或文件夹。"
                         } else {
-                            "导入本地资料，或先创建文件夹整理课程文件。"
+                            "尚未添加文件。"
                         },
                         icon = if (isSearching) Icons.Default.Search else Icons.Default.Folder,
                         primaryActionText = if (isSearching) "清空搜索" else "导入资料",
@@ -2989,8 +2985,29 @@ private fun KnowledgeBaseStatusStrip(
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
+internal fun KnowledgeBaseTabs(selectedTabIndex: Int, onSelectTab: (Int) -> Unit) {
+    PrimaryTabRow(selectedTabIndex = selectedTabIndex) {
+        listOf("文件管理", "知识空间", "BITShare").forEachIndexed { index, title ->
+            Tab(
+                selected = selectedTabIndex == index,
+                onClick = { onSelectTab(index) },
+                text = {
+                    Text(
+                        title,
+                        style = MaterialTheme.typography.labelLarge,
+                        maxLines = 1,
+                        autoSize = TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = 14.sp)
+                    )
+                }
+            )
+        }
+    }
+}
+
+@Composable
 @OptIn(ExperimentalLayoutApi::class)
-private fun EmptyStateCard(
+internal fun EmptyStateCard(
     title: String,
     description: String,
     icon: ImageVector? = null,
@@ -2999,68 +3016,54 @@ private fun EmptyStateCard(
     secondaryActionText: String? = null,
     onSecondaryAction: (() -> Unit)? = null
 ) {
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .defaultMinSize(minHeight = 156.dp)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        contentAlignment = Alignment.Center
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(8.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
-            ),
-            border = BorderStroke(
-                1.dp,
-                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Column(
-                modifier = Modifier.padding(12.dp),
+            icon?.let {
+                Icon(
+                    imageVector = it,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+        Text(
+            text = description,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        if (primaryActionText != null && onPrimaryAction != null) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                icon?.let {
-                    Icon(
-                        imageVector = it,
-                        contentDescription = null,
-                        modifier = Modifier.size(24.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
+                Button(
+                    onClick = onPrimaryAction,
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 7.dp)
+                ) {
+                    Text(primaryActionText)
                 }
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                if (primaryActionText != null && onPrimaryAction != null) {
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                if (secondaryActionText != null && onSecondaryAction != null) {
+                    OutlinedButton(
+                        onClick = onSecondaryAction,
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 7.dp)
                     ) {
-                        Button(
-                            onClick = onPrimaryAction,
-                            shape = RoundedCornerShape(8.dp),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 7.dp)
-                        ) {
-                            Text(primaryActionText)
-                        }
-                        if (secondaryActionText != null && onSecondaryAction != null) {
-                            OutlinedButton(
-                                onClick = onSecondaryAction,
-                                shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 7.dp)
-                            ) {
-                                Text(secondaryActionText)
-                            }
-                        }
+                        Text(secondaryActionText)
                     }
                 }
             }
@@ -3097,7 +3100,7 @@ private fun formatTimestamp(timestamp: Long?): String {
     return formatter.format(Date(timestamp))
 }
 
-private fun shareFile(
+internal fun shareFile(
     context: android.content.Context,
     localPath: String,
     mimeType: String,
@@ -3113,7 +3116,8 @@ private fun shareFile(
         val uri = FileProvider.getUriForFile(
             context,
             "${context.packageName}.fileprovider",
-            file
+            file,
+            title
         )
 
         val shareIntent = Intent(Intent.ACTION_SEND).apply {
@@ -3124,6 +3128,7 @@ private fun shareFile(
             }
             putExtra(Intent.EXTRA_STREAM, uri)
             putExtra(Intent.EXTRA_SUBJECT, title)
+            clipData = ClipData.newUri(context.contentResolver, title, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
 
@@ -3133,13 +3138,11 @@ private fun shareFile(
     }
 }
 
-private fun shareFiles(
+internal fun shareFiles(
     context: android.content.Context,
     files: List<KnowledgeBaseFileSummary>
 ) {
-    val existingFiles = files.mapNotNull { summary ->
-        File(summary.localPath).takeIf { it.exists() }
-    }
+    val existingFiles = files.filter { File(it.localPath).exists() }
     if (existingFiles.isEmpty()) {
         Toast.makeText(context, "文件不存在，无法分享", Toast.LENGTH_SHORT).show()
         return
@@ -3151,7 +3154,8 @@ private fun shareFiles(
                 FileProvider.getUriForFile(
                     context,
                     "${context.packageName}.fileprovider",
-                    file
+                    File(file.localPath),
+                    file.displayName
                 )
             }
         )

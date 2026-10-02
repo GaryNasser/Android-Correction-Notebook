@@ -11,6 +11,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Density
+import com.github.garynasser.correction_notebook.data.model.studyset.DueReviewItem
 import com.github.garynasser.correction_notebook.ui.theme.CorrectionNotebookTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -22,6 +23,42 @@ class StudySummaryLayoutTest {
     val compose = createComposeRule()
 
     private lateinit var density: Density
+
+    @Test
+    fun emptyReviewStateOpensLibraryWithoutPromotingDisabledAi() {
+        var opened = 0
+        compose.setContent {
+            CorrectionNotebookTheme {
+                Box(Modifier.width(320.dp)) {
+                    DueReviewCard(emptyList(), onReviewDone = {}, onOpenKnowledgeBase = { opened++ })
+                }
+            }
+        }
+        compose.onNodeWithText("暂无到期闪卡").assertExists()
+        compose.onNodeWithText("去生成").assertDoesNotExist()
+        compose.onNodeWithText("知识库").performClick()
+        compose.runOnIdle { assertEquals(1, opened) }
+    }
+
+    @Test
+    fun existingManualFlashcardsCanStillBeReviewedWithAiDisabled() {
+        val card = DueReviewItem(
+            flashcardId = "manual", studySetId = "set", studySetTitle = "Algebra",
+            courseName = null, title = "Eigenvector", front = "What is an eigenvector?",
+            back = "A vector whose direction is unchanged by a linear transformation.",
+            hint = "", createdByAi = false, nextReviewAt = 0L
+        )
+        var reviewed: String? = null
+        compose.setContent {
+            CorrectionNotebookTheme {
+                Box(Modifier.width(320.dp)) {
+                    DueReviewCard(listOf(card), onReviewDone = { reviewed = it }, onOpenKnowledgeBase = {})
+                }
+            }
+        }
+        compose.onNodeWithText("已复习").performClick()
+        compose.runOnIdle { assertEquals("manual", reviewed) }
+    }
 
     @Test
     fun summaryFitsInOneCompactRowAndBothMetricsOpenStatistics() {
