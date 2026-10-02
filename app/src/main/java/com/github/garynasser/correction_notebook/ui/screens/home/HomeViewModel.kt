@@ -58,11 +58,9 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
-import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
-import java.time.temporal.TemporalAdjusters
 import java.util.UUID
 import javax.inject.Inject
 
@@ -71,7 +69,7 @@ enum class StudyMode {
 }
 
 data class HomeUiState(
-    val selectedDate: LocalDate = currentWeekStart(),
+    val selectedDate: LocalDate = LocalDate.now(),
     val todoItems: List<TodoItem> = emptyList(),
     val articles: List<Article> = emptyList(),
     val isArticlesLoading: Boolean = false,
@@ -138,10 +136,6 @@ data class HomeUiState(
 
 enum class ActiveTimerMode {
     NONE, POMODORO, COUNTDOWN, STOPWATCH
-}
-
-private fun currentWeekStart(): LocalDate {
-    return LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
 }
 
 internal fun shouldRefreshLocalPlan(aiAdvice: String?): Boolean = aiAdvice == null
@@ -408,9 +402,8 @@ class HomeViewModel @Inject constructor(
     }
 
     fun setSelectedWeek(date: LocalDate) {
-        val weekStart = date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
         _uiState.value = _uiState.value.copy(
-            selectedDate = weekStart,
+            selectedDate = date,
             scheduleRange = ScheduleRange.WEEK,
             plannerTab = PlannerTab.SCHEDULE
         )
