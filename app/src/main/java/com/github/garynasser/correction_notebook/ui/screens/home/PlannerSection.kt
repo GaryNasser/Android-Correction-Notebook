@@ -898,6 +898,7 @@ fun IcsImportPreviewDialog(
         },
         shape = RoundedCornerShape(8.dp),
         title = { Text("导入预览", style = MaterialTheme.typography.titleMedium) },
+        containerColor = MaterialTheme.colorScheme.surface,
         text = {
             LazyColumn(
                 modifier = Modifier
@@ -909,15 +910,32 @@ fun IcsImportPreviewDialog(
                 item {
                     Text(
                         text = preview.fileName,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 item {
-                    ImportCountRow("新增", preview.added.size)
-                    ImportCountRow("更新", preview.updated.size)
-                    ImportCountRow("冲突", preview.conflicts.size)
-                    ImportCountRow("覆盖时删除", preview.deleted.size)
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            ImportCountRow("新增", preview.added.size, Modifier.weight(1f))
+                            ImportCountRow("更新", preview.updated.size, Modifier.weight(1f))
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            ImportCountRow("冲突", preview.conflicts.size, Modifier.weight(1f))
+                            ImportCountRow("待删除", preview.deleted.size, Modifier.weight(1f))
+                        }
+                    }
+                }
+                item {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                }
+                if (preview.added.isEmpty() && preview.updated.isEmpty() &&
+                    preview.conflicts.isEmpty() && preview.deleted.isEmpty()
+                ) {
+                    item {
+                        Text("没有变更", style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
                 diffPreviewGroup("新增事件", preview.added)
                 diffPreviewGroup("将更新", preview.updated)
@@ -958,14 +976,16 @@ fun IcsImportPreviewDialog(
 @Composable
 private fun ImportCountRow(
     label: String,
-    count: Int
+    count: Int,
+    modifier: Modifier = Modifier
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
+        modifier = modifier,
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(label)
-        Text("$count 项", fontWeight = FontWeight.SemiBold)
+        Text(label, style = MaterialTheme.typography.bodySmall)
+        Text("$count 项", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -978,27 +998,22 @@ private fun LazyListScope.diffPreviewGroup(
         Text(title, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
     }
     items(changes) { item ->
-        Card(
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f)
-            )
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(10.dp)
-            ) {
-                Text(item.title, fontWeight = FontWeight.Medium)
-                Text(
-                    item.startsAt.format(DateTimeFormatter.ofPattern("MM月dd日 HH:mm")),
-                    style = MaterialTheme.typography.bodySmall
-                )
-                Text(
-                    item.detail,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                )
-            }
+            Text(item.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+            Text(
+                item.startsAt.format(DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm")),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                item.detail,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
         }
     }
 }
