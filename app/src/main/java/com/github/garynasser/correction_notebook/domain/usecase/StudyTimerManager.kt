@@ -5,23 +5,28 @@ import com.github.garynasser.correction_notebook.data.model.home.PomodoroSetting
 import com.github.garynasser.correction_notebook.data.model.home.PomodoroState
 import com.github.garynasser.correction_notebook.data.model.home.SessionType
 import com.github.garynasser.correction_notebook.data.model.home.TimerState
-import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
 class StudyTimerManager(
-    private val scope: CoroutineScope
+    private val scope: CoroutineScope,
+    private val elapsedRealtimeMillis: () -> Long = { System.nanoTime() / 1_000_000 }
 ) {
     private val _timerState = MutableStateFlow<TimerState>(TimerState.Idle)
     val timerState: StateFlow<TimerState> = _timerState.asStateFlow()
 
     private var timerJob: Job? = null
-    private var pomodoroState = PomodoroState()
+    private var lastTickMillis = 0L
+    private var partialSecondMillis = 0L
+    private var completedFocusSeconds = 0
 
-    // Callbacks for alerts and time tracking
     var onTimerFinished: (() -> Unit)? = null
     var onPomodoroPhaseChanged: ((PomodoroPhase) -> Unit)? = null
-    var onStopwatchReset: ((Int) -> Unit)? = null  // Called with elapsed minutes when stopwatch is reset
-    var onCountdownReset: ((Int) -> Unit)? = null  // Called with elapsed minutes when countdown is reset
 
     data class SessionSnapshot(
         val sessionType: SessionType,
@@ -31,178 +36,107 @@ class StudyTimerManager(
 
     fun startPomodoro(settings: PomodoroSettings = PomodoroSettings()) {
         stopTimer()
-        pomodoroState = PomodoroState(
-            phase = PomodoroPhase.FOCUS,
-            timeRemainingSeconds = settings.focusMinutes * 60,
-            isRunning = true,
-            settings = settings
+        partialSecondMillis = 0
+        completedFocusSeconds = 0
+        val safeSettings = settings.copy(
+            focusMinutes = settings.focusMinutes.coerceAtLeast(1),
+            shortBreakMinutes = settings.shortBreakMinutes.coerceAtLeast(1),
+            longBreakMinutes = settings.longBreakMinutes.coerceAtLeast(1)
         )
-        _timerState.value = TimerState.Pomodoro(pomodoroState)
+        _timerState.value = TimerState.Pomodoro(
+            PomodoroState(
+                timeRemainingSeconds = safeSettings.focusMinutes * 60,
+                isRunning = true,
+                settings = safeSettings
+            )
+        )
         startTimerJob()
     }
 
     fun startCountdown(minutes: Int) {
         stopTimer()
-        val totalSeconds = minutes * 60
-        _timerState.value = TimerState.Countdown(
-            totalSeconds = totalSeconds,
-            remainingSeconds = totalSeconds,
-            isRunning = true
-        )
-        startCountdownJob(totalSeconds = totalSeconds, remainingSeconds = totalSeconds)
+        partialSecondMillis = 0
+        val seconds = minutes.coerceAtLeast(1) * 60
+        _timerState.value = TimerState.Countdown(seconds, seconds, isRunning = true)
+        startTimerJob()
     }
 
     fun startStopwatch() {
         stopTimer()
-        _timerState.value = TimerState.Stopwatch(
-            elapsedSeconds = 0,
-            isRunning = true
-        )
-        startStopwatchJob()
+        partialSecondMillis = 0
+        _timerState.value = TimerState.Stopwatch(elapsedSeconds = 0, isRunning = true)
+        startTimerJob()
     }
 
     fun pause() {
-        when (val state = _timerState.value) {
-            is TimerState.Pomodoro -> {
-                pomodoroState = state.state.copy(isRunning = false)
-                _timerState.value = TimerState.Pomodoro(pomodoroState)
-            }
-            is TimerState.Countdown -> {
-                _timerState.value = state.copy(isRunning = false)
-            }
-            is TimerState.Stopwatch -> {
-                _timerState.value = state.copy(isRunning = false)
-            }
-            else -> {}
-        }
-        timerJob?.cancel()
+        updateElapsedTime()
+        stopTimer()
+        setRunning(false)
     }
 
     fun resume() {
-        when (val state = _timerState.value) {
-            is TimerState.Pomodoro -> {
-                pomodoroState = state.state.copy(isRunning = true)
-                _timerState.value = TimerState.Pomodoro(pomodoroState)
-                startTimerJob()
-            }
-            is TimerState.Countdown -> {
-                _timerState.value = state.copy(isRunning = true)
-                startCountdownJob(
-                    totalSeconds = state.totalSeconds,
-                    remainingSeconds = state.remainingSeconds
-                )
-            }
-            is TimerState.Stopwatch -> {
-                val currentElapsed = state.elapsedSeconds
-                _timerState.value = state.copy(isRunning = true)
-                startStopwatchJob(currentElapsed)
-            }
-            else -> {}
-        }
+        if (_timerState.value.isRunning()) return
+        setRunning(true)
+        if (_timerState.value.isRunning()) startTimerJob()
     }
 
     fun skip() {
+        updateElapsedTime()
         when (val state = _timerState.value) {
             is TimerState.Pomodoro -> {
                 stopTimer()
+                partialSecondMillis = 0
                 handlePomodoroPhaseEnd(skipped = true)
+                if (_timerState.value.isRunning()) startTimerJob()
             }
             is TimerState.Countdown -> {
                 stopTimer()
                 _timerState.value = TimerState.CountdownFinished(state.totalSeconds)
             }
-            is TimerState.Stopwatch -> {
-                // Just continue, no skip for stopwatch
-            }
-            else -> {}
+            else -> Unit
         }
     }
 
     fun stop() {
+        updateElapsedTime()
         stopTimer()
-        when (val state = _timerState.value) {
-            is TimerState.Pomodoro -> {
-                // Calculate elapsed focus time before stopping
-                val settings = pomodoroState.settings
-                val currentPhaseElapsed = when (pomodoroState.phase) {
-                    PomodoroPhase.FOCUS -> settings.focusMinutes * 60 - pomodoroState.timeRemainingSeconds
-                    PomodoroPhase.SHORT_BREAK -> settings.shortBreakMinutes * 60 - pomodoroState.timeRemainingSeconds
-                    PomodoroPhase.LONG_BREAK -> settings.longBreakMinutes * 60 - pomodoroState.timeRemainingSeconds
-                }
-                val totalElapsedSeconds = pomodoroState.completedPomodoros * settings.focusMinutes * 60 + currentPhaseElapsed
-                _timerState.value = TimerState.Idle
-            }
-            is TimerState.Countdown -> {
-                _timerState.value = TimerState.CountdownFinished(state.totalSeconds)
-            }
-            is TimerState.CountdownFinished -> {
-                // Already finished, do nothing
-            }
-            is TimerState.Stopwatch -> {
-                _timerState.value = TimerState.StopwatchFinished(state.elapsedSeconds)
-            }
-            is TimerState.StopwatchFinished -> {
-                // Already finished, do nothing
-            }
-            TimerState.Idle -> {}
-        }
+        _timerState.value = TimerState.Idle
+        partialSecondMillis = 0
     }
 
     fun reset() {
-        val settings = pomodoroState.settings
+        updateElapsedTime()
+        stopTimer()
+        partialSecondMillis = 0
         when (val state = _timerState.value) {
             is TimerState.Pomodoro -> {
-                pomodoroState = PomodoroState(
-                    phase = PomodoroPhase.FOCUS,
-                    timeRemainingSeconds = settings.focusMinutes * 60,
-                    isRunning = false,
-                    completedPomodoros = 0,
-                    totalFocusTimeMinutes = 0,
-                    settings = settings
+                completedFocusSeconds = 0
+                _timerState.value = TimerState.Pomodoro(
+                    PomodoroState(
+                        timeRemainingSeconds = state.state.settings.focusMinutes * 60,
+                        settings = state.state.settings
+                    )
                 )
-                _timerState.value = TimerState.Pomodoro(pomodoroState)
-                stopTimer()
             }
             is TimerState.Countdown -> {
-                // Save elapsed time before reset
-                val elapsedMinutes = (state.totalSeconds - state.remainingSeconds) / 60
-                onCountdownReset?.invoke(elapsedMinutes)
-                _timerState.value = state.copy(
-                    remainingSeconds = state.totalSeconds,
-                    isRunning = false
-                )
-                stopTimer()
+                _timerState.value = state.copy(remainingSeconds = state.totalSeconds, isRunning = false)
             }
             is TimerState.CountdownFinished -> {
-                // Save elapsed time before reset
-                val elapsedMinutes = state.totalSeconds / 60
-                onCountdownReset?.invoke(elapsedMinutes)
-                _timerState.value = TimerState.Countdown(
-                    totalSeconds = state.totalSeconds,
-                    remainingSeconds = state.totalSeconds,
-                    isRunning = false
-                )
+                _timerState.value = TimerState.Countdown(state.totalSeconds, state.totalSeconds, isRunning = false)
             }
-            is TimerState.Stopwatch -> {
-                // Save elapsed time before reset
-                val elapsedMinutes = state.elapsedSeconds / 60
-                onStopwatchReset?.invoke(elapsedMinutes)
-                _timerState.value = state.copy(
-                    elapsedSeconds = 0,
-                    isRunning = false
-                )
-                stopTimer()
+            is TimerState.Stopwatch, is TimerState.StopwatchFinished -> {
+                _timerState.value = TimerState.Stopwatch(elapsedSeconds = 0, isRunning = false)
             }
-            is TimerState.StopwatchFinished -> {
-                // Save elapsed time before reset
-                val elapsedMinutes = state.elapsedSeconds / 60
-                onStopwatchReset?.invoke(elapsedMinutes)
-                _timerState.value = TimerState.Stopwatch(
-                    elapsedSeconds = 0,
-                    isRunning = false
-                )
-            }
-            TimerState.Idle -> {}
+            TimerState.Idle -> Unit
+        }
+    }
+
+    private fun setRunning(running: Boolean) {
+        _timerState.value = when (val state = _timerState.value) {
+            is TimerState.Pomodoro -> state.copy(state = state.state.copy(isRunning = running))
+            is TimerState.Countdown -> state.copy(isRunning = running)
+            is TimerState.Stopwatch -> state.copy(isRunning = running)
+            else -> state
         }
     }
 
@@ -212,190 +146,117 @@ class StudyTimerManager(
     }
 
     private fun startTimerJob() {
+        stopTimer()
+        lastTickMillis = elapsedRealtimeMillis()
         timerJob = scope.launch {
-            while (pomodoroState.timeRemainingSeconds > 0 && pomodoroState.isRunning) {
-                delay(1000)
-                pomodoroState = pomodoroState.copy(
-                    timeRemainingSeconds = pomodoroState.timeRemainingSeconds - 1
-                )
-                _timerState.value = TimerState.Pomodoro(pomodoroState)
+            while (_timerState.value.isRunning()) {
+                delay(1_000)
+                updateElapsedTime()
             }
-            if (pomodoroState.timeRemainingSeconds <= 0) {
-                handlePomodoroPhaseEnd()
+        }
+    }
+
+    private fun updateElapsedTime() {
+        if (!_timerState.value.isRunning()) return
+        val now = elapsedRealtimeMillis()
+        val elapsedMillis = partialSecondMillis + (now - lastTickMillis).coerceAtLeast(0)
+        lastTickMillis = now
+        partialSecondMillis = elapsedMillis % 1_000
+        val seconds = (elapsedMillis / 1_000).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+        if (seconds == 0) return
+
+        when (val state = _timerState.value) {
+            is TimerState.Countdown -> {
+                val remaining = (state.remainingSeconds - seconds).coerceAtLeast(0)
+                if (remaining == 0) {
+                    _timerState.value = TimerState.CountdownFinished(state.totalSeconds)
+                    onTimerFinished?.invoke()
+                } else {
+                    _timerState.value = state.copy(remainingSeconds = remaining)
+                }
             }
+            is TimerState.Stopwatch -> {
+                _timerState.value = state.copy(elapsedSeconds = state.elapsedSeconds + seconds)
+            }
+            is TimerState.Pomodoro -> advancePomodoro(seconds)
+            else -> Unit
+        }
+    }
+
+    private fun advancePomodoro(seconds: Int) {
+        var remainingElapsed = seconds
+        // Catch up every phase, including breaks, after a delayed background tick.
+        while (remainingElapsed > 0) {
+            val state = (_timerState.value as? TimerState.Pomodoro)?.state ?: return
+            val consumed = minOf(remainingElapsed, state.timeRemainingSeconds)
+            remainingElapsed -= consumed
+            _timerState.value = TimerState.Pomodoro(
+                state.copy(timeRemainingSeconds = state.timeRemainingSeconds - consumed)
+            )
+            if (consumed == state.timeRemainingSeconds) handlePomodoroPhaseEnd()
         }
     }
 
     private fun handlePomodoroPhaseEnd(skipped: Boolean = false) {
-        val settings = pomodoroState.settings
-        val newPhase: PomodoroPhase
-
-        pomodoroState = when (pomodoroState.phase) {
+        val state = (_timerState.value as TimerState.Pomodoro).state
+        val settings = state.settings
+        val next = when (state.phase) {
             PomodoroPhase.FOCUS -> {
-                val elapsedFocusMinutes = maxOf(
-                    0,
-                    (settings.focusMinutes * 60 - pomodoroState.timeRemainingSeconds) / 60
-                )
-                val newCompleted = if (skipped) {
-                    pomodoroState.completedPomodoros
-                } else {
-                    pomodoroState.completedPomodoros + 1
-                }
-                val longBreakInterval = settings.pomodorosBeforeLongBreak.coerceAtLeast(1)
-                newPhase = if (newCompleted > 0 && newCompleted % longBreakInterval == 0) {
-                    PomodoroPhase.LONG_BREAK
-                } else {
-                    PomodoroPhase.SHORT_BREAK
-                }
-                val focusMinutesToAdd = if (skipped) elapsedFocusMinutes else settings.focusMinutes
-                if (newPhase == PomodoroPhase.LONG_BREAK) {
-                    pomodoroState.copy(
-                        phase = PomodoroPhase.LONG_BREAK,
-                        timeRemainingSeconds = settings.longBreakMinutes * 60,
-                        completedPomodoros = newCompleted,
-                        totalFocusTimeMinutes = pomodoroState.totalFocusTimeMinutes + focusMinutesToAdd
-                    )
-                } else {
-                    pomodoroState.copy(
-                        phase = PomodoroPhase.SHORT_BREAK,
-                        timeRemainingSeconds = settings.shortBreakMinutes * 60,
-                        completedPomodoros = newCompleted,
-                        totalFocusTimeMinutes = pomodoroState.totalFocusTimeMinutes + focusMinutesToAdd
-                    )
-                }
-            }
-            PomodoroPhase.SHORT_BREAK, PomodoroPhase.LONG_BREAK -> {
-                newPhase = PomodoroPhase.FOCUS
-                pomodoroState.copy(
-                    phase = PomodoroPhase.FOCUS,
-                    timeRemainingSeconds = settings.focusMinutes * 60
+                completedFocusSeconds += settings.focusMinutes * 60 - state.timeRemainingSeconds
+                val completed = state.completedPomodoros + if (skipped) 0 else 1
+                val longBreak = completed > 0 && completed % settings.pomodorosBeforeLongBreak.coerceAtLeast(1) == 0
+                state.copy(
+                    phase = if (longBreak) PomodoroPhase.LONG_BREAK else PomodoroPhase.SHORT_BREAK,
+                    timeRemainingSeconds = (if (longBreak) settings.longBreakMinutes else settings.shortBreakMinutes) * 60,
+                    completedPomodoros = completed,
+                    totalFocusTimeMinutes = completedFocusSeconds / 60
                 )
             }
+            PomodoroPhase.SHORT_BREAK, PomodoroPhase.LONG_BREAK -> state.copy(
+                phase = PomodoroPhase.FOCUS,
+                timeRemainingSeconds = settings.focusMinutes * 60
+            )
         }
-        _timerState.value = TimerState.Pomodoro(pomodoroState)
-
-        // Trigger alert for phase change
-        onTimerFinished?.invoke()
-        onPomodoroPhaseChanged?.invoke(newPhase)
-        if (pomodoroState.isRunning) {
-            startTimerJob()
-        }
+        _timerState.value = TimerState.Pomodoro(next)
+        if (!skipped) onTimerFinished?.invoke()
+        onPomodoroPhaseChanged?.invoke(next.phase)
     }
 
-    private fun startCountdownJob(totalSeconds: Int, remainingSeconds: Int) {
-        timerJob = scope.launch {
-            var remaining = remainingSeconds
-            while (remaining > 0) {
-                val state = _timerState.value
-                if (state is TimerState.Countdown && state.isRunning) {
-                    delay(1000)
-                    remaining--
-                    _timerState.value = TimerState.Countdown(
-                        totalSeconds = state.totalSeconds,
-                        remainingSeconds = remaining,
-                        isRunning = true
-                    )
-                } else {
-                    break
-                }
-            }
-            if (remaining <= 0) {
-                _timerState.value = TimerState.CountdownFinished(totalSeconds)
-                onTimerFinished?.invoke()
-            }
-        }
-    }
-
-    private fun startStopwatchJob(initialElapsed: Int = 0) {
-        timerJob = scope.launch {
-            var elapsed = initialElapsed
-            while (true) {
-                val state = _timerState.value
-                if (state is TimerState.Stopwatch && state.isRunning) {
-                    delay(1000)
-                    elapsed++
-                    _timerState.value = TimerState.Stopwatch(
-                        elapsedSeconds = elapsed,
-                        isRunning = true
-                    )
-                } else {
-                    break
-                }
-            }
-        }
-    }
-
-    fun getElapsedMinutes(): Int {
-        return getElapsedSeconds() / 60
-    }
+    fun getElapsedMinutes(): Int = getElapsedSeconds() / 60
 
     fun getElapsedSeconds(): Int {
+        updateElapsedTime()
         return when (val state = _timerState.value) {
-            is TimerState.Pomodoro -> {
-                val settings = state.state.settings
-                val completedFocusSeconds = state.state.totalFocusTimeMinutes * 60
-                val currentFocusSeconds = if (state.state.phase == PomodoroPhase.FOCUS) {
-                    settings.focusMinutes * 60 - state.state.timeRemainingSeconds
-                } else {
-                    0
-                }
-                completedFocusSeconds + maxOf(0, currentFocusSeconds)
-            }
+            is TimerState.Pomodoro -> completedFocusSeconds + if (state.state.phase == PomodoroPhase.FOCUS) {
+                state.state.settings.focusMinutes * 60 - state.state.timeRemainingSeconds
+            } else 0
             is TimerState.Stopwatch -> state.elapsedSeconds
             is TimerState.StopwatchFinished -> state.elapsedSeconds
             is TimerState.Countdown -> state.totalSeconds - state.remainingSeconds
             is TimerState.CountdownFinished -> state.totalSeconds
-            else -> 0
+            TimerState.Idle -> 0
         }
     }
 
-    fun getElapsedMinutesForCurrentSession(): Int {
-        return getElapsedSeconds() / 60
-    }
+    fun getElapsedMinutesForCurrentSession(): Int = getElapsedMinutes()
 
     fun getCurrentSessionSnapshot(): SessionSnapshot? {
+        val minutes = roundUpToMinutes(getElapsedSeconds())
+        if (minutes <= 0) return null
         return when (val state = _timerState.value) {
-            is TimerState.Pomodoro -> {
-                val settings = state.state.settings
-                val currentFocusMinutes = if (state.state.phase == PomodoroPhase.FOCUS) {
-                    val elapsedFocusSeconds = settings.focusMinutes * 60 - state.state.timeRemainingSeconds
-                    roundUpToMinutes(maxOf(0, elapsedFocusSeconds))
-                } else {
-                    0
-                }
-                val totalFocusMinutes = state.state.totalFocusTimeMinutes + currentFocusMinutes
-                if (totalFocusMinutes <= 0 && state.state.completedPomodoros <= 0) {
-                    null
-                } else {
-                    SessionSnapshot(
-                        sessionType = SessionType.POMODORO,
-                        durationMinutes = totalFocusMinutes,
-                        pomodoroCount = state.state.completedPomodoros
-                    )
-                }
-            }
-            is TimerState.Countdown -> {
-                val elapsedMinutes = roundUpToMinutes(state.totalSeconds - state.remainingSeconds)
-                if (elapsedMinutes <= 0) null else SessionSnapshot(SessionType.COUNTDOWN, elapsedMinutes)
-            }
-            is TimerState.CountdownFinished -> {
-                val elapsedMinutes = roundUpToMinutes(state.totalSeconds)
-                if (elapsedMinutes <= 0) null else SessionSnapshot(SessionType.COUNTDOWN, elapsedMinutes)
-            }
-            is TimerState.Stopwatch -> {
-                val elapsedMinutes = roundUpToMinutes(state.elapsedSeconds)
-                if (elapsedMinutes <= 0) null else SessionSnapshot(SessionType.STOPWATCH, elapsedMinutes)
-            }
-            is TimerState.StopwatchFinished -> {
-                val elapsedMinutes = roundUpToMinutes(state.elapsedSeconds)
-                if (elapsedMinutes <= 0) null else SessionSnapshot(SessionType.STOPWATCH, elapsedMinutes)
-            }
+            is TimerState.Pomodoro -> SessionSnapshot(SessionType.POMODORO, minutes, state.state.completedPomodoros)
+            is TimerState.Countdown, is TimerState.CountdownFinished -> SessionSnapshot(SessionType.COUNTDOWN, minutes)
+            is TimerState.Stopwatch, is TimerState.StopwatchFinished -> SessionSnapshot(SessionType.STOPWATCH, minutes)
             TimerState.Idle -> null
         }
     }
 
-    private fun roundUpToMinutes(seconds: Int): Int {
-        if (seconds <= 0) return 0
-        return (seconds + 59) / 60
-    }
+    private fun roundUpToMinutes(seconds: Int): Int = if (seconds <= 0) 0 else (seconds + 59) / 60
+}
+
+private fun TimerState.isRunning(): Boolean = when (this) {
+    is TimerState.Pomodoro -> state.isRunning
+    is TimerState.Countdown -> isRunning
+    is TimerState.Stopwatch -> isRunning
+    else -> false
 }

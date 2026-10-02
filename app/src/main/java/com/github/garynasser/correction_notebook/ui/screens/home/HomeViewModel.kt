@@ -2,6 +2,7 @@ package com.github.garynasser.correction_notebook.ui.screens.home
 
 import android.content.Context
 import android.net.Uri
+import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.garynasser.correction_notebook.data.local.StudyPreferencesManager
@@ -103,6 +104,8 @@ data class HomeUiState(
     val selectedMode: StudyMode? = null,
     val activeTimerMode: ActiveTimerMode = ActiveTimerMode.NONE,  // Tracks what timer was started
     val showStatistics: Boolean = false,
+    val isSavingStudySession: Boolean = false,
+    val studySessionError: String? = null,
     val backgroundImageUri: String? = null,
     val isLandscapeOrientation: Boolean = false,
     val pomodoroSettings: PomodoroSettings = PomodoroSettings(),
@@ -178,10 +181,10 @@ class HomeViewModel @Inject constructor(
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
-    val timerManager = StudyTimerManager(viewModelScope)
+    val timerManager = StudyTimerManager(viewModelScope, SystemClock::elapsedRealtime)
     private var sessionPersisted = false
     private var currentSessionStartedAt: LocalDateTime? = null
-    private var finishSessionJob: Job? = null
+    private var sessionActionJob: Job? = null
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
@@ -1087,21 +1090,40 @@ class HomeViewModel @Inject constructor(
     }
 
     fun finishCurrentSessionAndExit() {
-        if (finishSessionJob?.isActive == true) return
-        finishSessionJob = viewModelScope.launch {
+        saveCurrentSession(reset = false)
+    }
+
+    fun resetCurrentSession() {
+        saveCurrentSession(reset = true)
+    }
+
+    fun dismissStudySessionError() {
+        _uiState.value = _uiState.value.copy(studySessionError = null)
+    }
+
+    private fun saveCurrentSession(reset: Boolean) {
+        if (sessionActionJob?.isActive == true) return
+        timerManager.pause()
+        _uiState.value = _uiState.value.copy(isSavingStudySession = true, studySessionError = null)
+        sessionActionJob = viewModelScope.launch {
             try {
                 persistCurrentSessionIfNeeded()
+                if (reset) {
+                    timerManager.reset()
+                    markSessionStarted()
+                } else {
+                    timerManager.stop()
+                    currentSessionStartedAt = null
+                    clearSelectedMode()
+                }
             } catch (error: CancellationException) {
                 throw error
             } catch (_: Exception) {
                 _uiState.value = _uiState.value.copy(
-                    todoActionMessage = null,
-                    todoActionError = "学习记录保存失败，但本次计时已结束"
+                    studySessionError = "学习记录保存失败，计时已暂停，请重试"
                 )
             } finally {
-                timerManager.stop()
-                currentSessionStartedAt = null
-                clearSelectedMode()
+                _uiState.value = _uiState.value.copy(isSavingStudySession = false)
             }
         }
     }

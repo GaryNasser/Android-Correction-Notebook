@@ -8,9 +8,11 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
@@ -67,6 +69,10 @@ fun ImmersiveStudyScreen(
     timerManager: StudyTimerManager,
     onExit: () -> Unit,
     onStop: () -> Unit = {},
+    onReset: () -> Unit = {},
+    isSavingSession: Boolean = false,
+    sessionError: String? = null,
+    onDismissSessionError: () -> Unit = {},
     backgroundImageUri: String? = null,
     soundEnabled: Boolean = true,
     vibrationEnabled: Boolean = true,
@@ -95,8 +101,15 @@ fun ImmersiveStudyScreen(
     val window = activity?.window
     val decorView = window?.decorView
 
-    LaunchedEffect(showControls, showMoreSheet, timerState) {
-        if (showControls && !showMoreSheet && timerState !is TimerState.Idle) {
+    val timerRunning = when (val state = timerState) {
+        is TimerState.Pomodoro -> state.state.isRunning
+        is TimerState.Countdown -> state.isRunning
+        is TimerState.Stopwatch -> state.isRunning
+        else -> false
+    }
+    LaunchedEffect(showControls, showMoreSheet, timerRunning, isAlerting) {
+        if (!timerRunning || isAlerting) showControls = true
+        else if (showControls && !showMoreSheet) {
             delay(3500)
             showControls = false
         }
@@ -159,6 +172,12 @@ fun ImmersiveStudyScreen(
         }
     }
 
+    fun resetSession() {
+        alertManager?.stop()
+        isAlerting = false
+        onReset()
+    }
+
     val backgroundGradient = remember {
         Brush.verticalGradient(
             colors = listOf(
@@ -177,7 +196,7 @@ fun ImmersiveStudyScreen(
                 indication = null,
                 interactionSource = remember { MutableInteractionSource() }
             ) {
-                showControls = !showControls
+                showControls = if (timerRunning) !showControls else true
             }
     ) {
         // Background image if set
@@ -222,6 +241,7 @@ fun ImmersiveStudyScreen(
 
             BottomControls(
                 timerState = timerState,
+                enabled = !isSavingSession,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(
@@ -230,7 +250,7 @@ fun ImmersiveStudyScreen(
                         bottom = navigationBottomPadding + 20.dp
                     ),
                 onSkip = { timerManager.skip() },
-                onReset = { timerManager.reset() },
+                onReset = ::resetSession,
                 onPlayPause = {
                     val state = timerState
                     when (state) {
@@ -241,14 +261,11 @@ fun ImmersiveStudyScreen(
                         is TimerState.Countdown -> {
                             if (state.isRunning) timerManager.pause() else timerManager.resume()
                         }
-                        is TimerState.CountdownFinished -> {
-                            timerManager.reset()
-                        }
                         is TimerState.Stopwatch -> {
                             if (state.isRunning) timerManager.pause() else timerManager.resume()
                         }
-                        is TimerState.StopwatchFinished -> {
-                            timerManager.reset()
+                        is TimerState.CountdownFinished, is TimerState.StopwatchFinished -> {
+                            resetSession()
                         }
                     }
                 },
@@ -272,6 +289,16 @@ fun ImmersiveStudyScreen(
                 }
             )
         }
+    }
+
+    if (sessionError != null) {
+        AlertDialog(
+            onDismissRequest = onDismissSessionError,
+            shape = RoundedCornerShape(8.dp),
+            title = { Text("记录未保存", style = MaterialTheme.typography.titleMedium) },
+            text = { Text(sessionError) },
+            confirmButton = { TextButton(onClick = onDismissSessionError) { Text("知道了") } }
+        )
     }
 
     if (showMoreSheet) {
@@ -510,126 +537,119 @@ private fun WhiteNoiseSelector(
 @Composable
 private fun BottomControls(
     timerState: TimerState,
+    enabled: Boolean,
     modifier: Modifier = Modifier,
     onSkip: () -> Unit,
     onReset: () -> Unit,
     onPlayPause: () -> Unit,
     onStop: () -> Unit
 ) {
-    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
-        val compact = maxWidth < 360.dp
-        val sideButtonWidth = if (compact) 72.dp else 92.dp
-        val playButtonSize = if (compact) 76.dp else 84.dp
-        val playIconSize = if (compact) 30.dp else 34.dp
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        when (timerState) {
+            is TimerState.Pomodoro -> SecondaryControlButton(
+                onClick = onSkip,
+                enabled = enabled,
+                icon = Icons.Default.SkipNext,
+                label = "跳过"
+            )
+            is TimerState.Countdown,
+            is TimerState.Stopwatch,
+            is TimerState.CountdownFinished,
+            is TimerState.StopwatchFinished -> SecondaryControlButton(
+                onClick = onReset,
+                enabled = enabled,
+                icon = Icons.Default.Refresh,
+                label = "重置"
+            )
+            TimerState.Idle -> Spacer(modifier = Modifier.size(48.dp))
+        }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        IconButton(
+            onClick = onPlayPause,
+            enabled = enabled && timerState !is TimerState.Idle,
+            modifier = Modifier
+                .size(64.dp)
+                .clip(CircleShape)
+                .background(
+                    if (timerState is TimerState.Idle) {
+                        Color.White.copy(alpha = 0.22f)
+                    } else {
+                        Color.White
+                    }
+                )
         ) {
-            when (timerState) {
-                is TimerState.Pomodoro -> SecondaryControlButton(
-                    modifier = Modifier.width(sideButtonWidth),
-                    onClick = onSkip,
-                    icon = Icons.Default.SkipNext,
-                    label = "跳过",
-                    compact = compact
-                )
-                is TimerState.Countdown,
-                is TimerState.Stopwatch,
-                is TimerState.CountdownFinished,
-                is TimerState.StopwatchFinished -> SecondaryControlButton(
-                    modifier = Modifier.width(sideButtonWidth),
-                    onClick = onReset,
-                    icon = Icons.Default.Refresh,
-                    label = "重置",
-                    compact = compact
-                )
-                TimerState.Idle -> Spacer(modifier = Modifier.width(sideButtonWidth))
-            }
+            Icon(
+                imageVector = when (timerState) {
+                    TimerState.Idle -> Icons.Default.PlayArrow
+                    is TimerState.Pomodoro -> if (timerState.state.isRunning) Icons.Default.Pause else Icons.Default.PlayArrow
+                    is TimerState.Countdown -> if (timerState.isRunning) Icons.Default.Pause else Icons.Default.PlayArrow
+                    is TimerState.Stopwatch -> if (timerState.isRunning) Icons.Default.Pause else Icons.Default.PlayArrow
+                    is TimerState.CountdownFinished,
+                    is TimerState.StopwatchFinished -> Icons.Default.Refresh
+                },
+                contentDescription = when (timerState) {
+                    is TimerState.Pomodoro -> if (timerState.state.isRunning) "暂停" else "继续"
+                    is TimerState.Countdown -> if (timerState.isRunning) "暂停" else "继续"
+                    is TimerState.Stopwatch -> if (timerState.isRunning) "暂停" else "继续"
+                    is TimerState.CountdownFinished, is TimerState.StopwatchFinished -> "重新计时"
+                    TimerState.Idle -> "开始"
+                },
+                tint = Color(0xFF006781),
+                modifier = Modifier.size(28.dp)
+            )
+        }
 
-            IconButton(
-                onClick = onPlayPause,
-                enabled = timerState !is TimerState.Idle,
-                modifier = Modifier
-                    .size(playButtonSize)
-                    .clip(CircleShape)
-                    .background(
-                        if (timerState is TimerState.Idle) {
-                            Color.White.copy(alpha = 0.22f)
-                        } else {
-                            Color.White
-                        }
-                    )
-            ) {
-                Icon(
-                    imageVector = when (timerState) {
-                        TimerState.Idle -> Icons.Default.PlayArrow
-                        is TimerState.Pomodoro -> if (timerState.state.isRunning) Icons.Default.Pause else Icons.Default.PlayArrow
-                        is TimerState.Countdown -> if (timerState.isRunning) Icons.Default.Pause else Icons.Default.PlayArrow
-                        is TimerState.Stopwatch -> if (timerState.isRunning) Icons.Default.Pause else Icons.Default.PlayArrow
-                        is TimerState.CountdownFinished,
-                        is TimerState.StopwatchFinished -> Icons.Default.Refresh
-                    },
-                    contentDescription = "播放/暂停",
-                    tint = Color(0xFF006781),
-                    modifier = Modifier.size(playIconSize)
-                )
-            }
-
-            when (timerState) {
-                is TimerState.Pomodoro,
-                is TimerState.Countdown,
-                is TimerState.Stopwatch -> SecondaryControlButton(
-                    modifier = Modifier.width(sideButtonWidth),
-                    onClick = onStop,
-                    icon = Icons.Default.Stop,
-                    label = "结束",
-                    compact = compact
-                )
-                is TimerState.CountdownFinished,
-                is TimerState.StopwatchFinished -> SecondaryControlButton(
-                    modifier = Modifier.width(sideButtonWidth),
-                    onClick = onReset,
-                    icon = Icons.Default.Refresh,
-                    label = "重置",
-                    compact = compact
-                )
-                TimerState.Idle -> Spacer(modifier = Modifier.width(sideButtonWidth))
-            }
+        when (timerState) {
+            is TimerState.Pomodoro,
+            is TimerState.Countdown,
+            is TimerState.Stopwatch,
+            is TimerState.CountdownFinished,
+            is TimerState.StopwatchFinished -> SecondaryControlButton(
+                onClick = onStop,
+                enabled = enabled,
+                icon = Icons.Default.Stop,
+                label = "结束"
+            )
+            TimerState.Idle -> Spacer(modifier = Modifier.size(48.dp))
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SecondaryControlButton(
-    modifier: Modifier = Modifier,
     onClick: () -> Unit,
+    enabled: Boolean,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    compact: Boolean = false
+    label: String
 ) {
-    OutlinedButton(
-        onClick = onClick,
-        modifier = modifier.height(if (compact) 46.dp else 50.dp),
-        shape = CircleShape,
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.24f)),
-        colors = ButtonDefaults.outlinedButtonColors(
-            containerColor = Color.White.copy(alpha = 0.12f),
-            contentColor = Color.White
-        ),
-        contentPadding = PaddingValues(horizontal = if (compact) 0.dp else 12.dp)
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
+        tooltip = { PlainTooltip { Text(label) } },
+        state = rememberTooltipState()
     ) {
-        Icon(icon, contentDescription = label, modifier = Modifier.size(if (compact) 22.dp else 20.dp))
-        if (!compact) {
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(label, maxLines = 1, style = MaterialTheme.typography.labelLarge)
+        OutlinedIconButton(
+            onClick = onClick,
+            enabled = enabled,
+            modifier = Modifier.size(48.dp),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.24f)),
+            colors = IconButtonDefaults.outlinedIconButtonColors(
+                containerColor = Color.White.copy(alpha = 0.12f),
+                contentColor = Color.White,
+                disabledContentColor = Color.White.copy(alpha = 0.38f)
+            )
+        ) {
+            Icon(icon, contentDescription = label, modifier = Modifier.size(22.dp))
         }
     }
 }
 
 @Composable
-private fun TimerDisplay(
+internal fun TimerDisplay(
     timerState: TimerState,
     compactMode: Boolean
 ) {
@@ -678,12 +698,16 @@ private fun TimerDisplay(
         !timerState.state.isRunning
 
     Column(
-        modifier = Modifier.padding(horizontal = 24.dp),
+        modifier = Modifier.widthIn(max = 600.dp).fillMaxWidth().padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
             text = displayText,
-            fontSize = if (compactMode) 112.sp else 96.sp,
+            modifier = Modifier.fillMaxWidth(),
+            fontSize = if (compactMode) 88.sp else 80.sp,
+            maxLines = 1,
+            autoSize = TextAutoSize.StepBased(minFontSize = 24.sp, maxFontSize = if (compactMode) 88.sp else 80.sp),
+            textAlign = TextAlign.Center,
             fontWeight = FontWeight.Bold,
             color = Color.White.copy(alpha = if (showPulse) alpha else 1f)
         )
