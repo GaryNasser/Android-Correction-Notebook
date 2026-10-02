@@ -1,10 +1,14 @@
 package com.github.garynasser.correction_notebook.ui.screens.knowledgebase
 
 import android.graphics.Bitmap
+import android.net.Uri
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
 import androidx.core.graphics.createBitmap
 import androidx.lifecycle.SavedStateHandle
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.toRoute
@@ -72,6 +76,11 @@ class KnowledgeBaseFileViewerViewModel @Inject constructor(
     var uiState = androidx.compose.runtime.mutableStateOf(KnowledgeBaseFileViewerUiState())
         private set
 
+    var exportMessage by mutableStateOf<String?>(null)
+        private set
+    var isExportError by mutableStateOf(false)
+        private set
+
     private var loadJob: Job? = null
     private var aiJob: Job? = null
     private var studySetJob: Job? = null
@@ -85,6 +94,22 @@ class KnowledgeBaseFileViewerViewModel @Inject constructor(
 
     fun refresh() {
         loadFile()
+    }
+
+    fun exportFile(fileId: String, targetUri: Uri) {
+        viewModelScope.launch {
+            exportMessage = "正在导出文件..."
+            isExportError = false
+            knowledgeBaseRepository.exportFile(fileId, targetUri)
+                .onSuccess {
+                    exportMessage = "已导出文件副本"
+                }
+                .onFailure { error ->
+                    if (error is CancellationException) throw error
+                    isExportError = true
+                    exportMessage = error.message ?: "导出失败，请重试"
+                }
+        }
     }
 
     fun runAiAction(mode: KnowledgeAiMode) {
