@@ -17,7 +17,6 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeout
 import javax.inject.Inject
 
 sealed interface CourseUiState {
@@ -179,7 +178,7 @@ class CourseListViewModel @Inject constructor(
 
             try {
                 runCatching {
-                    withTimeout(30_000) {
+                    awaitYanheResource(30_000, "课程同步超时，请重试") {
                         videoRepository.getAllPersonalCourses()
                     }
                 }.onSuccess { loadedCourses ->

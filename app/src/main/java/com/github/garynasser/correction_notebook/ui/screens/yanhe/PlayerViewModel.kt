@@ -109,16 +109,16 @@ class PlayerViewModel @Inject constructor(
     }
 
     private fun startPlay(mediaController: MediaController) {
-        val mediaItem = MediaItem.Builder()
+        val mediaItemBuilder = MediaItem.Builder()
             .setUri(videoUrl.toUri())
-            .setMimeType(MimeTypes.APPLICATION_M3U8)
             .setMediaMetadata(
                 MediaMetadata.Builder()
                     .setTitle(videoTitle.ifBlank { "延河课堂视频" })
                     .setAlbumTitle(courseName.ifBlank { "BITStudy" })
                     .build()
             )
-            .build()
+        inferCourseVideoMimeType(videoUrl)?.let(mediaItemBuilder::setMimeType)
+        val mediaItem = mediaItemBuilder.build()
 
         mediaController.setMediaItem(mediaItem)
         mediaController.prepare()
@@ -150,5 +150,14 @@ class PlayerViewModel @Inject constructor(
         }
         browserFuture = null
         super.onCleared()
+    }
+}
+
+internal fun inferCourseVideoMimeType(url: String): String? {
+    val path = url.substringBefore('#').substringBefore('?').lowercase()
+    return when {
+        path.endsWith(".m3u8") -> MimeTypes.APPLICATION_M3U8
+        path.endsWith(".mp4") || path.endsWith(".m4v") -> MimeTypes.VIDEO_MP4
+        else -> null
     }
 }

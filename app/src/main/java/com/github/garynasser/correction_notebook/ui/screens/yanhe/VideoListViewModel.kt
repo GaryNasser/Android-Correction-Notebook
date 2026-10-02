@@ -16,7 +16,6 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeout
 import javax.inject.Inject
 
 sealed interface VideoUIState {
@@ -80,7 +79,7 @@ class VideoListViewModel @Inject constructor(
             uiState = VideoUIState.Loading
             playState = PlayState.Idle
             try {
-                val results = withTimeout(20_000) {
+                val results = awaitYanheResource(20_000, "视频列表请求超时，请重试") {
                     videoRepository.getCourseSession(courseId)
                 }
 
@@ -103,7 +102,7 @@ class VideoListViewModel @Inject constructor(
                 val playableSection = if (section.videos.any { it.mainUrl.isNotBlank() || it.vgaUrl.isNotBlank() }) {
                     section
                 } else {
-                    withTimeout(12_000) {
+                    awaitYanheResource(12_000, "视频地址获取超时，请重新选择播放") {
                         videoRepository.getCourseSessionDetail(section.id)
                     }
                 }
