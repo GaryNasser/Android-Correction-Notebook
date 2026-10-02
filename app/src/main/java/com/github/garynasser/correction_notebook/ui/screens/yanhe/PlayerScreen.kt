@@ -3,7 +3,9 @@ package com.github.garynasser.correction_notebook.ui.screens.yanhe
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Error
@@ -11,6 +13,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -21,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.media3.ui.PlayerView
+import androidx.media3.common.Player
 
 @Composable
 fun PlayerScreen(
@@ -31,6 +35,19 @@ fun PlayerScreen(
     val controller by viewModel.controller // 监听 MediaController 的变化
     val videoTitle = viewModel.videoTitle.ifBlank { "延河课堂视频" }
     val courseName = viewModel.courseName
+
+    PlayerScreenContent(controller, playState, videoTitle, courseName, onBack, viewModel::retryPlayback)
+}
+
+@Composable
+internal fun PlayerScreenContent(
+    controller: Player?,
+    playState: PlayState,
+    videoTitle: String,
+    courseName: String,
+    onBack: () -> Unit,
+    onRetry: () -> Unit
+) {
 
     Box(
         modifier = Modifier
@@ -47,85 +64,67 @@ fun PlayerScreen(
                     }
                 },
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(16f / 9f) // 保持视频比例，或者使用 fillMaxSize()
-                    .align(Alignment.Center),
+                    .fillMaxSize()
+                    .testTag("playerSurface"),
                 update = { view ->
                     view.player = controller
+                },
+                onRelease = { view ->
+                    view.player = null
                 }
             )
-        } else {
-            PlayerPlaceholder(modifier = Modifier.align(Alignment.Center))
         }
 
-        if (playState is PlayState.Loading) {
-            PlayerLoadingOverlay(modifier = Modifier.fillMaxSize())
-        }
-
-        if (playState is PlayState.Error) {
-            PlayerErrorOverlay(
-                message = playState.message,
-                onRetry = viewModel::retryPlayback,
-                modifier = Modifier.fillMaxSize()
-            )
-        }
-
-        Surface(
-            modifier = Modifier
-                .padding(horizontal = 8.dp, vertical = 8.dp)
-                .align(Alignment.TopStart)
-                .fillMaxWidth(),
-            shape = RoundedCornerShape(8.dp),
-            color = Color.Black.copy(alpha = 0.44f)
-        ) {
-            Row(
-                modifier = Modifier.padding(end = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
+        Column(Modifier.fillMaxSize()) {
+            Surface(
+                modifier = Modifier
+                    .padding(horizontal = 8.dp, vertical = 8.dp)
+                    .fillMaxWidth(),
+                shape = RoundedCornerShape(8.dp),
+                color = Color.Black.copy(alpha = 0.44f)
             ) {
-                IconButton(onClick = onBack) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "返回",
-                        tint = Color.White
-                    )
-                }
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.Center
+                Row(
+                    modifier = Modifier.padding(end = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = videoTitle,
-                        color = Color.White,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    if (courseName.isNotBlank()) {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "返回",
+                            tint = Color.White
+                        )
+                    }
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.Center
+                    ) {
                         Text(
-                            text = courseName,
-                            color = Color.White.copy(alpha = 0.72f),
-                            style = MaterialTheme.typography.bodySmall,
+                            text = videoTitle,
+                            color = Color.White,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
+                        if (courseName.isNotBlank()) {
+                            Text(
+                                text = courseName,
+                                color = Color.White.copy(alpha = 0.72f),
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun PlayerPlaceholder(modifier: Modifier = Modifier) {
-    Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .aspectRatio(16f / 9f),
-        color = Color(0xFF151515)
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp)
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                when (playState) {
+                    is PlayState.Loading -> PlayerLoadingOverlay(Modifier.fillMaxSize())
+                    is PlayState.Error -> PlayerErrorOverlay(playState.message, onRetry, Modifier.fillMaxSize())
+                    else -> Unit
+                }
+            }
         }
     }
 }
@@ -146,7 +145,7 @@ private fun PlayerLoadingOverlay(modifier: Modifier = Modifier) {
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(22.dp))
-                Text("流媒体缓冲中...", color = Color.White)
+                Text("正在缓冲", color = Color.White, style = MaterialTheme.typography.bodyMedium)
             }
         }
     }
@@ -159,26 +158,29 @@ private fun PlayerErrorOverlay(
     modifier: Modifier = Modifier
 ) {
     Box(
-        modifier = modifier.background(Color.Black.copy(alpha = 0.88f)),
+        modifier = modifier.background(Color.Black.copy(alpha = 0.88f)).padding(16.dp),
         contentAlignment = Alignment.Center
     ) {
         Surface(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 28.dp),
+                .widthIn(max = 480.dp)
+                .fillMaxWidth(),
             color = Color(0xFF181818),
             shape = RoundedCornerShape(8.dp),
             border = BorderStroke(1.dp, Color.White.copy(alpha = 0.16f))
         ) {
             Column(
-                modifier = Modifier.padding(18.dp),
+                modifier = Modifier.padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Icon(Icons.Default.Error, contentDescription = null, tint = Color(0xFFFFD2D2), modifier = Modifier.size(30.dp))
-                Text("播放失败", color = Color.White, style = MaterialTheme.typography.titleMedium)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.Error, contentDescription = null, tint = Color(0xFFFFD2D2), modifier = Modifier.size(24.dp))
+                    Text("播放失败", color = Color.White, style = MaterialTheme.typography.titleSmall)
+                }
                 Text(
                     text = message,
+                    modifier = Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
                     color = Color(0xFFC9C9C9),
                     style = MaterialTheme.typography.bodySmall,
                     textAlign = TextAlign.Center
