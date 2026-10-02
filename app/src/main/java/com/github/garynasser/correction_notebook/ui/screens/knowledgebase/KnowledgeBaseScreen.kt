@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -495,6 +496,7 @@ fun KnowledgeBaseScreen(
                 pendingRemoteDownload = null
                 viewModel.dismissRemoteDetail()
             },
+            onCancelClick = viewModel::cancelRemoteDownload,
             onDownloadClick = { showDownloadFolderPicker = true }
         )
     }
@@ -2687,17 +2689,28 @@ private fun LearningContextDialog(
 }
 
 @Composable
-private fun RemoteDetailDialog(
+internal fun RemoteDetailDialog(
     detail: BitShareFileDetail,
     isDownloading: Boolean,
     onDismiss: () -> Unit,
+    onCancelClick: () -> Unit,
     onDownloadClick: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(detail.title) },
+        title = { Text("文件详情", style = MaterialTheme.typography.titleMedium) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (isDownloading) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        Text("正在下载", style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+                DetailLine("名称", detail.title)
                 DetailLine("原始文件名", detail.originalName)
                 DetailLine("文件大小", formatFileSize(detail.sizeBytes))
                 DetailLine("下载量", detail.downloadCount.toString())
@@ -2709,22 +2722,16 @@ private fun RemoteDetailDialog(
             }
         },
         confirmButton = {
-            Button(
-                onClick = onDownloadClick,
-                enabled = !isDownloading
-            ) {
-                if (isDownloading) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.dp
-                        )
-                        Text("下载中…")
-                    }
-                } else {
+            if (isDownloading) {
+                TextButton(onClick = onCancelClick) {
+                    Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("取消下载")
+                }
+            } else {
+                Button(onClick = onDownloadClick) {
+                    Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
                     Text("下载到知识库")
                 }
             }

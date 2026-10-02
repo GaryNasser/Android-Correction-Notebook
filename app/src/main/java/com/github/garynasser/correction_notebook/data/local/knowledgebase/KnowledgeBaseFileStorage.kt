@@ -3,6 +3,10 @@ package com.github.garynasser.correction_notebook.data.local.knowledgebase
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.InputStream
@@ -47,27 +51,39 @@ class KnowledgeBaseFileStorage @Inject constructor(
         folderPathIds: List<String>,
         preferredName: String,
         inputStream: InputStream
-    ): StoredKnowledgeBaseFile = withContext(Dispatchers.IO) {
-        val folder = ensureFolderPath(folderPathIds)
-        val storedName = "${UUID.randomUUID()}-${preferredName.sanitizeFileName()}"
-        val targetFile = File(folder, storedName)
-
+    ): StoredKnowledgeBaseFile {
+        var targetFile: File? = null
+        var inputOwned = false
         try {
-            inputStream.use { input ->
-                targetFile.outputStream().use { output ->
-                    copyKnowledgeBaseFile(input, output)
+            return withContext(Dispatchers.IO) {
+                inputOwned = true
+                inputStream.use { input ->
+                    val folder = ensureFolderPath(folderPathIds)
+                    val storedName = "${UUID.randomUUID()}-${preferredName.sanitizeFileName()}"
+                    val target = File(folder, storedName).also { targetFile = it }
+                    val coroutineContext = currentCoroutineContext()
+                    runInterruptible {
+                        target.outputStream().use { output ->
+                            copyKnowledgeBaseFile(input, output, checkCancelled = { coroutineContext.ensureActive() })
+                        }
+                    }
+                    coroutineContext.ensureActive()
+                    StoredKnowledgeBaseFile(storedName, target.absolutePath, target.length())
                 }
             }
         } catch (error: Throwable) {
-            targetFile.delete()
+            try {
+                withContext(NonCancellable + Dispatchers.IO) {
+                    targetFile?.let { target ->
+                        check(!target.exists() || target.delete()) { "无法清理未完成的导入文件" }
+                    }
+                    if (!inputOwned) inputStream.close()
+                }
+            } catch (cleanupError: Throwable) {
+                error.addSuppressed(cleanupError)
+            }
             throw error
         }
-
-        StoredKnowledgeBaseFile(
-            storedName = storedName,
-            absolutePath = targetFile.absolutePath,
-            sizeBytes = targetFile.length()
-        )
     }
 
     suspend fun moveFile(
@@ -157,13 +173,16 @@ internal fun commitStagedKnowledgeBaseFileDeletion(deletion: PendingKnowledgeBas
 internal fun copyKnowledgeBaseFile(
     input: InputStream,
     output: OutputStream,
-    maxBytes: Long = MAX_KNOWLEDGE_BASE_FILE_BYTES
+    maxBytes: Long = MAX_KNOWLEDGE_BASE_FILE_BYTES,
+    checkCancelled: () -> Unit = {}
 ): Long {
     require(maxBytes > 0) { "文件大小上限必须大于 0" }
     val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
     var totalBytes = 0L
     while (true) {
+        checkCancelled()
         val read = input.read(buffer)
+        checkCancelled()
         if (read < 0) break
         if (totalBytes + read > maxBytes) {
             val megabyte = 1024L * 1024L

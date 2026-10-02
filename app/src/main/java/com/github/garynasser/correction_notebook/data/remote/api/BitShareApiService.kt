@@ -27,9 +27,9 @@ interface BitShareApiService {
 
     @Streaming
     @GET("api/public/files/{fileId}/download")
-    suspend fun downloadFile(
+    fun downloadFile(
         @Path("fileId") fileId: String
-    ): ResponseBody
+    ): retrofit2.Call<ResponseBody>
 
     /**
      * 批量下载文件
