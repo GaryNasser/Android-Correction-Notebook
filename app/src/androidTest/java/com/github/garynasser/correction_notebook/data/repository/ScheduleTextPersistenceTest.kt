@@ -16,9 +16,46 @@ import org.junit.runner.RunWith
 import java.util.UUID
 import java.io.File
 import java.time.LocalDateTime
+import java.time.ZoneId
+import com.github.garynasser.correction_notebook.data.model.home.ScheduleRange
 
 @RunWith(AndroidJUnit4::class)
 class ScheduleTextPersistenceTest {
+    @Test
+    fun timezoneOnlyChangeIsPreviewedAndChangesFutureCourseTimes() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val repository = ScheduleRepository(context)
+        val importer = IcsImportRepository(context, repository)
+        val token = UUID.randomUUID().toString()
+        val file = File(File(context.filesDir, "knowledge_base").apply { mkdirs() }, "qa_zone_$token.ics")
+        val raw = listOf("BEGIN:VCALENDAR", "VERSION:2.0", "X-WR-CALNAME:$token", "BEGIN:VEVENT", "UID:$token",
+            "DTSTART;TZID=America/New_York:20000103T090000", "DTEND;TZID=America/New_York:20000103T100000",
+            "RRULE:FREQ=WEEKLY;COUNT=30", "SUMMARY:Timezone fixture", "END:VEVENT", "END:VCALENDAR").joinToString("\r\n")
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        var calendarId: String? = null
+        try {
+            file.writeText(raw)
+            val first = importer.buildPreview(uri)
+            calendarId = first.sourceCalendarId
+            repository.applyImportPreview(first, ImportDecision.MERGE)
+            file.writeText(raw.replace("America/New_York", "America/Bogota"))
+            val update = importer.buildPreview(uri)
+            assertEquals(first.incomingEvents.single().startAt, update.incomingEvents.single().startAt)
+            assertEquals(1, update.updated.size)
+            assertTrue(update.added.isEmpty() && update.conflicts.isEmpty() && update.deleted.isEmpty())
+            repository.applyImportPreview(update, ImportDecision.MERGE)
+            val stored = repository.getImportedEventsForCalendar(first.sourceCalendarId).single()
+            assertEquals("America/Bogota", stored.timezoneId)
+            val expected = LocalDateTime.of(2000, 4, 3, 9, 0).atZone(ZoneId.of("America/Bogota"))
+                .withZoneSameInstant(ZoneId.systemDefault()).toLocalDateTime()
+            assertTrue(repository.getEventsForRange(ScheduleRange.WEEK, expected.toLocalDate())
+                .flatMap { it.items }.any { it.eventId == stored.id && it.startAt == expected })
+        } finally {
+            calendarId?.let { repository.getImportedEventsForCalendar(it).forEach { event -> repository.deleteEvent(event.id) } }
+            file.delete()
+        }
+    }
+
     @Test
     fun fileUriImportReimportConflictAndOverwritePreserveTextAndUnrelatedEvents() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()

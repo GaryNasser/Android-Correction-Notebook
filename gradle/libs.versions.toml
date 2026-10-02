@@ -28,8 +28,10 @@ hiltNavigationCompose = "1.2.0"
 media3 = "1.2.0"
 firebaseCrashlyticsBuildtools = "3.0.6"  # Compose编译器版本
 room = "2.6.1"
+libRecur = "0.17.1"
 
 [libraries]
+lib-recur = { group = "org.dmfs", name = "lib-recur", version.ref = "libRecur" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
