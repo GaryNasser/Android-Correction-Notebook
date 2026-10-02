@@ -7,8 +7,11 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -46,6 +49,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
@@ -53,6 +57,7 @@ import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -72,6 +77,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -86,6 +94,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -128,6 +137,14 @@ fun AITutorScreen(
     val hasCurrentSession = uiState.selectedSessionId != null
     val canChangeSession = !uiState.isLoading && !uiState.isChatActionBusy
     val canSendMessage = canChangeSession && uiState.isConfigured
+    val keyboardController = LocalSoftwareKeyboardController.current
+    fun sendInput() {
+        if (inputText.isNotBlank() && canSendMessage) {
+            viewModel.sendMessage(inputText)
+            inputText = ""
+            keyboardController?.hide()
+        }
+    }
 
     LaunchedEffect(uiState.messages.size, uiState.isLoading) {
         val targetIndex = when {
@@ -236,11 +253,17 @@ fun AITutorScreen(
                 )
 
                 if (uiState.messages.isEmpty()) {
-                    EmptyChatState(
-                        isKnowledgeMode = uiState.isKnowledgeMode,
-                        onSuggestion = { inputText = it },
-                        modifier = Modifier.weight(1f)
-                    )
+                    if (uiState.isLoading) {
+                        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            AiTypingIndicator()
+                        }
+                    } else {
+                        EmptyChatState(
+                            isKnowledgeMode = uiState.isKnowledgeMode,
+                            onSuggestion = { inputText = it },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 } else {
                     LazyColumn(
                         state = chatListState,
@@ -284,14 +307,7 @@ fun AITutorScreen(
                                 Text(if (uiState.isKnowledgeMode) "询问知识库资料..." else "输入学习问题...")
                             },
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                            keyboardActions = KeyboardActions(
-                                onSend = {
-                                    if (inputText.isNotBlank() && canSendMessage) {
-                                        viewModel.sendMessage(inputText)
-                                        inputText = ""
-                                    }
-                                }
-                            ),
+                            keyboardActions = KeyboardActions(onSend = { sendInput() }),
                             maxLines = 3,
                             enabled = canSendMessage,
                             shape = RoundedCornerShape(8.dp)
@@ -299,15 +315,14 @@ fun AITutorScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                         FilledIconButton(
                             onClick = {
-                                viewModel.sendMessage(inputText)
-                                inputText = ""
+                                if (uiState.isLoading) viewModel.cancelReply() else sendInput()
                             },
-                            enabled = inputText.isNotBlank() && canSendMessage,
-                            modifier = Modifier.size(42.dp),
+                            enabled = uiState.isLoading || (inputText.isNotBlank() && canSendMessage),
+                            modifier = Modifier.size(48.dp),
                             shape = RoundedCornerShape(8.dp)
                         ) {
                             if (uiState.isLoading) {
-                                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                Icon(Icons.Default.Stop, contentDescription = "停止回复", modifier = Modifier.size(20.dp))
                             } else {
                                 Icon(
                                     Icons.AutoMirrored.Filled.Send,
@@ -494,7 +509,7 @@ private fun EmptyAiState(onConfigure: () -> Unit) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun AiTutorHeader(
     uiState: AITutorUiState,
@@ -506,25 +521,23 @@ private fun AiTutorHeader(
 
     Surface(
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.66f),
-        shape = RoundedCornerShape(8.dp),
-        tonalElevation = 1.dp
+            .fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surface
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
+        FlowRow(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            maxItemsInEachRow = 2
         ) {
             Row(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).widthIn(min = 180.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Default.Psychology, contentDescription = null)
-                Spacer(modifier = Modifier.width(10.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         uiState.activeProvider?.name.orEmpty(),
+                        style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Medium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -532,26 +545,35 @@ private fun AiTutorHeader(
                     Text(
                         text = selectedSession?.title ?: uiState.activeProvider?.defaultModel.orEmpty(),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
+                IconButton(onClick = onOpenSessions, enabled = enabled) {
+                    Icon(Icons.Default.History, contentDescription = "选择对话", modifier = Modifier.size(20.dp))
+                }
             }
-            TextButton(
-                onClick = onOpenSessions,
-                enabled = enabled,
-                shape = RoundedCornerShape(8.dp)
-            ) {
-                Text("对话")
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.weight(1f).widthIn(min = 160.dp)) {
+                SegmentedButton(
+                    selected = !uiState.isKnowledgeMode,
+                    onClick = { onKnowledgeModeChange(false) },
+                    enabled = enabled,
+                    shape = SegmentedButtonDefaults.itemShape(0, 2),
+                    modifier = Modifier.heightIn(min = 48.dp),
+                    icon = {},
+                    label = { Text("普通") }
+                )
+                SegmentedButton(
+                    selected = uiState.isKnowledgeMode,
+                    onClick = { onKnowledgeModeChange(true) },
+                    enabled = enabled,
+                    shape = SegmentedButtonDefaults.itemShape(1, 2),
+                    modifier = Modifier.heightIn(min = 48.dp),
+                    icon = {},
+                    label = { Text("资料") }
+                )
             }
-            AssistChip(
-                onClick = { onKnowledgeModeChange(!uiState.isKnowledgeMode) },
-                enabled = enabled,
-                leadingIcon = { Icon(Icons.AutoMirrored.Filled.LibraryBooks, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                label = { Text(if (uiState.isKnowledgeMode) "资料" else "普通") },
-                shape = RoundedCornerShape(8.dp)
-            )
         }
     }
 }
@@ -630,50 +652,33 @@ private fun EmptyChatState(
     onSuggestion: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .heightIn(min = 148.dp),
-        shape = RoundedCornerShape(8.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.36f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.28f))
+    BoxWithConstraints(
+        modifier = modifier.fillMaxWidth(),
+        contentAlignment = Alignment.Center
     ) {
+        val showIntro = maxHeight >= 128.dp
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 18.dp),
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.64f)
-            ) {
+            if (showIntro) {
                 Icon(
                     if (isKnowledgeMode) Icons.AutoMirrored.Filled.LibraryBooks else Icons.Default.SmartToy,
                     contentDescription = null,
-                    modifier = Modifier
-                        .padding(8.dp)
-                        .size(28.dp),
+                    modifier = Modifier.size(28.dp),
                     tint = MaterialTheme.colorScheme.primary
                 )
+                Text(
+                    text = if (isKnowledgeMode) "资料问答" else "新的学习对话",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
             }
-            Text(
-                text = if (isKnowledgeMode) "问你的知识库" else "AI 学习导师已就绪",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                text = if (isKnowledgeMode) {
-                    "基于已导入的资料提问，适合复习前快速抓重点。"
-                } else {
-                    "从今天的任务开始，直接让 AI 帮你拆成可执行安排。"
-                },
-                style = MaterialTheme.typography.bodySmall,
-                textAlign = TextAlign.Center,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
             SuggestionChip(
                 onClick = {
                     onSuggestion(
@@ -699,7 +704,7 @@ fun ChatMessageItem(message: ChatUiMessage) {
             Spacer(modifier = Modifier.width(8.dp))
         }
         Surface(
-            shape = MaterialTheme.shapes.large,
+            shape = RoundedCornerShape(8.dp),
             color = if (message.isUser) {
                 MaterialTheme.colorScheme.primary
             } else {
@@ -715,7 +720,8 @@ fun ChatMessageItem(message: ChatUiMessage) {
                     Text(
                         text = message.content,
                         modifier = Modifier.padding(12.dp),
-                        color = MaterialTheme.colorScheme.onPrimary
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        style = MaterialTheme.typography.bodyMedium
                     )
                 } else {
                     MarkdownMessage(
@@ -1800,8 +1806,8 @@ fun ProviderDialog(
             onDismissRequest = {
                 if (!uiState.isProviderBusy) providerToDelete = null
             },
-            title = { Text("删除 Provider") },
-            text = { Text("确定删除“${provider.name}”吗？API Key 和模型配置会一起移除。") },
+            title = { Text("删除 Provider", style = MaterialTheme.typography.titleMedium) },
+            text = { Text("确定删除“${provider.name}”吗？API Key、模型配置和关联对话（含全部消息）都会被删除。") },
             confirmButton = {
                 TextButton(
                     onClick = {

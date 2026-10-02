@@ -2,6 +2,7 @@ package com.github.garynasser.correction_notebook.domain.usecase
 
 import com.github.garynasser.correction_notebook.data.local.ai.UserMemoryEntity
 import com.github.garynasser.correction_notebook.data.model.ai.AiActionResult
+import com.github.garynasser.correction_notebook.data.model.ai.AIProviderConfig
 import com.github.garynasser.correction_notebook.data.model.ai.MemoryCategory
 import com.github.garynasser.correction_notebook.data.model.ai.NormalizedChatMessage
 import com.github.garynasser.correction_notebook.data.model.home.ScheduleRange
@@ -42,12 +43,16 @@ class AiStudyUseCase @Inject constructor(
 ) {
     suspend fun chat(
         messages: List<NormalizedChatMessage>,
-        systemPrompt: String = DEFAULT_TUTOR_PROMPT
+        systemPrompt: String = DEFAULT_TUTOR_PROMPT,
+        providerConfig: AIProviderConfig? = null
     ): Result<String> {
+        val config = providerConfig ?: aiRepository.activeProviderConfig()
+            ?: return Result.failure(IllegalStateException("请先配置 AI Provider"))
         return aiRepository.sendChat(
             messages = messages,
             systemPrompt = systemPrompt,
-            memorySummary = memorySummary()
+            memorySummary = memorySummary(),
+            providerConfig = config
         )
     }
 
@@ -55,8 +60,11 @@ class AiStudyUseCase @Inject constructor(
         question: String,
         folderId: String? = null,
         fileId: String? = null,
-        courseId: Int? = null
+        courseId: Int? = null,
+        providerConfig: AIProviderConfig? = null
     ): Result<String> {
+        val config = providerConfig ?: aiRepository.activeProviderConfig()
+            ?: return Result.failure(IllegalStateException("请先配置 AI Provider"))
         fileId?.let { knowledgeBaseAiRepository.ensureIndexed(it) }
         val chunks = knowledgeBaseAiRepository.searchContext(question, folderId, fileId, courseId)
         if (chunks.isEmpty()) {
@@ -74,11 +82,14 @@ class AiStudyUseCase @Inject constructor(
         return aiRepository.sendChat(
             messages = listOf(NormalizedChatMessage("user", question)),
             systemPrompt = prompt,
-            memorySummary = memorySummary()
+            memorySummary = memorySummary(),
+            providerConfig = config
         )
     }
 
     suspend fun summarizeKnowledgeFile(fileId: String, mode: KnowledgeAiMode): Result<String> {
+        val config = aiRepository.activeProviderConfig()
+            ?: return Result.failure(IllegalStateException("请先配置 AI Provider"))
         val chunks = knowledgeBaseAiRepository.contextForFile(fileId)
         if (chunks.isEmpty()) {
             return Result.failure(Exception("当前文件暂不支持抽取文本，PDF 第一版不做 OCR"))
@@ -95,7 +106,8 @@ class AiStudyUseCase @Inject constructor(
         return aiRepository.sendChat(
             messages = listOf(NormalizedChatMessage("user", "$instruction\n\n资料内容：\n$context")),
             systemPrompt = DEFAULT_TUTOR_PROMPT,
-            memorySummary = memorySummary()
+            memorySummary = memorySummary(),
+            providerConfig = config
         )
     }
 
@@ -106,6 +118,8 @@ class AiStudyUseCase @Inject constructor(
     }
 
     suspend fun generateStudySetFromKnowledgeFile(fileId: String): Result<StudySetDraft> {
+        val config = aiRepository.activeProviderConfig()
+            ?: return Result.failure(IllegalStateException("请先配置 AI Provider"))
         val file = knowledgeBaseRepository.getFileSummary(fileId)
         val chunks = knowledgeBaseAiRepository.contextForFile(fileId)
         if (chunks.isEmpty()) {
@@ -125,7 +139,8 @@ class AiStudyUseCase @Inject constructor(
         return aiRepository.sendChat(
             messages = listOf(NormalizedChatMessage("user", prompt)),
             systemPrompt = DEFAULT_TUTOR_PROMPT,
-            memorySummary = memorySummary()
+            memorySummary = memorySummary(),
+            providerConfig = config
         ).fold(
             onSuccess = { raw ->
                 val draft = StudySetDraftParser.parse(raw, fallbackTitle)
@@ -140,6 +155,8 @@ class AiStudyUseCase @Inject constructor(
     }
 
     suspend fun generateTodayPlan(targetDate: LocalDate = LocalDate.now()): Result<AiActionResult> {
+        val config = aiRepository.activeProviderConfig()
+            ?: return Result.failure(IllegalStateException("请先配置 AI Provider"))
         val context = buildTodayLearningContext(targetDate)
         val dateLabel = formatTargetDate(targetDate)
         val prompt = """
@@ -155,11 +172,14 @@ class AiStudyUseCase @Inject constructor(
         return aiRepository.sendChat(
             messages = listOf(NormalizedChatMessage("user", prompt)),
             systemPrompt = DEFAULT_TUTOR_PROMPT,
-            memorySummary = memorySummary()
+            memorySummary = memorySummary(),
+            providerConfig = config
         ).map(AiActionParser::parse)
     }
 
     suspend fun generateTodayAdvice(targetDate: LocalDate = LocalDate.now()): Result<String> {
+        val config = aiRepository.activeProviderConfig()
+            ?: return Result.failure(IllegalStateException("请先配置 AI Provider"))
         val dateLabel = formatTargetDate(targetDate)
         val todos = todoRepository.todoItems.first()
             .filterNot { it.isCompleted }
@@ -185,11 +205,14 @@ class AiStudyUseCase @Inject constructor(
         return aiRepository.sendChat(
             messages = listOf(NormalizedChatMessage("user", prompt)),
             systemPrompt = DEFAULT_TUTOR_PROMPT,
-            memorySummary = memorySummary()
+            memorySummary = memorySummary(),
+            providerConfig = config
         )
     }
 
     suspend fun breakDownTodo(title: String, description: String): Result<String> {
+        val config = aiRepository.activeProviderConfig()
+            ?: return Result.failure(IllegalStateException("请先配置 AI Provider"))
         return aiRepository.sendChat(
             messages = listOf(
                 NormalizedChatMessage(
@@ -198,11 +221,14 @@ class AiStudyUseCase @Inject constructor(
                 )
             ),
             systemPrompt = DEFAULT_TUTOR_PROMPT,
-            memorySummary = memorySummary()
+            memorySummary = memorySummary(),
+            providerConfig = config
         )
     }
 
     suspend fun breakDownTodoStructured(title: String, description: String): Result<AiActionResult> {
+        val config = aiRepository.activeProviderConfig()
+            ?: return Result.failure(IllegalStateException("请先配置 AI Provider"))
         val prompt = """
             请把这个学习待办拆成 3-6 个可执行小任务，并为每个小任务生成 CREATE_TODO action。
             ${AiActionParser.instruction()}
@@ -213,11 +239,14 @@ class AiStudyUseCase @Inject constructor(
         return aiRepository.sendChat(
             messages = listOf(NormalizedChatMessage("user", prompt)),
             systemPrompt = DEFAULT_TUTOR_PROMPT,
-            memorySummary = memorySummary()
+            memorySummary = memorySummary(),
+            providerConfig = config
         ).map(AiActionParser::parse)
     }
 
     suspend fun summarizeCourseSection(sectionTitle: String, note: String): Result<String> {
+        val config = aiRepository.activeProviderConfig()
+            ?: return Result.failure(IllegalStateException("请先配置 AI Provider"))
         return aiRepository.sendChat(
             messages = listOf(
                 NormalizedChatMessage(
@@ -232,7 +261,8 @@ class AiStudyUseCase @Inject constructor(
                 )
             ),
             systemPrompt = DEFAULT_TUTOR_PROMPT,
-            memorySummary = memorySummary()
+            memorySummary = memorySummary(),
+            providerConfig = config
         )
     }
 
@@ -243,6 +273,8 @@ class AiStudyUseCase @Inject constructor(
         sectionTitle: String,
         note: String
     ): Result<AiActionResult> {
+        val config = aiRepository.activeProviderConfig()
+            ?: return Result.failure(IllegalStateException("请先配置 AI Provider"))
         val prompt = """
             请为这节课生成“AI 学习包”，包含 summary、SAVE_COURSE_NOTE action 和 2-4 个 CREATE_TODO action。
             ${AiActionParser.instruction()}
@@ -256,7 +288,8 @@ class AiStudyUseCase @Inject constructor(
         return aiRepository.sendChat(
             messages = listOf(NormalizedChatMessage("user", prompt)),
             systemPrompt = DEFAULT_TUTOR_PROMPT,
-            memorySummary = memorySummary()
+            memorySummary = memorySummary(),
+            providerConfig = config
         ).map(AiActionParser::parse)
     }
 
@@ -265,6 +298,8 @@ class AiStudyUseCase @Inject constructor(
         endDate: LocalDate,
         periodLabel: String
     ): Result<String> {
+        val config = aiRepository.activeProviderConfig()
+            ?: return Result.failure(IllegalStateException("请先配置 AI Provider"))
         val sessions = studySessionRepository.getSessionsBetween(startDate, endDate)
         val totalMinutes = sessions.sumOf { it.durationMinutes }
         val completedPomodoros = sessions.sumOf {
@@ -309,7 +344,8 @@ class AiStudyUseCase @Inject constructor(
         return aiRepository.sendChat(
             messages = listOf(NormalizedChatMessage("user", prompt)),
             systemPrompt = DEFAULT_TUTOR_PROMPT,
-            memorySummary = memorySummary()
+            memorySummary = memorySummary(),
+            providerConfig = config
         )
     }
 
