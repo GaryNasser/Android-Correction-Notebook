@@ -153,6 +153,10 @@ fun HomeScreen(
             timerManager = homeViewModel.timerManager,
             onExit = { homeViewModel.finishCurrentSessionAndExit() },
             onStop = { homeViewModel.finishCurrentSessionAndExit() },
+            onReset = homeViewModel::resetCurrentSession,
+            isSavingSession = uiState.isSavingStudySession,
+            sessionError = uiState.studySessionError,
+            onDismissSessionError = homeViewModel::dismissStudySessionError,
             backgroundImageUri = uiState.backgroundImageUri,
             soundEnabled = uiState.soundEnabled,
             vibrationEnabled = uiState.vibrationEnabled,
@@ -2131,7 +2135,7 @@ fun TodayStudyWorkbench(
                 onRecentFilesClick = onRecentFilesClick
             )
 
-            if (timerState !is TimerState.Idle) {
+            if (timerState is TimerState.Pomodoro || timerState is TimerState.Countdown || timerState is TimerState.Stopwatch) {
                 AssistChip(
                     onClick = onImmersiveModeClick,
                     leadingIcon = {
@@ -2144,9 +2148,9 @@ fun TodayStudyWorkbench(
                     label = {
                         Text(
                             when (timerState) {
-                                is TimerState.Pomodoro -> "番茄钟运行中"
-                                is TimerState.Countdown -> "倒计时运行中"
-                                is TimerState.Stopwatch -> "计时中"
+                                is TimerState.Pomodoro -> if (timerState.state.isRunning) "番茄钟运行中" else "番茄钟已暂停"
+                                is TimerState.Countdown -> if (timerState.isRunning) "倒计时运行中" else "倒计时已暂停"
+                                is TimerState.Stopwatch -> if (timerState.isRunning) "计时中" else "计时已暂停"
                                 else -> ""
                             }
                         )

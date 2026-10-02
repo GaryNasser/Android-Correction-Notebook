@@ -64,10 +64,16 @@ fun MainContainer(
     val snackbarHostState = remember { SnackbarHostState() }
     val aiEnabledSetting by aiSettingsManager.aiEnabled.collectAsStateWithLifecycle(initialValue = null)
     val aiEnabled = aiEnabledSetting == true
-    var hideBottomBar by remember { mutableStateOf(false) }
+    var fullscreenEntryId by remember { mutableStateOf<String?>(null) }
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
+    val hideBottomBar = fullscreenEntryId != null && fullscreenEntryId == navBackStackEntry?.id
+
+    fun updateFullscreen(entryId: String, fullscreen: Boolean) {
+        if (fullscreen) fullscreenEntryId = entryId
+        else if (fullscreenEntryId == entryId) fullscreenEntryId = null
+    }
 
     // 自动判断当前路由是否在底部栏列表中
     val shouldShowBottomBar = bottomNavList.any { item ->
@@ -76,12 +82,6 @@ fun MainContainer(
 
     LaunchedEffect(Unit) {
         appUpdateViewModel.checkForUpdates(silent = true)
-    }
-
-    LaunchedEffect(currentDestination) {
-        if (currentDestination?.hasRoute(Home::class) != true && hideBottomBar) {
-            hideBottomBar = false
-        }
     }
 
     LaunchedEffect(aiEnabledSetting, currentDestination) {
@@ -162,7 +162,7 @@ fun MainContainer(
             startDestination = Home,
             modifier = Modifier.padding(innerPadding)
         ) {
-            composable<Home> {
+            composable<Home> { entry ->
                 HomeScreen(
                     onOpenArticle = { article ->
                         navController.navigate(ArticleDetailRoute(article.id, article.url))
@@ -195,7 +195,7 @@ fun MainContainer(
                     onOpenKnowledgeFile = { fileId ->
                         navController.navigate(KnowledgeBaseFileViewer(fileId))
                     },
-                    onFullscreenModeChanged = { hideBottomBar = it }
+                    onFullscreenModeChanged = { updateFullscreen(entry.id, it) }
                 )
             }
             composable<ArticleDetailRoute> {
@@ -207,12 +207,12 @@ fun MainContainer(
                 navController.navigate(VideoList(courseId, courseName))
             }) }
             composable<AITutor> { AITutorScreen() }
-            composable<KnowledgeBase> {
+            composable<KnowledgeBase> { entry ->
                 KnowledgeBaseScreen(
                     onOpenFile = { fileId ->
                         navController.navigate(KnowledgeBaseFileViewer(fileId))
                     },
-                    onFullscreenModeChanged = { hideBottomBar = it }
+                    onFullscreenModeChanged = { updateFullscreen(entry.id, it) }
                 )
             }
 
