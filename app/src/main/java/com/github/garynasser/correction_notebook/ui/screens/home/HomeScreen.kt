@@ -313,6 +313,7 @@ fun HomeScreen(
 
     if (uiState.showAddScheduleDialog) {
         AddScheduleDialog(
+            initialDate = uiState.selectedDate,
             isSaving = uiState.isEditingSchedule,
             onDismiss = { homeViewModel.hideAddScheduleDialog() },
             onAdd = { event -> homeViewModel.addSchedule(event) }

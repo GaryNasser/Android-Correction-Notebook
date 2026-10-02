@@ -47,21 +47,21 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TimePickerState
 import androidx.compose.material3.rememberDatePickerState
-import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import com.github.garynasser.correction_notebook.ui.components.LocalAiEnabled
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -80,7 +80,6 @@ import com.github.garynasser.correction_notebook.data.model.home.TodoItem
 import com.github.garynasser.correction_notebook.data.repository.scheduleDateRange
 import com.github.garynasser.correction_notebook.ui.components.FreshCard
 import java.time.LocalDate
-import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
@@ -583,19 +582,23 @@ private fun formatScheduleTimeCompact(item: ScheduleOccurrence): String {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddScheduleDialog(
+    initialDate: LocalDate = LocalDate.now(),
     isSaving: Boolean = false,
     onDismiss: () -> Unit,
     onAdd: (ScheduleEvent) -> Unit
 ) {
-    var title by remember { mutableStateOf("") }
-    var location by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
-    var allDay by remember { mutableStateOf(false) }
-    var selectedDate by remember { mutableStateOf(LocalDate.now()) }
-    var showDatePicker by remember { mutableStateOf(false) }
-    var validationMessage by remember { mutableStateOf<String?>(null) }
-    val startTimeState = rememberTimePickerState(initialHour = 9, initialMinute = 0, is24Hour = true)
-    val endTimeState = rememberTimePickerState(initialHour = 10, initialMinute = 0, is24Hour = true)
+    var title by rememberSaveable { mutableStateOf("") }
+    var location by rememberSaveable { mutableStateOf("") }
+    var description by rememberSaveable { mutableStateOf("") }
+    var allDay by rememberSaveable { mutableStateOf(false) }
+    var selectedDateText by rememberSaveable { mutableStateOf(initialDate.toString()) }
+    val selectedDate = LocalDate.parse(selectedDateText)
+    var showDatePicker by rememberSaveable { mutableStateOf(false) }
+    var validationMessage by rememberSaveable { mutableStateOf<String?>(null) }
+    var startHour by rememberSaveable { mutableStateOf("09") }
+    var startMinute by rememberSaveable { mutableStateOf("00") }
+    var endHour by rememberSaveable { mutableStateOf("10") }
+    var endMinute by rememberSaveable { mutableStateOf("00") }
     val fieldShape = RoundedCornerShape(8.dp)
 
     AlertDialog(
@@ -603,6 +606,7 @@ fun AddScheduleDialog(
             if (!isSaving) onDismiss()
         },
         shape = RoundedCornerShape(8.dp),
+        containerColor = MaterialTheme.colorScheme.surface,
         title = { Text("添加日程", style = MaterialTheme.typography.titleMedium) },
         text = {
             Column(
@@ -622,6 +626,7 @@ fun AddScheduleDialog(
                     label = { Text("活动标题") },
                     enabled = !isSaving,
                     singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyMedium,
                     shape = fieldShape
                 )
                 OutlinedTextField(
@@ -634,6 +639,7 @@ fun AddScheduleDialog(
                     label = { Text("地点") },
                     enabled = !isSaving,
                     singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyMedium,
                     shape = fieldShape
                 )
                 OutlinedTextField(
@@ -643,60 +649,70 @@ fun AddScheduleDialog(
                     label = { Text("备注") },
                     enabled = !isSaving,
                     maxLines = 3,
+                    textStyle = MaterialTheme.typography.bodyMedium,
                     shape = fieldShape
                 )
-                Card(
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = fieldShape,
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.34f)
-                    )
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 10.dp, vertical = 6.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("全天安排", style = MaterialTheme.typography.bodyMedium)
-                        androidx.compose.material3.Switch(
-                            checked = allDay,
-                            onCheckedChange = { allDay = it },
-                            enabled = !isSaving
-                        )
-                    }
+                    Text("全天安排", style = MaterialTheme.typography.bodyMedium)
+                    androidx.compose.material3.Switch(
+                        checked = allDay,
+                        onCheckedChange = {
+                            allDay = it
+                            validationMessage = null
+                        },
+                        enabled = !isSaving,
+                        modifier = Modifier.semantics { contentDescription = "全天安排" }
+                    )
                 }
                 OutlinedButton(
                     onClick = { showDatePicker = true },
                     enabled = !isSaving,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(42.dp),
+                        .heightIn(min = 48.dp),
                     shape = fieldShape
                 ) {
-                    Text("日期：${selectedDate.format(DateTimeFormatter.ofPattern("yyyy年MM月dd日"))}")
+                    androidx.compose.material3.Icon(
+                        Icons.Default.CalendarMonth,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(selectedDate.format(DateTimeFormatter.ofPattern("yyyy/MM/dd")))
                 }
                 if (!allDay) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Text("开始", style = MaterialTheme.typography.labelMedium)
-                            CompactTimeInput(state = startTimeState)
+                    CompactTimeInput(
+                        label = "开始",
+                        hour = startHour,
+                        minute = startMinute,
+                        enabled = !isSaving,
+                        onHourChange = {
+                            startHour = it
+                            validationMessage = null
+                        },
+                        onMinuteChange = {
+                            startMinute = it
+                            validationMessage = null
                         }
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Text("结束", style = MaterialTheme.typography.labelMedium)
-                            CompactTimeInput(state = endTimeState)
+                    )
+                    CompactTimeInput(
+                        label = "结束",
+                        hour = endHour,
+                        minute = endMinute,
+                        enabled = !isSaving,
+                        onHourChange = {
+                            endHour = it
+                            validationMessage = null
+                        },
+                        onMinuteChange = {
+                            endMinute = it
+                            validationMessage = null
                         }
-                    }
+                    )
                 }
                 validationMessage?.let { message ->
                     Text(
@@ -710,22 +726,25 @@ fun AddScheduleDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    val start = LocalDateTime.of(selectedDate, LocalTime.of(startTimeState.hour, startTimeState.minute))
+                    val start = if (allDay) selectedDate.atStartOfDay() else {
+                        scheduleTimeFromInput(startHour, startMinute)?.let(selectedDate::atTime)
+                    }
                     val end = if (allDay) {
-                        LocalDateTime.of(selectedDate.plusDays(1), LocalTime.MIDNIGHT)
+                        selectedDate.plusDays(1).atStartOfDay()
                     } else {
-                        LocalDateTime.of(selectedDate, LocalTime.of(endTimeState.hour, endTimeState.minute))
+                        scheduleTimeFromInput(endHour, endMinute)?.let(selectedDate::atTime)
                     }
                     when {
                         title.isBlank() -> validationMessage = "请填写活动标题"
-                        !allDay && !end.isAfter(start) -> validationMessage = "结束时间需要晚于开始时间"
+                        start == null || end == null -> validationMessage = "请填写完整的开始和结束时间"
+                        !end.isAfter(start) -> validationMessage = "结束时间需要晚于开始时间"
                         else -> {
                             onAdd(
                                 ScheduleEvent(
                                     title = title.trim(),
                                     description = description.trim(),
                                     location = location.trim(),
-                                    startAt = if (allDay) LocalDateTime.of(selectedDate, LocalTime.MIDNIGHT) else start,
+                                    startAt = start,
                                     endAt = end,
                                     allDay = allDay
                                 )
@@ -748,10 +767,6 @@ fun AddScheduleDialog(
         }
     )
 
-    LaunchedEffect(startTimeState.hour, startTimeState.minute, endTimeState.hour, endTimeState.minute, allDay) {
-        validationMessage = null
-    }
-
     if (showDatePicker) {
         val datePickerState = rememberDatePickerState(
             initialSelectedDateMillis = selectedDate.toDatePickerUtcMillis()
@@ -764,12 +779,12 @@ fun AddScheduleDialog(
                 TextButton(
                     onClick = {
                         datePickerState.selectedDateMillis?.let { millis ->
-                            selectedDate = datePickerMillisToLocalDate(millis)
+                            selectedDateText = datePickerMillisToLocalDate(millis).toString()
                             validationMessage = null
                         }
                         showDatePicker = false
                     },
-                    enabled = !isSaving,
+                    enabled = !isSaving && datePickerState.selectedDateMillis != null,
                     shape = RoundedCornerShape(8.dp)
                 ) { Text("确定") }
             },
@@ -786,37 +801,30 @@ fun AddScheduleDialog(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CompactTimeInput(
-    state: TimePickerState,
-    modifier: Modifier = Modifier
+    label: String,
+    hour: String,
+    minute: String,
+    enabled: Boolean,
+    onHourChange: (String) -> Unit,
+    onMinuteChange: (String) -> Unit
 ) {
-    var hourText by remember { mutableStateOf(state.hour.toString().padStart(2, '0')) }
-    var minuteText by remember { mutableStateOf(state.minute.toString().padStart(2, '0')) }
-
-    LaunchedEffect(state.hour) {
-        hourText = state.hour.toString().padStart(2, '0')
-    }
-    LaunchedEffect(state.minute) {
-        minuteText = state.minute.toString().padStart(2, '0')
-    }
-
     Row(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(40.dp))
         CompactTimeField(
-            value = hourText,
+            value = hour,
             label = "时",
+            accessibilityLabel = "${label}小时",
+            enabled = enabled,
             valueRange = 0..23,
             imeAction = ImeAction.Next,
             modifier = Modifier.weight(1f),
-            onValueChange = { value ->
-                hourText = value
-                value.toIntOrNull()?.let { state.hour = it.coerceIn(0, 23) }
-            }
+            onValueChange = onHourChange
         )
         Text(
             text = ":",
@@ -824,15 +832,14 @@ private fun CompactTimeInput(
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f)
         )
         CompactTimeField(
-            value = minuteText,
+            value = minute,
             label = "分",
+            accessibilityLabel = "${label}分钟",
+            enabled = enabled,
             valueRange = 0..59,
             imeAction = ImeAction.Done,
             modifier = Modifier.weight(1f),
-            onValueChange = { value ->
-                minuteText = value
-                value.toIntOrNull()?.let { state.minute = it.coerceIn(0, 59) }
-            }
+            onValueChange = onMinuteChange
         )
     }
 }
@@ -841,6 +848,8 @@ private fun CompactTimeInput(
 private fun CompactTimeField(
     value: String,
     label: String,
+    accessibilityLabel: String,
+    enabled: Boolean,
     valueRange: IntRange,
     imeAction: ImeAction,
     modifier: Modifier = Modifier,
@@ -851,8 +860,9 @@ private fun CompactTimeField(
         onValueChange = { raw ->
             normalizeTimeFieldInput(raw, valueRange)?.let(onValueChange)
         },
-        modifier = modifier,
+        modifier = modifier.semantics { contentDescription = accessibilityLabel },
         label = { Text(label) },
+        enabled = enabled,
         singleLine = true,
         shape = RoundedCornerShape(8.dp),
         textStyle = MaterialTheme.typography.bodyMedium.copy(textAlign = TextAlign.Center),
@@ -866,6 +876,12 @@ private fun CompactTimeField(
 internal fun normalizeTimeFieldInput(raw: String, valueRange: IntRange): String? {
     val digits = raw.filter { it.isDigit() }.take(2)
     return digits.takeIf { it.isEmpty() || it.toInt() in valueRange }
+}
+
+internal fun scheduleTimeFromInput(hour: String, minute: String): LocalTime? {
+    val parsedHour = hour.toIntOrNull()?.takeIf { it in 0..23 } ?: return null
+    val parsedMinute = minute.toIntOrNull()?.takeIf { it in 0..59 } ?: return null
+    return LocalTime.of(parsedHour, parsedMinute)
 }
 
 @Composable
