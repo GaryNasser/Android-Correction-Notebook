@@ -1,6 +1,7 @@
 package com.github.garynasser.correction_notebook.ui.screens.register
 
 import androidx.compose.foundation.layout.*
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -8,9 +9,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.ImeAction
@@ -29,15 +34,26 @@ fun CasScreen(
     onBackButtonClick: () -> Unit,
     onConfirm: () -> Unit = { viewModel.submit() },
 ) {
+    val focus = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    val confirmAuthentication = {
+        keyboard?.hide()
+        focus.clearFocus()
+        onConfirm()
+    }
+    val leaveAuthentication = {
+        viewModel.cancelYanheLogin()
+        onBackButtonClick()
+    }
+    BackHandler(onBack = leaveAuthentication)
     Scaffold(
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom),
         topBar = {
             TopAppBar(
-                title = { Text("统一认证") },
+                title = { Text("统一认证", style = MaterialTheme.typography.titleMedium) },
                 navigationIcon = {
                     IconButton(
-                        onClick = onBackButtonClick,
-                        enabled = !viewModel.isCasLoading
+                        onClick = leaveAuthentication
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
@@ -55,14 +71,13 @@ fun CasScreen(
         AuthScreenFrame(
             modifier = modifier
                 .fillMaxSize()
-                .padding(top = innerPadding.calculateTopPadding())
-                .padding(bottom = innerPadding.calculateBottomPadding())
+                .padding(innerPadding)
+                .consumeWindowInsets(innerPadding)
         ) {
             AuthFormTemplate(
-                title = "延河课堂登录",
-                subtitle = "用于同步课程和视频，验证完成后会回到当前页面。",
+                title = "北理工账号",
                 buttonText = if (viewModel.isCasLoading) "正在验证" else "登录延河课堂",
-                onButtonClick = { onConfirm() },
+                onButtonClick = confirmAuthentication,
                 isButtonEnabled = viewModel.isCasEnabled,
                 isLoading = viewModel.isCasLoading,
                 inputFields = {
@@ -73,7 +88,8 @@ fun CasScreen(
                             viewModel.clearError()
                         },
                         label = { Text("学号") },
-                        placeholder = { Text("学号") },
+                        leadingIcon = { Icon(Icons.Default.School, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                        textStyle = MaterialTheme.typography.bodyMedium,
                         enabled = !viewModel.isCasLoading,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(8.dp),
@@ -90,8 +106,9 @@ fun CasScreen(
                             viewModel.casPassword = it
                             viewModel.clearError()
                         },
-                        label = { Text("统一验证密码") },
-                        placeholder = { Text("统一验证密码") },
+                        label = { Text("统一认证密码") },
+                        leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                        textStyle = MaterialTheme.typography.bodyMedium,
                         enabled = !viewModel.isCasLoading,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(8.dp),
@@ -108,7 +125,7 @@ fun CasScreen(
                         keyboardActions = KeyboardActions(
                             onDone = {
                                 if (viewModel.isCasEnabled) {
-                                    onConfirm()
+                                    confirmAuthentication()
                                 }
                             }
                         ),
@@ -136,8 +153,6 @@ fun CasScreen(
                     val message = viewModel.errorMessage
                     if (message != null) {
                         AuthMessageCard(message = message, isError = true)
-                    } else {
-                        AuthMessageCard(message = "使用北理工统一认证，仅用于拉取延河课堂我的课程和视频。")
                     }
                 }
             )
