@@ -53,6 +53,7 @@ import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -314,13 +315,15 @@ private fun TodoPlannerContent(
     } else {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             todos.forEach { todo ->
-                TodoItemCard(
-                    todo = todo,
-                    isBusy = todo.id in mutatingTodoIds,
-                    onToggleComplete = { onToggleTodo(todo.id) },
-                    onAiBreakdown = { onBreakDownTodo(todo) },
-                    onDelete = { onDeleteTodo(todo.id) }
-                )
+                key(todo.id) {
+                    TodoItemCard(
+                        todo = todo,
+                        isBusy = todo.id in mutatingTodoIds,
+                        onToggleComplete = { onToggleTodo(todo.id) },
+                        onAiBreakdown = { onBreakDownTodo(todo) },
+                        onDelete = { onDeleteTodo(todo.id) }
+                    )
+                }
             }
         }
     }
