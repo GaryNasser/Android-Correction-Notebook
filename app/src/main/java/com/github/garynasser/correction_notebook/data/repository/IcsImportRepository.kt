@@ -24,7 +24,7 @@ class IcsImportRepository(
         val fileName = queryDisplayName(uri) ?: "calendar.ics"
         val raw = context.contentResolver.openInputStream(uri)?.use { input -> readIcsText(input) }
             ?: error("无法读取 ICS 文件")
-        val unfoldedLines = unfoldLines(raw)
+        val unfoldedLines = unfoldIcsLines(raw)
         val sourceCalendarId = buildIcsCalendarId(fileName, unfoldedLines)
         val incomingEvents = parseIcsEvents(unfoldedLines, sourceCalendarId)
             .distinctBy(::icsEventCompositeKey)
@@ -85,20 +85,6 @@ class IcsImportRepository(
         }
     }
 
-    private fun unfoldLines(raw: String): List<String> {
-        val result = mutableListOf<String>()
-        raw.replace("\r\n", "\n").split('\n').forEach { line ->
-            if (line.startsWith(" ") || line.startsWith("\t")) {
-                if (result.isNotEmpty()) {
-                    result[result.lastIndex] = result.last() + line.trimStart()
-                }
-            } else {
-                result += line.trim()
-            }
-        }
-        return result.filter { it.isNotBlank() }
-    }
-
     private fun sameLogicalContent(lhs: ScheduleEvent, rhs: ScheduleEvent): Boolean {
         return lhs.title == rhs.title &&
             lhs.description == rhs.description &&
@@ -118,6 +104,18 @@ class IcsImportRepository(
             detail = detail
         )
     }
+}
+
+internal fun unfoldIcsLines(raw: String): List<String> {
+    val result = mutableListOf<String>()
+    raw.replace("\r\n", "\n").split('\n').forEach { line ->
+        if (line.startsWith(" ") || line.startsWith("\t")) {
+            if (result.isNotEmpty()) result[result.lastIndex] = result.last() + line.drop(1)
+        } else {
+            result += line
+        }
+    }
+    return result.filter { it.isNotBlank() }
 }
 
 internal fun unescapeIcsText(raw: String): String {

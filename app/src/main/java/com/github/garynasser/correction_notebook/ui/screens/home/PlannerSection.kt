@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -918,18 +919,10 @@ fun IcsImportPreviewDialog(
                     ImportCountRow("冲突", preview.conflicts.size)
                     ImportCountRow("覆盖时删除", preview.deleted.size)
                 }
-                if (preview.added.isNotEmpty()) {
-                    item { DiffPreviewGroup("新增事件", preview.added) }
-                }
-                if (preview.updated.isNotEmpty()) {
-                    item { DiffPreviewGroup("将更新", preview.updated) }
-                }
-                if (preview.conflicts.isNotEmpty()) {
-                    item { DiffPreviewGroup("冲突提醒", preview.conflicts) }
-                }
-                if (preview.deleted.isNotEmpty()) {
-                    item { DiffPreviewGroup("覆盖时删除", preview.deleted) }
-                }
+                diffPreviewGroup("新增事件", preview.added)
+                diffPreviewGroup("将更新", preview.updated)
+                diffPreviewGroup("冲突提醒", preview.conflicts)
+                diffPreviewGroup("覆盖时删除", preview.deleted)
             }
         },
         confirmButton = {
@@ -976,35 +969,35 @@ private fun ImportCountRow(
     }
 }
 
-@Composable
-private fun DiffPreviewGroup(
+private fun LazyListScope.diffPreviewGroup(
     title: String,
-    items: List<IcsDiffItem>
+    changes: List<IcsDiffItem>
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    if (changes.isEmpty()) return
+    item {
         Text(title, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-        items.take(4).forEach { item ->
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f)
-                )
+    }
+    items(changes) { item ->
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f)
+            )
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(10.dp)
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(10.dp)
-                ) {
-                    Text(item.title, fontWeight = FontWeight.Medium)
-                    Text(
-                        item.startsAt.format(DateTimeFormatter.ofPattern("MM月dd日 HH:mm")),
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    Text(
-                        item.detail,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                    )
-                }
+                Text(item.title, fontWeight = FontWeight.Medium)
+                Text(
+                    item.startsAt.format(DateTimeFormatter.ofPattern("MM月dd日 HH:mm")),
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Text(
+                    item.detail,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
             }
         }
     }

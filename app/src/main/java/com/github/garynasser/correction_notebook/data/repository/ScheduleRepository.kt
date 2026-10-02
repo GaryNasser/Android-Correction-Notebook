@@ -1,7 +1,6 @@
 package com.github.garynasser.correction_notebook.data.repository
 
 import android.content.Context
-import android.net.Uri
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.IOException
 import androidx.datastore.preferences.core.Preferences
@@ -37,20 +36,20 @@ class ScheduleRepository(private val context: Context) {
     val scheduleEvents: Flow<List<ScheduleEvent>> = context.scheduleDataStore.data
         .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
         .map { prefs ->
-            prefs[scheduleEventsKey]?.let(::parseScheduleEvents) ?: emptyList()
+            prefs[scheduleEventsKey]?.let(SchedulePreferenceCodec::parseEvents) ?: emptyList()
         }
 
     suspend fun addEvent(event: ScheduleEvent) {
         context.scheduleDataStore.edit { prefs ->
-            val current = prefs[scheduleEventsKey]?.let(::parseScheduleEvents) ?: emptyList()
-            prefs[scheduleEventsKey] = serializeScheduleEvents(current + event)
+            val current = prefs[scheduleEventsKey]?.let(SchedulePreferenceCodec::parseEvents) ?: emptyList()
+            prefs[scheduleEventsKey] = SchedulePreferenceCodec.serializeEvents(current + event)
         }
     }
 
     suspend fun updateEvent(event: ScheduleEvent) {
         context.scheduleDataStore.edit { prefs ->
-            val current = prefs[scheduleEventsKey]?.let(::parseScheduleEvents) ?: emptyList()
-            prefs[scheduleEventsKey] = serializeScheduleEvents(
+            val current = prefs[scheduleEventsKey]?.let(SchedulePreferenceCodec::parseEvents) ?: emptyList()
+            prefs[scheduleEventsKey] = SchedulePreferenceCodec.serializeEvents(
                 current.map { if (it.id == event.id) event.copy(updatedAt = System.currentTimeMillis()) else it }
             )
         }
@@ -58,8 +57,8 @@ class ScheduleRepository(private val context: Context) {
 
     suspend fun deleteEvent(eventId: String) {
         context.scheduleDataStore.edit { prefs ->
-            val current = prefs[scheduleEventsKey]?.let(::parseScheduleEvents) ?: emptyList()
-            prefs[scheduleEventsKey] = serializeScheduleEvents(current.filterNot { it.id == eventId })
+            val current = prefs[scheduleEventsKey]?.let(SchedulePreferenceCodec::parseEvents) ?: emptyList()
+            prefs[scheduleEventsKey] = SchedulePreferenceCodec.serializeEvents(current.filterNot { it.id == eventId })
         }
     }
 
@@ -92,8 +91,8 @@ class ScheduleRepository(private val context: Context) {
         decision: ImportDecision
     ) {
         context.scheduleDataStore.edit { prefs ->
-            val current = prefs[scheduleEventsKey]?.let(::parseScheduleEvents) ?: emptyList()
-            prefs[scheduleEventsKey] = serializeScheduleEvents(
+            val current = prefs[scheduleEventsKey]?.let(SchedulePreferenceCodec::parseEvents) ?: emptyList()
+            prefs[scheduleEventsKey] = SchedulePreferenceCodec.serializeEvents(
                 applyIcsImport(current, preview, decision)
             )
         }
@@ -103,7 +102,7 @@ class ScheduleRepository(private val context: Context) {
         val calendarId = schoolCalendarId(termId)
         val importedAt = System.currentTimeMillis()
         context.scheduleDataStore.edit { prefs ->
-            val current = prefs[scheduleEventsKey]?.let(::parseScheduleEvents) ?: emptyList()
+            val current = prefs[scheduleEventsKey]?.let(SchedulePreferenceCodec::parseEvents) ?: emptyList()
             val retained = current.filterNot {
                 it.sourceType == ScheduleSourceType.SCHOOL_IMPORT &&
                     it.sourceCalendarId == calendarId
@@ -116,7 +115,7 @@ class ScheduleRepository(private val context: Context) {
                     updatedAt = importedAt
                 )
             }
-            prefs[scheduleEventsKey] = serializeScheduleEvents(retained + normalizedEvents)
+            prefs[scheduleEventsKey] = SchedulePreferenceCodec.serializeEvents(retained + normalizedEvents)
         }
     }
 
@@ -306,70 +305,6 @@ class ScheduleRepository(private val context: Context) {
 
     private fun overrideKey(uid: String, recurrenceId: LocalDateTime): String {
         return listOf(uid, recurrenceId.format(formatter)).joinToString("#")
-    }
-
-    private fun serializeScheduleEvents(items: List<ScheduleEvent>): String {
-        return items.joinToString("|||") { item ->
-            listOf(
-                Uri.encode(item.id),
-                Uri.encode(item.title),
-                Uri.encode(item.description),
-                Uri.encode(item.location),
-                item.startAt.format(formatter),
-                item.endAt.format(formatter),
-                item.allDay.toString(),
-                Uri.encode(item.timezoneId ?: ""),
-                item.sourceType.name,
-                Uri.encode(item.sourceCalendarId ?: ""),
-                Uri.encode(item.sourceEventUid ?: ""),
-                Uri.encode(item.recurrenceRule ?: ""),
-                item.recurrenceId?.format(formatter) ?: "",
-                Uri.encode(item.exDateList.joinToString("," ) { ex -> ex.format(formatter) }),
-                item.lastImportedAt?.toString() ?: "",
-                item.updatedAt.toString()
-            ).joinToString(":::")
-        }
-    }
-
-    private fun parseScheduleEvents(raw: String): List<ScheduleEvent> {
-        if (raw.isBlank()) return emptyList()
-        return raw.split("|||").mapNotNull { itemStr ->
-            val parts = itemStr.split(":::")
-            parseScheduleEventParts(parts)
-        }
-    }
-
-    private fun parseScheduleEventParts(parts: List<String>): ScheduleEvent? {
-        if (parts.size < 16) return null
-        return runCatching {
-            val sourceType = runCatching { ScheduleSourceType.valueOf(parts[8]) }
-                .getOrDefault(ScheduleSourceType.MANUAL)
-            fun decodeText(index: Int): String {
-                val decoded = Uri.decode(parts[index])
-                return if (sourceType == ScheduleSourceType.ICS_IMPORT) unescapeIcsText(decoded) else decoded
-            }
-            ScheduleEvent(
-                id = Uri.decode(parts[0]),
-                title = decodeText(1),
-                description = decodeText(2),
-                location = decodeText(3),
-                startAt = LocalDateTime.parse(parts[4], formatter),
-                endAt = LocalDateTime.parse(parts[5], formatter),
-                allDay = parts[6].toBoolean(),
-                timezoneId = Uri.decode(parts[7]).ifBlank { null },
-                sourceType = sourceType,
-                sourceCalendarId = Uri.decode(parts[9]).ifBlank { null },
-                sourceEventUid = Uri.decode(parts[10]).ifBlank { null },
-                recurrenceRule = Uri.decode(parts[11]).ifBlank { null },
-                recurrenceId = parts[12].ifBlank { null }?.let { LocalDateTime.parse(it, formatter) },
-                exDateList = Uri.decode(parts[13]).ifBlank { "" }
-                    .split(",")
-                    .filter { it.isNotBlank() }
-                    .map { LocalDateTime.parse(it, formatter) },
-                lastImportedAt = parts[14].ifBlank { null }?.toLongOrNull(),
-                updatedAt = parts[15].toLongOrNull() ?: System.currentTimeMillis()
-            )
-        }.getOrNull()
     }
 
     companion object {
