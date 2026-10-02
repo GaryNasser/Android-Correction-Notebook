@@ -28,6 +28,61 @@ class StudyTimerManagerTest {
     }
 
     @Test
+    fun runningCheckpointCountsTheTimeWhileTheProcessWasMissing() = withClock { timer, advance ->
+        timer.startStopwatch()
+        advance(800)
+        val checkpoint = timer.checkpoint()
+        timer.pause()
+        advance(4_200)
+        timer.restore(checkpoint)
+        assertEquals(5, timer.getElapsedSeconds())
+        assertTrue((timer.timerState.value as TimerState.Stopwatch).isRunning)
+        advance(1_000)
+        assertEquals(6, timer.getElapsedSeconds())
+    }
+
+    @Test
+    fun pausedCheckpointKeepsFractionalTimeWithoutCountingTheProcessGap() = withClock { timer, advance ->
+        timer.startStopwatch()
+        advance(800)
+        timer.pause()
+        val checkpoint = timer.checkpoint()
+        advance(120_000)
+        timer.restore(checkpoint)
+        assertEquals(TimerState.Stopwatch(0, false), timer.timerState.value)
+        timer.resume()
+        advance(200)
+        assertEquals(1, timer.getElapsedSeconds())
+    }
+
+    @Test
+    fun countdownCanFinishWhileTheProcessIsMissing() = withClock { timer, advance ->
+        timer.startCountdown(1)
+        advance(10_000)
+        val checkpoint = timer.checkpoint()
+        timer.pause()
+        advance(70_000)
+        timer.restore(checkpoint)
+        assertEquals(TimerState.CountdownFinished(60), timer.timerState.value)
+        assertEquals(1, timer.getCurrentSessionSnapshot()!!.durationMinutes)
+    }
+
+    @Test
+    fun pomodoroCheckpointKeepsSkippedFocusSecondsAndCatchesUpBreaks() = withClock { timer, advance ->
+        timer.startPomodoro(PomodoroSettings(1, 1, 1, 4))
+        advance(30_000)
+        timer.skip()
+        val checkpoint = timer.checkpoint()
+        timer.pause()
+        advance(90_000)
+        timer.restore(checkpoint)
+        assertEquals(60, timer.getElapsedSeconds())
+        assertEquals(PomodoroPhase.FOCUS, (timer.timerState.value as TimerState.Pomodoro).state.phase)
+        assertEquals(0, timer.getCurrentSessionSnapshot()!!.pomodoroCount)
+        assertEquals(1, timer.getCurrentSessionSnapshot()!!.durationMinutes)
+    }
+
+    @Test
     fun delayedStopwatchTickUsesActualElapsedTime() = withClock { timer, advance ->
         timer.startStopwatch()
         advance(180_000)

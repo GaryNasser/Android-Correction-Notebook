@@ -32,6 +32,7 @@ class StudySessionRepository(private val context: Context) {
     suspend fun addSession(session: StudySession) {
         context.sessionDataStore.edit { prefs ->
             val current = prefs[sessionsKey]?.let(StudySessionPreferenceCodec::parseSessions) ?: emptyList()
+            if (current.any { it.id == session.id }) return@edit
             val updated = current + session
             prefs[sessionsKey] = StudySessionPreferenceCodec.serializeSessions(updated)
         }

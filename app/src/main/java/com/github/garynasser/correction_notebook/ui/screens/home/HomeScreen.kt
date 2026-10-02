@@ -146,9 +146,28 @@ fun HomeScreen(
         homeViewModel.consumeBackgroundImageMessage()
     }
 
+    if (uiState.isRestoringStudySession || uiState.selectedMode == StudyMode.IMMERSIVE ||
+        uiState.showStatistics || uiState.showTodoHistory
+    ) {
+        FullscreenHomeSurfaceEffect(onFullscreenModeChanged)
+    }
+
+    if (uiState.isRestoringStudySession) {
+        BackHandler {}
+        Row(
+            modifier = Modifier.fillMaxSize(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+            Spacer(Modifier.width(12.dp))
+            Text("正在恢复计时", style = MaterialTheme.typography.bodyMedium)
+        }
+        return
+    }
+
     // Handle immersive mode
     if (uiState.selectedMode == StudyMode.IMMERSIVE) {
-        FullscreenHomeSurfaceEffect(onFullscreenModeChanged)
         ImmersiveStudyScreen(
             timerManager = homeViewModel.timerManager,
             onExit = { homeViewModel.finishCurrentSessionAndExit() },
@@ -171,7 +190,6 @@ fun HomeScreen(
 
     // Handle statistics screen
     if (uiState.showStatistics) {
-        FullscreenHomeSurfaceEffect(onFullscreenModeChanged)
         BackHandler(onBack = homeViewModel::hideStatistics)
         StatisticsScreen(
             viewModel = statisticsViewModel,
@@ -182,7 +200,6 @@ fun HomeScreen(
 
     // Handle todo history screen
     if (uiState.showTodoHistory) {
-        FullscreenHomeSurfaceEffect(onFullscreenModeChanged)
         BackHandler(onBack = homeViewModel::hideTodoHistory)
         TodoHistoryScreen(
             onBack = { homeViewModel.hideTodoHistory() }
