@@ -2,13 +2,14 @@ package com.github.garynasser.correction_notebook.data.remote.cas
 
 import android.annotation.SuppressLint
 import com.github.garynasser.correction_notebook.di.BasicRetrofit
+import com.github.garynasser.correction_notebook.data.remote.network.awaitResponse
 import com.github.garynasser.correction_notebook.utils.SignatureUtils
 import com.google.gson.JsonParser
-import androidx.core.net.toUri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.FormBody
 import okhttp3.Headers
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.IOException
@@ -27,11 +28,10 @@ class BitCasClient @Inject constructor(
     suspend fun getYanheToken(studentId: String, password: String): String = withContext(Dispatchers.IO) {
         val tgtUrl = getTgtUrl(studentId, password)
         val st = getServiceTicket(tgtUrl, YANHE_CALLBACK_URL)
-        val callbackUrl = YANHE_CALLBACK_URL.toUri()
-            .buildUpon()
-            .appendQueryParameter("ticket", st)
+        val callbackUrl = YANHE_CALLBACK_URL.toHttpUrl()
+            .newBuilder()
+            .addQueryParameter("ticket", st)
             .build()
-            .toString()
 
         val request = Request.Builder()
             .url(callbackUrl)
@@ -39,23 +39,23 @@ class BitCasClient @Inject constructor(
             .get()
             .build()
 
-        okHttpClient.newBuilder()
+        val finalUrl = okHttpClient.newBuilder()
             .followRedirects(true)
             .followSslRedirects(true)
             .build()
             .newCall(request)
-            .execute()
-            .use { response ->
+            .awaitResponse { response ->
                 val finalUrl = response.request.url
                 val token = finalUrl.queryParameter("token")
                 val code = finalUrl.queryParameter("code")
                 if (!response.isSuccessful && token.isNullOrBlank() && code.isNullOrBlank()) {
                     throw CasAuthException("延河课堂认证失败：${response.code}")
                 }
-                token?.takeIf { it.isNotBlank() }
-                    ?: code?.takeIf { it.isNotBlank() }?.let(::exchangeCodeForToken)
-                    ?: throw CasAuthException("延河课堂认证成功回调中没有 token")
+                finalUrl
             }
+        finalUrl.queryParameter("token")?.takeIf { it.isNotBlank() }
+            ?: finalUrl.queryParameter("code")?.takeIf { it.isNotBlank() }?.let { exchangeCodeForToken(it) }
+            ?: throw CasAuthException("延河课堂认证成功回调中没有 token")
     }
 
     suspend fun getServiceTicketFor(studentId: String, password: String, serviceUrl: String): String = withContext(Dispatchers.IO) {
@@ -63,13 +63,12 @@ class BitCasClient @Inject constructor(
         getServiceTicket(tgtUrl, serviceUrl)
     }
 
-    private fun exchangeCodeForToken(code: String): String {
-        val url = YANHE_AUTH_TOKEN_URL.toUri()
-            .buildUpon()
-            .appendQueryParameter("code", code)
-            .appendQueryParameter("type", "1")
+    private suspend fun exchangeCodeForToken(code: String): String {
+        val url = YANHE_AUTH_TOKEN_URL.toHttpUrl()
+            .newBuilder()
+            .addQueryParameter("code", code)
+            .addQueryParameter("type", "1")
             .build()
-            .toString()
 
         val request = Request.Builder()
             .url(url)
@@ -77,7 +76,7 @@ class BitCasClient @Inject constructor(
             .get()
             .build()
 
-        okHttpClient.newCall(request).execute().use { response ->
+        return okHttpClient.newCall(request).awaitResponse { response ->
             val body = response.body?.string().orEmpty()
             if (!response.isSuccessful) {
                 throw CasAuthException("延河课堂 token 换取失败：${response.code}")
@@ -102,11 +101,11 @@ class BitCasClient @Inject constructor(
             if (token.isNullOrBlank()) {
                 throw CasAuthException("延河课堂 token 响应缺少 token")
             }
-            return token
+            token
         }
     }
 
-    private fun getTgtUrl(studentId: String, password: String): String {
+    private suspend fun getTgtUrl(studentId: String, password: String): String {
         val body = FormBody.Builder()
             .add("username", studentId)
             .add("password", password)
@@ -124,7 +123,7 @@ class BitCasClient @Inject constructor(
             ?: throw CasCredentialException("统一认证失败，请检查学号或密码")
     }
 
-    private fun getServiceTicket(tgtUrl: String, serviceUrl: String): String {
+    private suspend fun getServiceTicket(tgtUrl: String, serviceUrl: String): String {
         val body = FormBody.Builder()
             .add("service", serviceUrl)
             .build()
@@ -141,9 +140,9 @@ class BitCasClient @Inject constructor(
             ?: throw CasAuthException("统一认证未返回有效票据")
     }
 
-    private fun fetchBody(request: Request): String {
+    private suspend fun fetchBody(request: Request): String {
         try {
-            okHttpClient.newCall(request).execute().use { response ->
+            return okHttpClient.newCall(request).awaitResponse { response ->
                 val body = response.body?.string().orEmpty()
                 if (!response.isSuccessful) {
                     if (isCasCredentialFailureStatus(response.code)) {
@@ -151,7 +150,7 @@ class BitCasClient @Inject constructor(
                     }
                     throw CasAuthException("统一认证请求失败：${response.code}")
                 }
-                return body
+                body
             }
         } catch (e: IOException) {
             throw CasAuthException("无法连接北理工统一认证", e)

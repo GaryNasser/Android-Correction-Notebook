@@ -1,6 +1,6 @@
 package com.github.garynasser.correction_notebook.data.remote.school
 
-import androidx.core.net.toUri
+import com.github.garynasser.correction_notebook.data.remote.network.awaitResponse
 import com.github.garynasser.correction_notebook.data.model.school.SchoolCourseRaw
 import com.github.garynasser.correction_notebook.data.model.school.SchoolScheduleException
 import com.github.garynasser.correction_notebook.data.model.school.SchoolTerm
@@ -14,6 +14,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.FormBody
 import okhttp3.Headers
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.JavaNetCookieJar
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -61,7 +62,7 @@ class SchoolScheduleRemoteDataSource @Inject constructor(
         fetchSchedule(termId)
     }
 
-    private fun fetchSchedule(termId: String): List<SchoolCourseRaw> {
+    private suspend fun fetchSchedule(termId: String): List<SchoolCourseRaw> {
         val body = FormBody.Builder()
             .add("XNXQDM", termId)
             .add("xnxqdm", termId)
@@ -76,11 +77,10 @@ class SchoolScheduleRemoteDataSource @Inject constructor(
 
     private suspend fun establishSession(studentId: String, password: String) {
         val st = bitCasClient.getServiceTicketFor(studentId, password, SCHOOL_INDEX_URL)
-        val callback = SCHOOL_INDEX_URL.toUri()
-            .buildUpon()
-            .appendQueryParameter("ticket", st)
+        val callback = SCHOOL_INDEX_URL.toHttpUrl()
+            .newBuilder()
+            .addQueryParameter("ticket", st)
             .build()
-            .toString()
         val request = Request.Builder()
             .url(callback)
             .headers(defaultHeaders())
@@ -88,15 +88,14 @@ class SchoolScheduleRemoteDataSource @Inject constructor(
             .build()
         schoolClient
             .newCall(request)
-            .execute()
-            .use { response ->
+            .awaitResponse { response ->
                 if (!response.isSuccessful) {
                     throw SchoolScheduleException("学校系统认证回调失败：${response.code}")
                 }
             }
     }
 
-    private fun getJson(url: String): JsonObject {
+    private suspend fun getJson(url: String): JsonObject {
         val request = Request.Builder()
             .url(url)
             .headers(defaultHeaders())
@@ -105,13 +104,13 @@ class SchoolScheduleRemoteDataSource @Inject constructor(
         return executeJsonRequest(request)
     }
 
-    private fun executeJsonRequest(request: Request): JsonObject {
-        schoolClient.newCall(request).execute().use { response ->
+    private suspend fun executeJsonRequest(request: Request): JsonObject {
+        return schoolClient.newCall(request).awaitResponse { response ->
             val body = response.body?.string().orEmpty()
             if (!response.isSuccessful) {
                 throw SchoolScheduleException("学校系统请求失败：${response.code}")
             }
-            return runCatching { JsonParser.parseString(body).asJsonObject }
+            runCatching { JsonParser.parseString(body).asJsonObject }
                 .getOrElse { throw SchoolScheduleException("学校课表格式暂不支持，已保留本地日程", it) }
         }
     }
