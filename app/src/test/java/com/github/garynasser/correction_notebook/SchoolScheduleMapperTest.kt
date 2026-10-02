@@ -2,6 +2,7 @@ package com.github.garynasser.correction_notebook
 
 import com.github.garynasser.correction_notebook.data.model.home.ScheduleSourceType
 import com.github.garynasser.correction_notebook.data.model.school.SchoolCourseRaw
+import com.github.garynasser.correction_notebook.data.model.school.SchoolScheduleException
 import com.github.garynasser.correction_notebook.data.model.school.SchoolTerm
 import com.github.garynasser.correction_notebook.data.repository.school.SchoolScheduleMapper
 import org.junit.Assert.assertEquals
@@ -12,6 +13,24 @@ import java.time.LocalTime
 
 class SchoolScheduleMapperTest {
     private val mapper = SchoolScheduleMapper()
+
+    @Test
+    fun invalidCoursesRejectTheWholeBatchInsteadOfSilentlyDroppingOccurrences() {
+        val term = SchoolTerm("qa-term", "QA term", LocalDate.of(2026, 9, 7))
+        val valid = SchoolCourseRaw("高等数学", weekday = 2, startSection = 3, endSection = 4, weeks = listOf(1, 2))
+        val invalid = listOf(
+            valid.copy(courseName = ""), valid.copy(weekday = 0), valid.copy(weekday = 8),
+            valid.copy(startSection = 0), valid.copy(endSection = 14),
+            valid.copy(startSection = 4, endSection = 3), valid.copy(weeks = emptyList()),
+            valid.copy(weeks = listOf(0, 1)), valid.copy(weeks = listOf(-1, 1))
+        )
+        invalid.forEach { course ->
+            val error = try { mapper.mapCourses(term, listOf(valid, course), 1234); null }
+                catch (error: SchoolScheduleException) { error }
+            assertTrue("Invalid course must reject the full batch: $course", error != null)
+            assertTrue(error!!.message.orEmpty().contains("已保留本地"))
+        }
+    }
 
     @Test
     fun mapCoursesExpandsWeeksIntoStableSchoolEvents() {

@@ -3,6 +3,7 @@ package com.github.garynasser.correction_notebook.data.repository.school
 import com.github.garynasser.correction_notebook.data.model.home.ScheduleEvent
 import com.github.garynasser.correction_notebook.data.model.home.ScheduleSourceType
 import com.github.garynasser.correction_notebook.data.model.school.SchoolCourseRaw
+import com.github.garynasser.correction_notebook.data.model.school.SchoolScheduleException
 import com.github.garynasser.correction_notebook.data.model.school.SchoolTerm
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -19,14 +20,19 @@ class SchoolScheduleMapper @Inject constructor() {
         val calendarId = schoolCalendarId(term.id)
 
         return courses.flatMap { course ->
-            val startTime = sectionTimes[course.startSection]?.first ?: return@flatMap emptyList()
-            val endTime = sectionTimes[course.endSection]?.second ?: return@flatMap emptyList()
-            course.weeks.distinct().sorted().mapNotNull { week ->
-                if (week <= 0 || course.weekday !in 1..7) return@mapNotNull null
+            if (course.courseName.isBlank() || course.weekday !in 1..7 ||
+                course.startSection !in sectionTimes || course.endSection !in sectionTimes ||
+                course.endSection < course.startSection || course.weeks.isEmpty() || course.weeks.any { it <= 0 }
+            ) {
+                throw SchoolScheduleException("课程“${course.courseName.ifBlank { "未命名课程" }}”的上课时间无效或暂不支持，已保留本地课表")
+            }
+            val startTime = sectionTimes.getValue(course.startSection).first
+            val endTime = sectionTimes.getValue(course.endSection).second
+            course.weeks.distinct().sorted().map { week ->
                 val date = firstMonday.plusWeeks((week - 1).toLong()).plusDays((course.weekday - 1).toLong())
                 ScheduleEvent(
                     id = buildEventId(term.id, course, week),
-                    title = course.courseName.ifBlank { "未命名课程" },
+                    title = course.courseName,
                     description = buildDescription(course, week),
                     location = course.location,
                     startAt = LocalDateTime.of(date, startTime),
