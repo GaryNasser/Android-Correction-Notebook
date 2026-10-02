@@ -148,10 +148,13 @@ class SchoolScheduleRemoteDataSource @Inject constructor(
             keys = listOf("cxxszhxqkb", "rows"),
             rowMarkerKeys = listOf("KCM", "KCMC", "courseName", "kcmc", "kcm")
         )
-        return rows.mapNotNull { element ->
-            val item = element.asJsonObjectOrNull() ?: return@mapNotNull null
+        return rows.mapIndexed { index, element ->
+            val item = element.asJsonObjectOrNull()
+                ?: throw SchoolScheduleException("第 ${index + 1} 条课程格式有误，已保留本地课表")
             val courseName = item.firstString("KCM", "KCMC", "courseName", "kcmc", "kcm").orEmpty()
-            if (courseName.isBlank()) return@mapNotNull null
+            if (courseName.isBlank()) {
+                throw SchoolScheduleException("第 ${index + 1} 条课程缺少名称，已保留本地课表")
+            }
             val weekdayText = item.firstString("XQ", "SKXQ", "weekday", "xq", "XQJ", "SKXQJ", "weekdayName")
             val weekday = item.firstInt("XQ", "SKXQ", "weekday", "xq")
                 ?: SchoolScheduleParsers.parseWeekday(weekdayText)
@@ -161,7 +164,9 @@ class SchoolScheduleRemoteDataSource @Inject constructor(
             val weeks = SchoolScheduleParsers.parseWeeks(
                 item.firstString("ZC", "SKZC", "ZCMC", "weeks", "zc", "zcmc")
             )
-            if (weekday == null || sectionRange == null || weeks.isEmpty()) return@mapNotNull null
+            if (weekday == null || sectionRange == null || weeks.isEmpty()) {
+                throw SchoolScheduleException("课程“$courseName”的星期、节次或周次不完整，已保留本地课表")
+            }
 
             SchoolCourseRaw(
                 courseName = courseName,
@@ -245,7 +250,7 @@ class SchoolScheduleRemoteDataSource @Inject constructor(
     }
 
     private fun JsonObject.firstInt(vararg keys: String): Int? {
-        return firstString(*keys)?.filter(Char::isDigit)?.toIntOrNull()
+        return firstString(*keys)?.toIntOrNull()
     }
 
     private fun JsonObject.firstDate(vararg keys: String): LocalDate? {
