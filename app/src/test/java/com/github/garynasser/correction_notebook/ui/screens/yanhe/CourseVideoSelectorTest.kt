@@ -27,6 +27,30 @@ class CourseVideoSelectorTest {
         assertNull(selectCourseVideoUrl(sectionWith(main = "", screen = ""), preferScreen = false))
     }
 
+    @Test
+    fun requestedSourceInLaterRecordWinsOverEarlierFallback() {
+        val section = CourseSection(videos = listOf(
+            Video(mainUrl = "camera.m3u8"), Video(vgaUrl = "screen.m3u8")
+        ))
+        assertEquals("screen.m3u8", selectCourseVideoUrl(section, preferScreen = true))
+        assertEquals("camera.m3u8", selectCourseVideoUrl(section, preferScreen = false))
+    }
+
+    @Test
+    fun cameraInLaterRecordWinsOverEarlierGenericPath() {
+        val section = CourseSection(videos = listOf(
+            Video(path = "generic.mp4"), Video(mainUrl = "camera.m3u8")
+        ))
+        assertEquals("camera.m3u8", selectCourseVideoUrl(section, preferScreen = false))
+    }
+
+    @Test
+    fun trimsTheSelectedUrlWithoutChangingItsQuery() {
+        assertEquals("screen.m3u8?token=a+b", selectCourseVideoUrl(
+            sectionWith(main = "camera.m3u8", screen = "  screen.m3u8?token=a+b  "), true
+        ))
+    }
+
     private fun sectionWith(main: String, screen: String) = CourseSection(
         videos = listOf(Video(mainUrl = main, vgaUrl = screen))
     )

@@ -17,15 +17,16 @@ import kotlinx.coroutines.flow.map
 
 private val Context.courseLearningDataStore: DataStore<Preferences> by preferencesDataStore("course_learning_prefs")
 
-class CourseLearningRepository(private val context: Context) {
+class CourseLearningRepository internal constructor(private val dataStore: DataStore<Preferences>) {
+    constructor(context: Context) : this(context.courseLearningDataStore)
     private val progressKey = stringPreferencesKey("course_progress")
     private val notesKey = stringPreferencesKey("course_notes")
 
-    val progressItems: Flow<List<CourseProgress>> = context.courseLearningDataStore.data
+    val progressItems: Flow<List<CourseProgress>> = dataStore.data
         .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
         .map { prefs -> prefs[progressKey]?.let(CourseLearningPreferenceCodec::parseProgressItems).orEmpty() }
 
-    val notes: Flow<List<CourseNote>> = context.courseLearningDataStore.data
+    val notes: Flow<List<CourseNote>> = dataStore.data
         .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
         .map { prefs -> prefs[notesKey]?.let(CourseLearningPreferenceCodec::parseNotes).orEmpty() }
 
@@ -47,7 +48,7 @@ class CourseLearningRepository(private val context: Context) {
         videoUrl: String,
         totalSections: Int
     ) {
-        context.courseLearningDataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             val current = prefs[progressKey]?.let(CourseLearningPreferenceCodec::parseProgressItems).orEmpty()
             val existing = current.firstOrNull { it.courseId == courseId }
             val updatedItem = (existing ?: CourseProgress(courseId = courseId)).copy(
@@ -72,7 +73,7 @@ class CourseLearningRepository(private val context: Context) {
         totalSections: Int,
         completed: Boolean
     ) {
-        context.courseLearningDataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             val current = prefs[progressKey]?.let(CourseLearningPreferenceCodec::parseProgressItems).orEmpty()
             val existing = current.firstOrNull { it.courseId == courseId }
             val completedIds = existing?.completedSectionIds.orEmpty().toMutableSet().apply {
@@ -93,7 +94,7 @@ class CourseLearningRepository(private val context: Context) {
     }
 
     suspend fun saveNote(note: CourseNote) {
-        context.courseLearningDataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             val current = prefs[notesKey]?.let(CourseLearningPreferenceCodec::parseNotes).orEmpty()
             prefs[notesKey] = CourseLearningPreferenceCodec.serializeNotes(
                 (current + note).sortedByDescending { it.createdAt }.take(200)

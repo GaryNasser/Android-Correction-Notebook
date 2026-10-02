@@ -64,7 +64,7 @@ class ScheduleCreationFlowTest {
             }
             compose.onNodeWithText(title, substring = true).assertDoesNotExist()
         } catch (error: Throwable) {
-            compose.onAllNodes(isRoot()).printToLog("ScheduleFlowFailure")
+            compose.onAllNodes(isRoot()).printToLog("ScheduleFlowFailure", maxDepth = Int.MAX_VALUE)
             throw error
         } finally {
             runBlocking {

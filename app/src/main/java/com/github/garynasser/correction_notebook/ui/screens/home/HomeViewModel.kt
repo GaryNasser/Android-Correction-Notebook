@@ -954,14 +954,6 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 action()
-                refreshScheduleSections()
-                refreshLocalPlan()
-                _uiState.value = _uiState.value.copy(
-                    isEditingSchedule = false,
-                    showAddScheduleDialog = if (closeAddDialogOnSuccess) false else _uiState.value.showAddScheduleDialog,
-                    scheduleActionMessage = successMessage,
-                    scheduleActionError = null
-                )
             } catch (throwable: CancellationException) {
                 _uiState.value = _uiState.value.copy(isEditingSchedule = false)
                 throw throwable
@@ -970,6 +962,24 @@ class HomeViewModel @Inject constructor(
                     isEditingSchedule = false,
                     scheduleActionMessage = null,
                     scheduleActionError = throwable.message?.takeIf { it.isNotBlank() } ?: failureMessage
+                )
+                return@launch
+            }
+            _uiState.value = _uiState.value.copy(
+                isEditingSchedule = false,
+                showAddScheduleDialog = if (closeAddDialogOnSuccess) false else _uiState.value.showAddScheduleDialog,
+                scheduleActionMessage = successMessage,
+                scheduleActionError = null
+            )
+            try {
+                refreshScheduleSections()
+                refreshLocalPlan()
+            } catch (throwable: CancellationException) {
+                throw throwable
+            } catch (throwable: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    scheduleActionMessage = null,
+                    scheduleActionError = "日程已更新，但界面刷新失败：${throwable.message?.takeIf { it.isNotBlank() } ?: "请重新进入首页"}"
                 )
             }
         }
