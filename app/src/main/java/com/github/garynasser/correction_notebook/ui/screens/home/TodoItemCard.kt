@@ -5,7 +5,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,6 +18,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
@@ -73,7 +76,13 @@ fun TodoItemCard(
                 modifier = Modifier
                     .size(48.dp)
                     .clip(CircleShape)
-                    .clickable(enabled = !isBusy, onClick = onToggleComplete),
+                    .toggleable(
+                        value = todo.isCompleted,
+                        enabled = !isBusy,
+                        role = Role.Checkbox,
+                        onValueChange = { onToggleComplete() }
+                    )
+                    .semantics { contentDescription = "完成待办：${todo.title}" },
                 contentAlignment = Alignment.Center
             ) {
                 Box(

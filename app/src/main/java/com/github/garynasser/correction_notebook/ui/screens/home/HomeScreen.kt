@@ -1484,7 +1484,7 @@ private fun StudyDashboardPage(
 }
 
 @Composable
-private fun StudyTodoSection(
+internal fun StudyTodoSection(
     todos: List<TodoItem>,
     mutatingTodoIds: Set<String>,
     isAiLoading: Boolean,
@@ -1526,15 +1526,17 @@ private fun StudyTodoSection(
             EmptyTodoState(onAddClick = onAddTodo)
         } else {
             todos.forEach { todo ->
-                TodoItemCard(
-                    todo = todo,
-                    isBusy = todo.id in mutatingTodoIds,
-                    isAiActionEnabled = !isAiLoading,
-                    isAiBreakdownBusy = breakingDownTodoId == todo.id,
-                    onToggleComplete = { onToggleTodo(todo.id) },
-                    onDelete = { onDeleteTodo(todo.id) },
-                    onAiBreakdown = { onBreakDownTodo(todo) }
-                )
+                key(todo.id) {
+                    TodoItemCard(
+                        todo = todo,
+                        isBusy = todo.id in mutatingTodoIds,
+                        isAiActionEnabled = !isAiLoading,
+                        isAiBreakdownBusy = breakingDownTodoId == todo.id,
+                        onToggleComplete = { onToggleTodo(todo.id) },
+                        onDelete = { onDeleteTodo(todo.id) },
+                        onAiBreakdown = { onBreakDownTodo(todo) }
+                    )
+                }
             }
         }
     }
