@@ -61,7 +61,6 @@ import com.github.garynasser.correction_notebook.data.model.studyset.DueReviewIt
 import com.github.garynasser.correction_notebook.data.model.studyset.KnowledgeCardType
 import com.github.garynasser.correction_notebook.data.model.yanhe.CourseProgress
 import com.github.garynasser.correction_notebook.ui.components.FreshCard
-import com.github.garynasser.correction_notebook.ui.components.FreshGradientCard
 import com.github.garynasser.correction_notebook.ui.components.FreshScreen
 import com.github.garynasser.correction_notebook.ui.components.MetricTile
 import com.github.garynasser.correction_notebook.ui.components.SectionHeader
@@ -862,7 +861,7 @@ private fun ScheduleFloatingButton(
 }
 
 @Composable
-private fun CourseGridBlock(
+internal fun CourseGridBlock(
     item: ScheduleOccurrence,
     span: Int,
     modifier: Modifier,
@@ -913,7 +912,7 @@ private fun CourseGridBlock(
             overflow = TextOverflow.Clip,
             softWrap = true,
             autoSize = TextAutoSize.StepBased(
-                minFontSize = 7.sp,
+                minFontSize = 4.sp,
                 maxFontSize = maxFontSize,
                 stepSize = 0.5.sp
             )
@@ -2066,15 +2065,11 @@ fun TodayStudyWorkbench(
         }
     }
 
-    FreshGradientCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 132.dp)
-    ) {
+    Column(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(vertical = 4.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -2102,24 +2097,18 @@ fun TodayStudyWorkbench(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Surface(
+                Text(
+                    text = buildString {
+                        append("今日 ")
+                        append(formatMinutesToDisplay(todayMinutes))
+                        append(" · ")
+                        append(completedPomodoros)
+                        append(" 个番茄钟")
+                    },
                     modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.62f)
-                ) {
-                    Text(
-                        text = buildString {
-                            append("今日 ")
-                            append(formatMinutesToDisplay(todayMinutes))
-                            append(" · ")
-                            append(completedPomodoros)
-                            append(" 个番茄钟")
-                        },
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f)
-                    )
-                }
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 FilledTonalButton(
                     onClick = onImmersiveModeClick,
                     modifier = Modifier.height(40.dp),
@@ -2324,72 +2313,49 @@ fun QuickStatsPreview(
     completedPomodoros: Int,
     onClick: () -> Unit
 ) {
-    FreshCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.62f)
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            MetricTile(
-                icon = Icons.Default.Timer,
-                value = formatMinutesToDisplay(todayMinutes),
-                label = "今日学习",
-                modifier = Modifier.weight(1f)
-            )
-            MetricTile(
-                icon = Icons.Default.EmojiEvents,
-                value = "$completedPomodoros",
-                label = "番茄钟",
-                modifier = Modifier.weight(1f)
-            )
-        }
+        MetricTile(
+            icon = Icons.Default.Timer,
+            value = formatMinutesToDisplay(todayMinutes),
+            label = "今日学习",
+            modifier = Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).clickable(onClick = onClick)
+        )
+        MetricTile(
+            icon = Icons.Default.EmojiEvents,
+            value = "$completedPomodoros",
+            label = "番茄钟",
+            modifier = Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).clickable(onClick = onClick)
+        )
     }
 }
 
 @Composable
 fun EmptyTodoState(onAddClick: () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f)
-        )
+    Row(
+        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 18.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Icon(
-                Icons.Default.CheckCircle,
-                contentDescription = null,
-                modifier = Modifier.size(32.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-            )
-            Spacer(modifier = Modifier.height(10.dp))
-            Text(
-                text = "暂无待办事项",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            TextButton(
-                onClick = onAddClick,
-                shape = RoundedCornerShape(8.dp),
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-            ) {
-                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("添加待办")
-            }
+        Icon(
+            Icons.Default.CheckCircle,
+            contentDescription = null,
+            modifier = Modifier.size(20.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = "暂无待办事项",
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        TextButton(onClick = onAddClick) {
+            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(4.dp))
+            Text("添加待办")
         }
     }
 }
