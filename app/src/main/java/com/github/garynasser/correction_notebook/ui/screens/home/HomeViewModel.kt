@@ -2,7 +2,9 @@ package com.github.garynasser.correction_notebook.ui.screens.home
 
 import android.content.Context
 import android.net.Uri
+import android.os.Bundle
 import android.os.SystemClock
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.garynasser.correction_notebook.data.local.StudyPreferencesManager
@@ -24,6 +26,7 @@ import com.github.garynasser.correction_notebook.data.model.home.StudySession
 import com.github.garynasser.correction_notebook.data.model.home.TodoHistoryItem
 import com.github.garynasser.correction_notebook.data.model.home.TodoItem
 import com.github.garynasser.correction_notebook.data.model.home.TodoSource
+import com.github.garynasser.correction_notebook.data.model.home.TimerState
 import com.github.garynasser.correction_notebook.data.model.school.SchoolTerm
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.KnowledgeBaseFileSummary
 import com.github.garynasser.correction_notebook.data.model.studyset.DueReviewItem
@@ -60,6 +63,7 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.time.temporal.TemporalAdjusters
+import java.util.UUID
 import javax.inject.Inject
 
 enum class StudyMode {
@@ -105,6 +109,7 @@ data class HomeUiState(
     val activeTimerMode: ActiveTimerMode = ActiveTimerMode.NONE,  // Tracks what timer was started
     val showStatistics: Boolean = false,
     val isSavingStudySession: Boolean = false,
+    val isRestoringStudySession: Boolean = false,
     val studySessionError: String? = null,
     val backgroundImageUri: String? = null,
     val isLandscapeOrientation: Boolean = false,
@@ -178,21 +183,76 @@ class HomeViewModel @Inject constructor(
     private val knowledgeBaseRepository: KnowledgeBaseRepository,
     private val studySetRepository: StudySetRepository,
     private val aiStudyUseCase: AiStudyUseCase,
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
     val timerManager = StudyTimerManager(viewModelScope, SystemClock::elapsedRealtime)
     private var sessionPersisted = false
     private var currentSessionStartedAt: LocalDateTime? = null
+    private var currentSessionId: String? = null
     private var sessionActionJob: Job? = null
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
     init {
+        val savedBundle = savedStateHandle.get<Bundle>("studyTimer")
+        val savedTimer = savedBundle?.toSavedStudyTimer()
+        savedStateHandle.setSavedStateProvider("studyTimer") {
+            if (_uiState.value.isRestoringStudySession) {
+                savedBundle ?: Bundle()
+            } else {
+                val sessionId = currentSessionId
+                val startedAt = currentSessionStartedAt
+                if (sessionId != null && startedAt != null && !sessionPersisted) {
+                    SavedStudyTimer(sessionId, startedAt, timerManager.checkpoint()).toBundle()
+                } else {
+                    Bundle()
+                }
+            }
+        }
+        if (savedTimer != null) restoreStudyTimer(savedTimer)
         loadData()
         loadPomodoroSettings()
         loadAlertSettings()
+    }
+
+    private fun restoreStudyTimer(saved: SavedStudyTimer) {
+        _uiState.value = _uiState.value.copy(isRestoringStudySession = true)
+        viewModelScope.launch {
+            try {
+                // A save may have committed after Android captured the old running state.
+                var recordReadFailed = false
+                val alreadySaved = try {
+                    studySessionRepository.sessions.first().any { it.id == saved.sessionId }
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (_: Exception) {
+                    recordReadFailed = true
+                    false
+                }
+                if (!alreadySaved) {
+                    currentSessionId = saved.sessionId
+                    currentSessionStartedAt = saved.startedAt
+                    timerManager.restore(saved.checkpoint)
+                    if (recordReadFailed) timerManager.pause()
+                    val mode = when (saved.checkpoint.state) {
+                        is TimerState.Pomodoro -> ActiveTimerMode.POMODORO
+                        is TimerState.Countdown, is TimerState.CountdownFinished -> ActiveTimerMode.COUNTDOWN
+                        is TimerState.Stopwatch, is TimerState.StopwatchFinished -> ActiveTimerMode.STOPWATCH
+                        TimerState.Idle -> ActiveTimerMode.NONE
+                    }
+                    _uiState.value = _uiState.value.copy(
+                        selectedMode = StudyMode.IMMERSIVE,
+                        activeTimerMode = mode,
+                        studySessionError = if (recordReadFailed) "学习记录暂时无法读取，计时已暂停，请重试保存" else null
+                    )
+                }
+            } finally {
+                _uiState.value = _uiState.value.copy(isRestoringStudySession = false)
+            }
+        }
     }
 
     private suspend fun refreshTodayMinutes() {
@@ -1046,6 +1106,7 @@ class HomeViewModel @Inject constructor(
     }
 
     fun startPomodoro(settings: PomodoroSettings = _uiState.value.pomodoroSettings) {
+        if (_uiState.value.isRestoringStudySession) return
         markSessionStarted()
         _uiState.value = _uiState.value.copy(activeTimerMode = ActiveTimerMode.POMODORO)
         timerManager.startPomodoro(settings)
@@ -1078,12 +1139,14 @@ class HomeViewModel @Inject constructor(
     }
 
     fun startCountdown(minutes: Int) {
+        if (_uiState.value.isRestoringStudySession) return
         markSessionStarted()
         _uiState.value = _uiState.value.copy(activeTimerMode = ActiveTimerMode.COUNTDOWN)
         timerManager.startCountdown(minutes)
     }
 
     fun startStopwatch() {
+        if (_uiState.value.isRestoringStudySession) return
         markSessionStarted()
         _uiState.value = _uiState.value.copy(activeTimerMode = ActiveTimerMode.STOPWATCH)
         timerManager.startStopwatch()
@@ -1102,7 +1165,7 @@ class HomeViewModel @Inject constructor(
     }
 
     private fun saveCurrentSession(reset: Boolean) {
-        if (sessionActionJob?.isActive == true) return
+        if (_uiState.value.isRestoringStudySession || sessionActionJob?.isActive == true) return
         timerManager.pause()
         _uiState.value = _uiState.value.copy(isSavingStudySession = true, studySessionError = null)
         sessionActionJob = viewModelScope.launch {
@@ -1114,6 +1177,7 @@ class HomeViewModel @Inject constructor(
                 } else {
                     timerManager.stop()
                     currentSessionStartedAt = null
+                    currentSessionId = null
                     clearSelectedMode()
                 }
             } catch (error: CancellationException) {
@@ -1131,6 +1195,7 @@ class HomeViewModel @Inject constructor(
     private fun markSessionStarted() {
         sessionPersisted = false
         currentSessionStartedAt = LocalDateTime.now()
+        currentSessionId = UUID.randomUUID().toString()
     }
 
     private suspend fun persistCurrentSessionIfNeeded() {
@@ -1142,9 +1207,11 @@ class HomeViewModel @Inject constructor(
         val endedAt = LocalDateTime.now()
         val fallbackStart = endedAt.minusMinutes(snapshot.durationMinutes.toLong())
         val startAt = currentSessionStartedAt ?: fallbackStart
+        val sessionId = currentSessionId ?: UUID.randomUUID().toString().also { currentSessionId = it }
 
         studySessionRepository.addSession(
             StudySession(
+                id = sessionId,
                 subject = snapshot.sessionType.defaultSubject(),
                 startTime = if (startAt.isAfter(endedAt)) fallbackStart else startAt,
                 endTime = endedAt,

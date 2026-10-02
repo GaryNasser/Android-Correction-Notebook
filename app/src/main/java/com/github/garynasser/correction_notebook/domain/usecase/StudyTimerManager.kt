@@ -34,6 +34,28 @@ class StudyTimerManager(
         val pomodoroCount: Int = 0
     )
 
+    data class Checkpoint(
+        val state: TimerState,
+        val elapsedRealtimeMillis: Long,
+        val partialSecondMillis: Long,
+        val completedFocusSeconds: Int
+    )
+
+    fun checkpoint(): Checkpoint {
+        updateElapsedTime()
+        return Checkpoint(_timerState.value, lastTickMillis, partialSecondMillis, completedFocusSeconds)
+    }
+
+    fun restore(checkpoint: Checkpoint) {
+        stopTimer()
+        _timerState.value = checkpoint.state
+        lastTickMillis = checkpoint.elapsedRealtimeMillis
+        partialSecondMillis = checkpoint.partialSecondMillis
+        completedFocusSeconds = checkpoint.completedFocusSeconds
+        updateElapsedTime()
+        if (_timerState.value.isRunning()) startTimerJob()
+    }
+
     fun startPomodoro(settings: PomodoroSettings = PomodoroSettings()) {
         stopTimer()
         partialSecondMillis = 0
