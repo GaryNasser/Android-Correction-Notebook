@@ -19,18 +19,20 @@ import java.time.LocalDate
 
 private val Context.sessionDataStore: DataStore<Preferences> by preferencesDataStore("session_prefs")
 
-class StudySessionRepository(private val context: Context) {
+class StudySessionRepository internal constructor(private val dataStore: DataStore<Preferences>) {
+
+    constructor(context: Context) : this(context.sessionDataStore)
 
     private val sessionsKey = stringPreferencesKey("study_sessions")
 
-    val sessions: Flow<List<StudySession>> = context.sessionDataStore.data
+    val sessions: Flow<List<StudySession>> = dataStore.data
         .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
         .map { prefs ->
             prefs[sessionsKey]?.let(StudySessionPreferenceCodec::parseSessions) ?: emptyList()
         }
 
     suspend fun addSession(session: StudySession) {
-        context.sessionDataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             val current = prefs[sessionsKey]?.let(StudySessionPreferenceCodec::parseSessions) ?: emptyList()
             if (current.any { it.id == session.id }) return@edit
             val updated = current + session
@@ -46,10 +48,8 @@ class StudySessionRepository(private val context: Context) {
     }
 
     suspend fun getWeekSessions(): List<StudySession> {
-        val weekAgo = LocalDate.now().minusDays(6)
-        return sessions.first().filter {
-            !it.startTime.toLocalDate().isBefore(weekAgo)
-        }
+        val today = LocalDate.now()
+        return getSessionsBetween(today.minusDays(6), today)
     }
 
     suspend fun getSessionsBetween(startDate: LocalDate, endDate: LocalDate): List<StudySession> {
