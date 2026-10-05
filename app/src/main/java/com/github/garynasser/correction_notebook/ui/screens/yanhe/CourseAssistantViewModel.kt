@@ -14,6 +14,13 @@ import com.github.garynasser.correction_notebook.domain.usecase.AiStudyUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -33,6 +40,12 @@ data class CourseAssistantUiState(
     val actionError: String? = null
 )
 
+data class CourseNotesUiState(
+    val isLoading: Boolean = true,
+    val notes: List<CourseNote> = emptyList(),
+    val error: String? = null
+)
+
 @HiltViewModel
 class CourseAssistantViewModel @Inject constructor(
     private val aiStudyUseCase: AiStudyUseCase,
@@ -43,15 +56,34 @@ class CourseAssistantViewModel @Inject constructor(
     val uiState: StateFlow<CourseAssistantUiState> = _uiState.asStateFlow()
     private var generationJob: Job? = null
     private var actionJob: Job? = null
+    private var generationId = 0L
+    private var resultSource: Pair<Int, Int>? = null
+    private val notesRetry = MutableStateFlow(0)
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val notesState: StateFlow<CourseNotesUiState> = notesRetry.flatMapLatest {
+        courseLearningRepository.notes
+            .map { CourseNotesUiState(isLoading = false, notes = it) }
+            .onStart { emit(CourseNotesUiState()) }
+            .catch { emit(CourseNotesUiState(isLoading = false, error = it.message ?: "课程笔记加载失败")) }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CourseNotesUiState())
+
+    fun retryNotes() { notesRetry.update { it + 1 } }
+
+    fun deleteNote(noteId: String) {
+        runAssistantAction("delete-note:$noteId", "已删除课程笔记", "删除课程笔记失败") {
+            courseLearningRepository.deleteNote(noteId)
+        }
+    }
 
     fun summarize(sectionTitle: String, note: String) {
         if (!beginGeneration()) return
+        val owner = generationId
         generationJob = viewModelScope.launch {
             aiStudyUseCase.summarizeCourseSection(sectionTitle, note)
-                .onSuccess { _uiState.value = CourseAssistantUiState(result = it) }
+                .onSuccess { if (owner == generationId) _uiState.value = CourseAssistantUiState(result = it) }
                 .onFailure {
                     if (it is CancellationException) throw it
-                    _uiState.value = CourseAssistantUiState(error = it.message ?: "课程助手生成失败")
+                    if (owner == generationId) _uiState.value = CourseAssistantUiState(error = it.message ?: "课程助手生成失败")
                 }
         }
     }
@@ -64,22 +96,26 @@ class CourseAssistantViewModel @Inject constructor(
         note: String
     ) {
         if (!beginGeneration()) return
+        val owner = generationId
+        resultSource = courseId to sectionId
         generationJob = viewModelScope.launch {
             aiStudyUseCase.summarizeCourseSectionStructured(courseId, courseName, sectionId, sectionTitle, note)
                 .onSuccess {
-                    _uiState.value = CourseAssistantUiState(
+                    if (owner == generationId) _uiState.value = CourseAssistantUiState(
                         result = it.summary.ifBlank { it.rawText },
                         actions = it.actions
                     )
                 }
                 .onFailure {
                     if (it is CancellationException) throw it
-                    _uiState.value = CourseAssistantUiState(error = it.message ?: "课程助手生成失败")
+                    if (owner == generationId) _uiState.value = CourseAssistantUiState(error = it.message ?: "课程助手生成失败")
                 }
         }
     }
 
     fun clear() {
+        generationId++
+        resultSource = null
         generationJob?.cancel()
         actionJob?.cancel()
         generationJob = null
@@ -92,6 +128,7 @@ class CourseAssistantViewModel @Inject constructor(
     }
 
     fun saveResultAsNote(courseId: Int, courseName: String, sectionId: Int, sectionTitle: String) {
+        if (!ownsResult(courseId, sectionId)) return
         val content = _uiState.value.result?.trim().orEmpty()
         if (content.isBlank()) {
             reportActionError("没有可保存的课程笔记")
@@ -116,6 +153,7 @@ class CourseAssistantViewModel @Inject constructor(
     }
 
     fun saveResultAsTodo(courseId: Int, sectionId: Int, sectionTitle: String) {
+        if (!ownsResult(courseId, sectionId)) return
         val content = _uiState.value.result?.trim().orEmpty()
         if (content.isBlank()) {
             reportActionError("没有可转为待办的内容")
@@ -128,7 +166,7 @@ class CourseAssistantViewModel @Inject constructor(
         ) {
             todoRepository.addTodo(
                 TodoItem(
-                    title = "复习：${sectionTitle}".take(40),
+                    title = "复习：${sectionTitle}",
                     description = content,
                     priority = Priority.MEDIUM,
                     source = TodoSource.COURSE_ASSISTANT,
@@ -139,6 +177,7 @@ class CourseAssistantViewModel @Inject constructor(
     }
 
     fun applyAction(action: AiAction, courseId: Int, courseName: String, sectionId: Int, sectionTitle: String) {
+        if (!ownsResult(courseId, sectionId) || action !in _uiState.value.actions) return
         when (action.type) {
             AiActionType.SAVE_COURSE_NOTE -> {
                 val content = action.payload["content"] ?: action.description.ifBlank { action.title }
@@ -176,7 +215,7 @@ class CourseAssistantViewModel @Inject constructor(
                 ) {
                     todoRepository.addTodo(
                         TodoItem(
-                            title = action.title.take(40),
+                            title = action.title,
                             description = content,
                             priority = parseCourseAssistantPriority(action.payload["priority"]),
                             source = TodoSource.COURSE_ASSISTANT,
@@ -196,7 +235,8 @@ class CourseAssistantViewModel @Inject constructor(
         action: suspend () -> Unit
     ) {
         val state = _uiState.value
-        if (!canStartCourseAssistantAction(actionKey, state.isActionBusy, state.appliedActionKeys)) return
+        if (state.isLoading || !canStartCourseAssistantAction(actionKey, state.isActionBusy, state.appliedActionKeys)) return
+        val owner = generationId
         _uiState.value = state.copy(
             isActionBusy = true,
             applyingActionKeys = state.applyingActionKeys + actionKey,
@@ -206,6 +246,7 @@ class CourseAssistantViewModel @Inject constructor(
         actionJob = viewModelScope.launch {
             try {
                 action()
+                if (owner != generationId) return@launch
                 _uiState.update {
                     it.copy(
                         isActionBusy = false,
@@ -215,7 +256,7 @@ class CourseAssistantViewModel @Inject constructor(
                     )
                 }
             } catch (error: CancellationException) {
-                _uiState.update {
+                if (owner == generationId) _uiState.update {
                     it.copy(
                         isActionBusy = false,
                         applyingActionKeys = it.applyingActionKeys - actionKey
@@ -223,7 +264,7 @@ class CourseAssistantViewModel @Inject constructor(
                 }
                 throw error
             } catch (error: Exception) {
-                _uiState.update {
+                if (owner == generationId) _uiState.update {
                     it.copy(
                         isActionBusy = false,
                         applyingActionKeys = it.applyingActionKeys - actionKey,
@@ -237,8 +278,18 @@ class CourseAssistantViewModel @Inject constructor(
     private fun beginGeneration(): Boolean {
         val state = _uiState.value
         if (state.isLoading || state.isActionBusy) return false
+        generationId++
+        resultSource = null
         _uiState.value = CourseAssistantUiState(isLoading = true)
         return true
+    }
+
+    private fun ownsResult(courseId: Int, sectionId: Int): Boolean {
+        val state = _uiState.value
+        if (state.isLoading || state.result == null) return false
+        if (resultSource == (courseId to sectionId)) return true
+        reportActionError("请先为当前章节生成学习包")
+        return false
     }
 
     private fun reportActionError(message: String) {

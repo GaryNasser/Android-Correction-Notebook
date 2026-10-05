@@ -15,11 +15,12 @@ import kotlinx.coroutines.flow.map
 
 private val Context.todoDataStore: DataStore<Preferences> by preferencesDataStore("todo_prefs")
 
-class TodoRepository(private val context: Context) {
+class TodoRepository internal constructor(private val dataStore: DataStore<Preferences>) {
+    constructor(context: Context) : this(context.todoDataStore)
 
     private val todoItemsKey = stringPreferencesKey("todo_items")
 
-    val todoItems: Flow<List<TodoItem>> = context.todoDataStore.data
+    val todoItems: Flow<List<TodoItem>> = dataStore.data
         .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
         .map { prefs ->
             prefs[todoItemsKey]?.let { json ->
@@ -28,7 +29,7 @@ class TodoRepository(private val context: Context) {
         }
 
     suspend fun addTodo(todo: TodoItem) {
-        context.todoDataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             val current = prefs[todoItemsKey]?.let(TodoPreferenceCodec::parseTodoItems) ?: emptyList()
             val updated = current + todo
             prefs[todoItemsKey] = TodoPreferenceCodec.serializeTodoItems(updated)
@@ -36,7 +37,7 @@ class TodoRepository(private val context: Context) {
     }
 
     suspend fun updateTodo(todo: TodoItem) {
-        context.todoDataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             val current = prefs[todoItemsKey]?.let(TodoPreferenceCodec::parseTodoItems) ?: emptyList()
             val updated = current.map { if (it.id == todo.id) todo else it }
             prefs[todoItemsKey] = TodoPreferenceCodec.serializeTodoItems(updated)
@@ -44,7 +45,7 @@ class TodoRepository(private val context: Context) {
     }
 
     suspend fun deleteTodo(todoId: String) {
-        context.todoDataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             val current = prefs[todoItemsKey]?.let(TodoPreferenceCodec::parseTodoItems) ?: emptyList()
             val updated = current.filter { it.id != todoId }
             prefs[todoItemsKey] = TodoPreferenceCodec.serializeTodoItems(updated)
@@ -53,7 +54,7 @@ class TodoRepository(private val context: Context) {
 
     suspend fun toggleComplete(todoId: String): TodoItem {
         var toggledTodo: TodoItem? = null
-        context.todoDataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             val current = prefs[todoItemsKey]?.let(TodoPreferenceCodec::parseTodoItems) ?: emptyList()
             val updated = current.map {
                 if (it.id == todoId) {

@@ -277,6 +277,8 @@ class AiStudyUseCase @Inject constructor(
             ?: return Result.failure(IllegalStateException("请先配置 AI Provider"))
         val prompt = """
             请为这节课生成“AI 学习包”，包含 summary、SAVE_COURSE_NOTE action 和 2-4 个 CREATE_TODO action。
+            你没有获得课程录像或转录。仅以用户提供的课堂笔记为本节内容依据，不要把通用知识或猜测写成课堂事实。
+            没有笔记时，在 summary 中说明材料不足，只给出复习建议，不要虚构本节摘要或老师讲过的内容。
             ${AiActionParser.instruction()}
 
             课程 ID：$courseId

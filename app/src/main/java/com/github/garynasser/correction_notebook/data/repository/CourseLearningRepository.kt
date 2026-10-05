@@ -27,7 +27,6 @@ class CourseLearningRepository internal constructor(private val dataStore: DataS
         .map { prefs -> prefs[progressKey]?.let(CourseLearningPreferenceCodec::parseProgressItems).orEmpty() }
 
     val notes: Flow<List<CourseNote>> = dataStore.data
-        .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
         .map { prefs -> prefs[notesKey]?.let(CourseLearningPreferenceCodec::parseNotes).orEmpty() }
 
     suspend fun getRecentProgress(limit: Int = 3): List<CourseProgress> {
@@ -97,8 +96,15 @@ class CourseLearningRepository internal constructor(private val dataStore: DataS
         dataStore.edit { prefs ->
             val current = prefs[notesKey]?.let(CourseLearningPreferenceCodec::parseNotes).orEmpty()
             prefs[notesKey] = CourseLearningPreferenceCodec.serializeNotes(
-                (current + note).sortedByDescending { it.createdAt }.take(200)
+                (current + note).sortedByDescending { it.createdAt }
             )
+        }
+    }
+
+    suspend fun deleteNote(noteId: String) {
+        dataStore.edit { prefs ->
+            val current = prefs[notesKey]?.let(CourseLearningPreferenceCodec::parseNotes).orEmpty()
+            prefs[notesKey] = CourseLearningPreferenceCodec.serializeNotes(current.filterNot { it.id == noteId })
         }
     }
 

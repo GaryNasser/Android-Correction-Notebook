@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -15,18 +14,14 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Camera
-import androidx.compose.material.icons.filled.AddTask
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.NoteAlt
@@ -40,14 +35,12 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -61,6 +54,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -72,7 +66,6 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.garynasser.correction_notebook.data.model.yanhe.CourseSection
-import com.github.garynasser.correction_notebook.data.model.ai.AiActionType
 import com.github.garynasser.correction_notebook.ui.components.LocalAiEnabled
 import com.github.garynasser.correction_notebook.ui.components.FreshScreen
 
@@ -87,8 +80,10 @@ fun CourseVideoListScreen(
     onBackButtonClick: () -> Unit
 ) {
     val assistantState by assistantViewModel.uiState.collectAsStateWithLifecycle()
-    var selectedSection by remember { mutableStateOf<CourseSection?>(null) }
-    var noteInput by remember { mutableStateOf("") }
+    var selectedSectionId by rememberSaveable(viewModel.courseId) { mutableStateOf<Int?>(null) }
+    var noteInput by rememberSaveable(viewModel.courseId) { mutableStateOf("") }
+    var showCourseNotes by rememberSaveable(viewModel.courseId) { mutableStateOf(false) }
+    val selectedSection = (viewModel.uiState as? VideoUIState.Success)?.videos?.firstOrNull { it.id == selectedSectionId }
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(viewModel.playState) {
@@ -119,7 +114,8 @@ fun CourseVideoListScreen(
                 courseName = viewModel.courseName,
                 isLoading = viewModel.uiState is VideoUIState.Loading,
                 onBack = onBackButtonClick,
-                onRefresh = { viewModel.getVideoList(viewModel.courseId) }
+                onRefresh = { viewModel.getVideoList(viewModel.courseId) },
+                onNotes = { showCourseNotes = true }
             )
         }
     ) { innerPadding ->
@@ -225,10 +221,12 @@ fun CourseVideoListScreen(
                                     onCompletedChange = { checked ->
                                         viewModel.setSectionCompleted(video, checked)
                                     },
-                                    onAiAssistantClick = if (LocalAiEnabled.current) ({
-                                        selectedSection = video
+                                    onAiAssistantClick = {
+                                        assistantViewModel.clear()
+                                        selectedSectionId = video.id
                                         noteInput = ""
-                                    }) else null,
+                                    },
+                                    aiEnabled = LocalAiEnabled.current,
                                     onCameraPlayClick = {
                                         viewModel.playSection(video, preferScreen = false)
                                     },
@@ -244,150 +242,23 @@ fun CourseVideoListScreen(
         }
     }
 
-    selectedSection?.takeIf { LocalAiEnabled.current }?.let { section ->
-        AlertDialog(
-            onDismissRequest = {
-                if (!assistantState.isActionBusy) {
-                    selectedSection = null
-                    assistantViewModel.clear()
-                }
-            },
-            shape = RoundedCornerShape(8.dp),
-            title = {
-                Text(
-                    text = "课程助手",
-                    style = MaterialTheme.typography.titleMedium
-                )
-            },
-            text = {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 460.dp)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text(section.title, style = MaterialTheme.typography.titleSmall)
-                    OutlinedTextField(
-                        value = noteInput,
-                        onValueChange = { noteInput = it },
-                        label = { Text("补充课堂笔记，可留空") },
-                        minLines = 3,
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    when {
-                        assistantState.isLoading -> Row(verticalAlignment = Alignment.CenterVertically) {
-                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("AI 正在整理课程内容...")
-                        }
-                        assistantState.result != null -> Text(assistantState.result.orEmpty())
-                        assistantState.error != null -> Text(
-                            assistantState.error.orEmpty(),
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    }
-                    assistantState.actions.forEach { action ->
-                        val actionKey = courseAssistantAiActionKey(action.id)
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.45f)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Icon(
-                                    if (action.type == AiActionType.SAVE_COURSE_NOTE) Icons.Default.NoteAlt else Icons.Default.AddTask,
-                                    contentDescription = null
-                                )
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(action.title, fontWeight = FontWeight.SemiBold)
-                                    if (action.description.isNotBlank()) {
-                                        Text(action.description, style = MaterialTheme.typography.bodySmall, maxLines = 2)
-                                    }
-                                }
-                                CourseAssistantActionButton(
-                                    actionKey = actionKey,
-                                    idleLabel = "确认",
-                                    completedLabel = "已完成",
-                                    state = assistantState,
-                                    onClick = {
-                                        assistantViewModel.applyAction(
-                                            action = action,
-                                            courseId = viewModel.courseId,
-                                            courseName = viewModel.courseName,
-                                            sectionId = section.id,
-                                            sectionTitle = section.title
-                                        )
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    if (assistantState.result != null) {
-                        CourseAssistantActionButton(
-                            actionKey = courseAssistantResultNoteKey(viewModel.courseId, section.id),
-                            idleLabel = "存笔记",
-                            completedLabel = "已保存",
-                            state = assistantState,
-                            onClick = {
-                                assistantViewModel.saveResultAsNote(
-                                    viewModel.courseId,
-                                    viewModel.courseName,
-                                    section.id,
-                                    section.title
-                                )
-                            }
-                        )
-                        CourseAssistantActionButton(
-                            actionKey = courseAssistantResultTodoKey(viewModel.courseId, section.id),
-                            idleLabel = "转待办",
-                            completedLabel = "已添加",
-                            state = assistantState,
-                            onClick = {
-                                assistantViewModel.saveResultAsTodo(viewModel.courseId, section.id, section.title)
-                            },
-                        )
-                    }
-                    TextButton(
-                        onClick = {
-                            assistantViewModel.summarizeLearningPackage(
-                                viewModel.courseId,
-                                viewModel.courseName,
-                                section.id,
-                                section.title,
-                                noteInput
-                            )
-                        },
-                        enabled = !assistantState.isLoading && !assistantState.isActionBusy,
-                        shape = RoundedCornerShape(8.dp)
-                    ) { Text(if (assistantState.result == null) "生成学习包" else "重新生成") }
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    selectedSection = null
-                    assistantViewModel.clear()
-                }, enabled = !assistantState.isActionBusy, shape = RoundedCornerShape(8.dp)) { Text("关闭") }
-            }
-        )
+    selectedSection?.let { section ->
+        CourseAssistantDialog(viewModel.courseId, viewModel.courseName, section, noteInput,
+            { noteInput = it }, assistantViewModel, onDismiss = {
+                selectedSectionId = null
+                assistantViewModel.clear()
+            })
+    }
+    if (showCourseNotes) {
+        CourseAssistantDialog(viewModel.courseId, viewModel.courseName,
+            CourseSection(id = 0, courseId = viewModel.courseId, title = viewModel.courseName), "", {}, assistantViewModel,
+            onDismiss = { showCourseNotes = false }, showAllNotes = true)
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun VideoListTopBar(courseName: String, isLoading: Boolean, onBack: () -> Unit, onRefresh: () -> Unit) {
+internal fun VideoListTopBar(courseName: String, isLoading: Boolean, onBack: () -> Unit, onRefresh: () -> Unit, onNotes: (() -> Unit)? = null) {
     TopAppBar(
         title = {
             Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
@@ -414,43 +285,16 @@ internal fun VideoListTopBar(courseName: String, isLoading: Boolean, onBack: () 
             }
         },
         actions = {
+            onNotes?.let { openNotes ->
+                IconButton(onClick = openNotes) {
+                    Icon(Icons.Default.NoteAlt, contentDescription = "查看课程笔记")
+                }
+            }
             IconButton(onClick = onRefresh, enabled = !isLoading) {
                 Icon(Icons.Default.Refresh, contentDescription = "刷新课程视频")
             }
         }
     )
-}
-
-@Composable
-private fun CourseAssistantActionButton(
-    actionKey: String,
-    idleLabel: String,
-    completedLabel: String,
-    state: CourseAssistantUiState,
-    onClick: () -> Unit
-) {
-    val isApplying = actionKey in state.applyingActionKeys
-    val isApplied = actionKey in state.appliedActionKeys
-    TextButton(
-        onClick = onClick,
-        enabled = !state.isActionBusy && !isApplied,
-        shape = RoundedCornerShape(8.dp),
-        modifier = Modifier.widthIn(min = 82.dp)
-    ) {
-        when {
-            isApplying -> {
-                CircularProgressIndicator(modifier = Modifier.size(15.dp), strokeWidth = 2.dp)
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("处理中")
-            }
-            isApplied -> {
-                Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(completedLabel)
-            }
-            else -> Text(idleLabel)
-        }
-    }
 }
 
 @Composable
@@ -587,7 +431,8 @@ fun VideoCard(
     onAiAssistantClick: (() -> Unit)?,
     onCameraPlayClick: () -> Unit,
     onScreenPlayClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    aiEnabled: Boolean = true
 ) {
     val timeInfo = buildString {
         append("第 ${section.weekNumber} 周")
@@ -662,8 +507,8 @@ fun VideoCard(
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Psychology,
-                        contentDescription = "课程助手",
+                        imageVector = if (aiEnabled) Icons.Default.Psychology else Icons.Default.NoteAlt,
+                        contentDescription = if (aiEnabled) "课程助手" else "课程笔记",
                         modifier = Modifier.size(18.dp)
                     )
                 }
