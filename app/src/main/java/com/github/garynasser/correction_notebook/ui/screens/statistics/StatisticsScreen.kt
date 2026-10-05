@@ -7,7 +7,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -20,9 +19,11 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.ViewModel
@@ -76,14 +77,7 @@ class StatisticsViewModel @Inject constructor(
 
     fun setPeriod(period: StatsPeriod) {
         if (_uiState.value.period == period) return
-        aiInsightJob?.cancel()
-        _uiState.value = _uiState.value.copy(
-            period = period,
-            aiInsight = null,
-            isAiInsightLoading = false,
-            aiInsightError = null
-        )
-        loadStats()
+        loadStats(period)
     }
 
     fun refreshStats() {
@@ -91,7 +85,10 @@ class StatisticsViewModel @Inject constructor(
     }
 
     fun generateAiInsight() {
-        if (_uiState.value.isAiInsightLoading || aiInsightJob?.isActive == true) return
+        val state = _uiState.value
+        if (state.isStatsLoading || state.statsError != null || state.chartLabels.isEmpty() ||
+            state.isAiInsightLoading || aiInsightJob?.isActive == true) return
+        val requestId = statsRequestId
         val selectedPeriod = _uiState.value.period
         val (startDate, endDate) = statsDateRange(selectedPeriod, LocalDate.now())
         _uiState.value = _uiState.value.copy(
@@ -106,13 +103,13 @@ class StatisticsViewModel @Inject constructor(
                     periodLabel = periodLabel(selectedPeriod)
                 )
                     .onSuccess {
-                        if (_uiState.value.period == selectedPeriod) {
+                        if (_uiState.value.period == selectedPeriod && requestId == statsRequestId) {
                             _uiState.value = _uiState.value.copy(aiInsight = it)
                         }
                     }
                     .onFailure {
                         if (it is CancellationException) throw it
-                        if (_uiState.value.period == selectedPeriod) {
+                        if (_uiState.value.period == selectedPeriod && requestId == statsRequestId) {
                             _uiState.value = _uiState.value.copy(
                                 aiInsightError = it.message ?: "AI 解读失败"
                             )
@@ -121,24 +118,24 @@ class StatisticsViewModel @Inject constructor(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                if (_uiState.value.period == selectedPeriod) {
+                if (_uiState.value.period == selectedPeriod && requestId == statsRequestId) {
                     _uiState.value = _uiState.value.copy(
                         aiInsightError = e.message ?: "AI 解读失败"
                     )
                 }
             } finally {
-                if (_uiState.value.period == selectedPeriod) {
+                if (_uiState.value.period == selectedPeriod && requestId == statsRequestId) {
                     _uiState.value = _uiState.value.copy(isAiInsightLoading = false)
                 }
             }
         }
     }
 
-    private fun loadStats() {
-        val selectedPeriod = _uiState.value.period
+    private fun loadStats(selectedPeriod: StatsPeriod = _uiState.value.period) {
         val requestId = ++statsRequestId
         statsJob?.cancel()
-        _uiState.value = _uiState.value.copy(isStatsLoading = true, statsError = null)
+        aiInsightJob?.cancel()
+        _uiState.value = StatsUiState(period = selectedPeriod, isStatsLoading = true)
         statsJob = viewModelScope.launch {
             try {
                 val today = LocalDate.now()
@@ -243,7 +240,8 @@ fun StatisticsScreen(
                     if (aiEnabled) {
                     TextButton(
                         onClick = viewModel::generateAiInsight,
-                        enabled = !uiState.isAiInsightLoading && !uiState.isStatsLoading
+                        enabled = !uiState.isAiInsightLoading && !uiState.isStatsLoading &&
+                            uiState.statsError == null && uiState.chartLabels.isNotEmpty()
                     ) {
                         if (uiState.isAiInsightLoading) {
                             CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
@@ -294,7 +292,8 @@ fun StatisticsScreen(
                 StatsSummaryStrip(
                     totalMinutes = uiState.totalStudyMinutes,
                     averageMinutes = uiState.averageDailyMinutes,
-                    completedPomodoros = uiState.completedPomodoros
+                    completedPomodoros = uiState.completedPomodoros,
+                    isAvailable = !uiState.isStatsLoading && uiState.statsError == null && uiState.chartLabels.isNotEmpty()
                 )
             }
 
@@ -358,50 +357,31 @@ fun StatisticsScreen(
             }
 
             item {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
-                    border = androidx.compose.foundation.BorderStroke(
-                        1.dp,
-                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.42f)
+                Column(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
+                    Text(
+                        text = "学习时长趋势",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
                     )
-                ) {
-                    Column(
-                        modifier = Modifier.padding(12.dp)
-                    ) {
-                        Text(
-                            text = "学习时长趋势",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
+                    Spacer(modifier = Modifier.height(4.dp))
+                    val (startDate, endDate) = statsDateRange(uiState.period, LocalDate.now())
+                    Text(
+                        text = "$startDate - $endDate · 分钟",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    if (uiState.isStatsLoading) {
+                        StatsLoadingBlock(
+                            message = "正在整理学习统计...",
+                            modifier = Modifier.fillMaxWidth().height(146.dp)
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = when (uiState.period) {
-                                StatsPeriod.DAY -> "查看今天的学习时长"
-                                StatsPeriod.WEEK -> "查看最近 7 天的学习分布"
-                                StatsPeriod.MONTH -> "查看本月每日学习趋势"
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    } else if (uiState.statsError == null) {
+                        BarChart(
+                            data = uiState.dailyMinutes,
+                            labels = uiState.chartLabels,
+                            modifier = Modifier.fillMaxWidth().height(146.dp)
                         )
-                        Spacer(modifier = Modifier.height(10.dp))
-                        if (uiState.isStatsLoading) {
-                            StatsLoadingBlock(
-                                message = "正在整理学习统计...",
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(146.dp)
-                            )
-                        } else {
-                            BarChart(
-                                data = uiState.dailyMinutes,
-                                labels = uiState.chartLabels,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(146.dp)
-                            )
-                        }
                     }
                 }
             }
@@ -409,45 +389,24 @@ fun StatisticsScreen(
             if (uiState.subjectDistribution.isNotEmpty()) {
                 item {
                     val subjectSlices = compactSubjectDistribution(uiState.subjectDistribution)
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
-                        border = androidx.compose.foundation.BorderStroke(
-                            1.dp,
-                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.42f)
-                        )
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(12.dp)
-                        ) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 text = "科目分布",
+                                modifier = Modifier.weight(1f),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                PieChart(
-                                    entries = subjectSlices,
-                                    modifier = Modifier.size(72.dp)
+                            PieChart(subjectSlices, Modifier.size(40.dp))
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            subjectSlices.forEach { (subject, minutes) ->
+                                LegendItem(
+                                    color = getColorForSubject(subject),
+                                    label = subject,
+                                    value = formatMinutesToHours(minutes)
                                 )
-                                Column(
-                                    modifier = Modifier.weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(5.dp)
-                                ) {
-                                    subjectSlices.forEach { (subject, minutes) ->
-                                        LegendItem(
-                                            color = getColorForSubject(subject),
-                                            label = subject,
-                                            value = formatMinutesToHours(minutes)
-                                        )
-                                    }
-                                }
                             }
                         }
                     }
@@ -571,7 +530,8 @@ internal fun statsBarHeightFraction(value: Int, maxValue: Int): Float {
 private fun StatsSummaryStrip(
     totalMinutes: Int,
     averageMinutes: Int,
-    completedPomodoros: Int
+    completedPomodoros: Int,
+    isAvailable: Boolean
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -581,57 +541,24 @@ private fun StatsSummaryStrip(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 9.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.Top
         ) {
-            Surface(
-                modifier = Modifier.size(38.dp),
-                shape = RoundedCornerShape(8.dp),
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.56f)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        Icons.Default.Timer,
-                        contentDescription = null,
-                        modifier = Modifier.size(21.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
-            Column(
-                modifier = Modifier.weight(1.18f),
-                verticalArrangement = Arrangement.spacedBy(1.dp)
-            ) {
-                Text(
-                    text = "总学习时长",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.62f),
-                    maxLines = 1
-                )
-                Text(
-                    text = formatCompactMinutes(totalMinutes),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    maxLines = 1
-                )
-            }
-            VerticalDivider(
-                modifier = Modifier.height(38.dp),
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.16f)
+            CompactStatItem(
+                modifier = Modifier.weight(1f),
+                title = "总学习时长",
+                value = if (isAvailable) formatCompactMinutes(totalMinutes) else "--"
             )
             CompactStatItem(
                 modifier = Modifier.weight(1f),
                 title = "番茄钟",
-                value = "${completedPomodoros}个",
-                icon = Icons.Default.EmojiEvents
+                value = if (isAvailable) "${completedPomodoros}个" else "--"
             )
             CompactStatItem(
                 modifier = Modifier.weight(1f),
                 title = "日均",
-                value = formatCompactMinutes(averageMinutes),
-                icon = Icons.AutoMirrored.Filled.TrendingUp
+                value = if (isAvailable) formatCompactMinutes(averageMinutes) else "--"
             )
         }
     }
@@ -641,40 +568,28 @@ private fun StatsSummaryStrip(
 private fun CompactStatItem(
     modifier: Modifier = Modifier,
     title: String,
-    value: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector
+    value: String
 ) {
-    Row(
+    Column(
         modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        Icon(
-            icon,
-            contentDescription = null,
-            modifier = Modifier.size(17.dp),
-            tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f)
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onPrimaryContainer
         )
-        Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-            Text(
-                text = value,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                maxLines = 1
-            )
-            Text(
-                text = title,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.62f),
-                maxLines = 1
-            )
-        }
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onPrimaryContainer
+        )
     }
 }
 
 @Composable
-private fun BarChart(
+internal fun BarChart(
     data: List<Int>,
     labels: List<String>,
     modifier: Modifier = Modifier
@@ -685,7 +600,7 @@ private fun BarChart(
     val maxValue = chartData.maxOrNull() ?: 0
     val hasData = maxValue > 0
     val chartColor = MaterialTheme.colorScheme.primary
-    val mutedText = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.56f)
+    val mutedText = MaterialTheme.colorScheme.onSurfaceVariant
     val itemSpacing = statsChartSpacingDp(itemCount).dp
 
     if (itemCount == 0) {
@@ -698,7 +613,11 @@ private fun BarChart(
         return
     }
 
-    Column(modifier = modifier) {
+    Column(modifier = modifier.semantics {
+        contentDescription = chartData.mapIndexed { index, minutes ->
+            "${chartLabels[index].ifBlank { (index + 1).toString() }}：$minutes 分钟"
+        }.joinToString("，")
+    }) {
         if (itemCount <= 7) {
             Row(
                 modifier = Modifier
@@ -785,7 +704,33 @@ private fun BarChart(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        Row(
+        if (itemCount > 7) {
+            val visibleLabels = chartLabels.withIndex().filter { it.value.isNotEmpty() }
+            Layout(
+                modifier = Modifier.fillMaxWidth(),
+                content = {
+                    visibleLabels.forEach { Text(it.value, style = MaterialTheme.typography.labelSmall, color = mutedText) }
+                }
+            ) { measurables, constraints ->
+                val placeables = measurables.map { it.measure(constraints.copy(minWidth = 0, minHeight = 0)) }
+                val inset = 6.dp.roundToPx()
+                val gap = 4.dp.roundToPx()
+                val spacing = itemSpacing.toPx()
+                val slotWidth = (constraints.maxWidth - 2 * inset - spacing * (itemCount - 1)) / itemCount
+                val positions = IntArray(placeables.size)
+                var rightEdge = constraints.maxWidth
+                // Keep full date labels inside the chart and separate adjacent month-end labels.
+                for (index in placeables.indices.reversed()) {
+                    val placeable = placeables[index]
+                    val center = inset + visibleLabels[index].index * (slotWidth + spacing) + slotWidth / 2
+                    positions[index] = min((center - placeable.width / 2).toInt(), rightEdge - placeable.width).coerceAtLeast(0)
+                    rightEdge = positions[index] - gap
+                }
+                layout(constraints.maxWidth, placeables.maxOfOrNull { it.height } ?: 0) {
+                    placeables.forEachIndexed { index, placeable -> placeable.placeRelative(positions[index], 0) }
+                }
+            }
+        } else Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 6.dp),
@@ -797,8 +742,7 @@ private fun BarChart(
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.labelSmall,
                     color = mutedText,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1
+                    textAlign = TextAlign.Center
                 )
             }
         }
@@ -819,7 +763,7 @@ private fun EmptyChartState(
         Text(
             text = message,
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = 24.dp)
         )
@@ -861,27 +805,21 @@ private fun LegendItem(
     value: String
 ) {
     Row(
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.Top
     ) {
         Box(
             modifier = Modifier
-                .size(12.dp)
+                .padding(top = 4.dp)
+                .size(8.dp)
                 .clip(RoundedCornerShape(2.dp))
                 .background(color)
         )
         Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.weight(1f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-        )
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(text = label, style = MaterialTheme.typography.bodySmall)
+            Text(text = value, style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 

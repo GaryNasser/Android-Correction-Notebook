@@ -17,7 +17,7 @@ import java.time.LocalDateTime
 class StudySessionRepositoryTest {
     @Test
     fun retryingTheSameSessionCannotDuplicateOrChangeAnAlreadySavedRecord() = runBlocking {
-        val repository = StudySessionRepository(ApplicationProvider.getApplicationContext())
+        val repository = StudySessionRepository(ApplicationProvider.getApplicationContext<android.content.Context>())
         val session = StudySession(
             subject = "Timer retry fixture",
             startTime = LocalDateTime.of(2000, 1, 1, 8, 0),
