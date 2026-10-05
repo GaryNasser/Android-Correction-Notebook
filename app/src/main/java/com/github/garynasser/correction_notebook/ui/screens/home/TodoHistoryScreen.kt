@@ -1,11 +1,11 @@
 package com.github.garynasser.correction_notebook.ui.screens.home
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -16,12 +16,10 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -39,7 +37,9 @@ fun TodoHistoryScreen(
     onBack: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    var showClearHistoryDialog by remember { mutableStateOf(false) }
+    var showClearHistoryDialog by rememberSaveable { mutableStateOf(false) }
+    var selectedItemId by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingDeleteId by rememberSaveable { mutableStateOf<String?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(uiState.message) {
@@ -148,7 +148,8 @@ fun TodoHistoryScreen(
                             TodoHistoryItemCard(
                                 item = historyItem,
                                 enabled = !uiState.isMutating,
-                                onDelete = { viewModel.deleteHistoryItem(historyItem.id) }
+                                onOpen = { selectedItemId = historyItem.id },
+                                onDelete = { pendingDeleteId = historyItem.id }
                             )
                         }
                     }
@@ -157,6 +158,49 @@ fun TodoHistoryScreen(
                 }
             }
         }
+    }
+
+    uiState.historyItems.firstOrNull { it.id == selectedItemId }?.let { item ->
+        TodoHistoryDetailDialog(
+            item = item,
+            enabled = !uiState.isMutating,
+            onDismiss = { selectedItemId = null },
+            onDelete = {
+                selectedItemId = null
+                pendingDeleteId = item.id
+            }
+        )
+    }
+
+    uiState.historyItems.firstOrNull { it.id == pendingDeleteId }?.let { item ->
+        AlertDialog(
+            onDismissRequest = { if (!uiState.isMutating) pendingDeleteId = null },
+            shape = RoundedCornerShape(8.dp),
+            title = { Text("删除完成记录", style = MaterialTheme.typography.titleMedium) },
+            text = {
+                Column(
+                    modifier = Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(item.title, style = MaterialTheme.typography.bodyMedium)
+                    Text("删除后无法恢复。", style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteHistoryItem(item.id)
+                        pendingDeleteId = null
+                    },
+                    enabled = !uiState.isMutating,
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) { Text("删除") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteId = null }, enabled = !uiState.isMutating) { Text("取消") }
+            }
+        )
     }
 
     if (showClearHistoryDialog) {
@@ -195,6 +239,57 @@ fun TodoHistoryScreen(
         )
     }
 }
+
+@Composable
+private fun TodoHistoryDetailDialog(
+    item: TodoHistoryItem,
+    enabled: Boolean,
+    onDismiss: () -> Unit,
+    onDelete: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(8.dp),
+        title = { Text("完成记录", style = MaterialTheme.typography.titleMedium) },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(item.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Text("${historyPriorityLabel(item.priority)} · 完成于 ${historyDateTimeText(item.completedAt)}",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("创建于 ${historyDateTimeText(item.createdAt)}", style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                item.dueDate?.let { date ->
+                    Text("截止日期 ${date.format(DateTimeFormatter.ofPattern("yyyy/MM/dd"))}",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (item.description.isNotBlank()) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Text(item.description, style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("关闭") } },
+        dismissButton = {
+            TextButton(onClick = onDelete, enabled = enabled) {
+                Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("删除")
+            }
+        }
+    )
+}
+
+private fun historyPriorityLabel(priority: Priority): String = when (priority) {
+    Priority.HIGH -> "高优先级"
+    Priority.MEDIUM -> "中优先级"
+    Priority.LOW -> "低优先级"
+}
+
+private fun historyDateTimeText(timestamp: Long): String = java.time.Instant.ofEpochMilli(timestamp)
+    .atZone(java.time.ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm"))
 
 @Composable
 private fun TodoHistoryMessageCard(
@@ -328,14 +423,9 @@ private fun DateHeader(date: LocalDate, count: Int) {
 private fun TodoHistoryItemCard(
     item: TodoHistoryItem,
     enabled: Boolean,
+    onOpen: () -> Unit,
     onDelete: () -> Unit
 ) {
-    val priorityColor = when (item.priority) {
-        Priority.HIGH -> Color(0xFFE53935)
-        Priority.MEDIUM -> Color(0xFFFFA000)
-        Priority.LOW -> Color(0xFF43A047)
-    }
-
     val completedTime = remember(item.completedAt) {
         java.time.Instant.ofEpochMilli(item.completedAt)
             .atZone(java.time.ZoneId.systemDefault())
@@ -344,6 +434,8 @@ private fun TodoHistoryItemCard(
     }
 
     Surface(
+        onClick = onOpen,
+        enabled = enabled,
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(8.dp),
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
@@ -352,75 +444,46 @@ private fun TodoHistoryItemCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                .padding(start = 12.dp, end = 4.dp, top = 10.dp, bottom = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier
-                    .size(30.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF43A047).copy(alpha = 0.14f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    Icons.Default.Check,
-                    contentDescription = null,
-                    tint = Color(0xFF2E7D32),
-                    modifier = Modifier.size(18.dp)
-                )
-            }
+            Icon(Icons.Default.Check, contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
 
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(3.dp)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(6.dp)
-                            .clip(CircleShape)
-                            .background(priorityColor)
-                    )
+                Text(
+                    text = item.title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Text(
+                    text = "完成于 $completedTime · ${historyPriorityLabel(item.priority)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                if (item.description.isNotBlank()) {
                     Text(
-                        text = item.title,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                        textDecoration = TextDecoration.LineThrough,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f),
+                        text = item.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                }
-
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "完成于 $completedTime",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    if (item.description.isNotBlank()) {
-                        Text(
-                            text = item.description,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
                 }
             }
 
             IconButton(
                 onClick = onDelete,
                 enabled = enabled,
-                modifier = Modifier.size(30.dp)
+                modifier = Modifier.size(48.dp)
             ) {
                 Icon(
                     Icons.Default.Delete,
