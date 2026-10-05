@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -588,9 +589,10 @@ fun KnowledgeBaseScreen(
                     cards = learningCards,
                     onDismiss = { learningStudySetId = null },
                     onEditCard = { editingKnowledgeCard = it },
-                    onReview = { card, remembered ->
-                        viewModel.markFlashcardReviewed(card.flashcardId, remembered)
-                    }
+                    onReview = { card, remembered, onReviewed ->
+                        viewModel.markFlashcardReviewed(card.flashcardId, remembered, onReviewed)
+                    },
+                    isReviewing = uiState.isLocalBusy
                 )
             } else if (isQuizMode) {
                 StudySetQuizPage(
@@ -1070,7 +1072,7 @@ private fun KnowledgeSpacePage(
 }
 
 @Composable
-private fun StudySetDetailPage(
+internal fun StudySetDetailPage(
     studySet: StudySetSummary,
     cards: List<DueReviewItem>,
     reviewedCards: List<DueReviewItem>,
@@ -1090,6 +1092,7 @@ private fun StudySetDetailPage(
     onReviewDone: (String) -> Unit
 ) {
     var filter by rememberSaveable(studySet.id) { mutableStateOf("ALL") }
+    var menuExpanded by remember { mutableStateOf(false) }
     val now = System.currentTimeMillis()
     val dueCards = cards.filter {
         it.type == KnowledgeCardType.QA_FLASHCARD && (it.lastReviewedAt == null || it.nextReviewAt <= now)
@@ -1110,7 +1113,7 @@ private fun StudySetDetailPage(
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(8.dp),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
     ) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1118,29 +1121,38 @@ private fun StudySetDetailPage(
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                 }
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(studySet.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(
-                        listOfNotNull(
-                            studySet.courseName,
-                            "${cards.size} 张卡",
-                            if (quizQuestions.isNotEmpty()) "${quizQuestions.size} 道测验" else null,
-                            if (dueCards.isNotEmpty()) "${dueCards.size} 待复习" else null
-                        ).joinToString(" · "),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Text(studySet.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                 }
-                IconButton(onClick = onRename) {
-                    Icon(Icons.Default.Edit, contentDescription = "编辑学习集")
+                Box {
+                    IconButton(onClick = { menuExpanded = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "学习集操作")
+                    }
+                    DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                        DropdownMenuItem(text = { Text("编辑学习集") }, leadingIcon = { Icon(Icons.Default.Edit, null) },
+                            onClick = { menuExpanded = false; onRename() })
+                        DropdownMenuItem(text = { Text("合并学习集") }, leadingIcon = { Icon(Icons.Default.Link, null) },
+                            onClick = { menuExpanded = false; onMerge() })
+                        DropdownMenuItem(text = { Text("删除学习集") }, leadingIcon = { Icon(Icons.Default.Delete, null) },
+                            onClick = { menuExpanded = false; onDelete() })
+                    }
                 }
-                IconButton(onClick = onMerge) {
-                    Icon(Icons.Default.Link, contentDescription = "合并学习集")
-                }
+            }
+        }
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    listOfNotNull(
+                        studySet.courseName,
+                        "${cards.size} 张卡",
+                        if (quizQuestions.isNotEmpty()) "${quizQuestions.size} 道测验" else null,
+                        if (dueCards.isNotEmpty()) "${dueCards.size} 待复习" else null
+                    ).joinToString(" · "),
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 IconButton(onClick = onAddCard) {
                     Icon(Icons.Default.Add, contentDescription = "添加知识卡片")
-                }
-                IconButton(onClick = onDelete) {
-                    Icon(Icons.Default.Delete, contentDescription = "删除学习集")
                 }
             }
         }
@@ -1169,26 +1181,28 @@ private fun StudySetDetailPage(
                     Spacer(modifier = Modifier.size(6.dp))
                     Text("测验")
                 }
-                Row(
-                    modifier = Modifier
-                        .weight(1f)
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    listOf(
-                        "ALL" to "全部",
-                        "DUE" to "待复习",
-                        "QA" to "问答",
-                        "KNOWLEDGE" to "知识点",
-                        "QUIZ" to "测验",
-                        "HISTORY" to "历史"
-                    ).forEach { (key, label) ->
-                        FilterChip(
-                            selected = filter == key,
-                            onClick = { filter = key },
-                            label = { Text(label) }
-                        )
-                    }
+            }
+        }
+
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf(
+                    "ALL" to "全部",
+                    "DUE" to "待复习",
+                    "QA" to "问答",
+                    "KNOWLEDGE" to "知识点",
+                    "QUIZ" to "测验",
+                    "HISTORY" to "历史"
+                ).forEach { (key, label) ->
+                    FilterChip(
+                        selected = filter == key,
+                        onClick = { filter = key },
+                        label = { Text(label) },
+                        shape = RoundedCornerShape(8.dp)
+                    )
                 }
             }
         }
@@ -1876,23 +1890,20 @@ private fun MoveKnowledgeCardDialog(
 }
 
 @Composable
-private fun StudySetQuizPage(
+internal fun StudySetQuizPage(
     studySet: StudySetSummary,
     questions: List<StudySetQuizItem>,
     initialQuestionId: String?,
     onDismiss: () -> Unit
 ) {
-    val initialIndex = remember(initialQuestionId, questions) {
-        questions.indexOfFirst { it.id == initialQuestionId }.takeIf { it >= 0 } ?: 0
-    }
-    var index by rememberSaveable(studySet.id, questions.size, initialQuestionId) { mutableIntStateOf(initialIndex) }
-    var selectedOption by rememberSaveable(studySet.id, index) { mutableStateOf<String?>(null) }
-    var showAnswer by rememberSaveable(studySet.id, index) { mutableStateOf(false) }
-    val safeIndex = index.coerceIn(0, (questions.size - 1).coerceAtLeast(0))
+    var selectedQuestionId by rememberSaveable(studySet.id, initialQuestionId) { mutableStateOf(initialQuestionId) }
+    val safeIndex = questions.indexOfFirst { it.id == selectedQuestionId }.coerceAtLeast(0)
     val current = questions.getOrNull(safeIndex)
+    var selectedOption by rememberSaveable(studySet.id, current?.id) { mutableStateOf<String?>(null) }
+    var showAnswer by rememberSaveable(studySet.id, current?.id) { mutableStateOf(false) }
 
-    LaunchedEffect(questions.size) {
-        if (index >= questions.size) index = (questions.size - 1).coerceAtLeast(0)
+    LaunchedEffect(current?.id) {
+        selectedQuestionId = current?.id
     }
 
     Surface(
@@ -1902,15 +1913,16 @@ private fun StudySetQuizPage(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .safeDrawingPadding()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onDismiss) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "退出测验")
                 }
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(studySet.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold)
+                    Text(studySet.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                     Text(
                         if (questions.isEmpty()) "0 / 0" else "${safeIndex + 1} / ${questions.size}",
                         style = MaterialTheme.typography.labelMedium,
@@ -1929,20 +1941,20 @@ private fun StudySetQuizPage(
                         .fillMaxWidth()
                         .weight(1f),
                     color = MaterialTheme.colorScheme.surface,
-                    shape = MaterialTheme.shapes.extraLarge,
-                    tonalElevation = 2.dp
+                    shape = RoundedCornerShape(8.dp),
+                    tonalElevation = 0.dp
                 ) {
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(22.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Column(
                             modifier = Modifier
                                 .weight(1f)
                                 .verticalScroll(rememberScrollState()),
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             Text(
                                 if (current.type == "MULTIPLE_CHOICE") "选择题" else "简答题",
@@ -1951,7 +1963,7 @@ private fun StudySetQuizPage(
                             )
                             Text(
                                 current.question,
-                                style = MaterialTheme.typography.headlineSmall,
+                                style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
                             if (current.options.isNotEmpty()) {
@@ -1998,12 +2010,12 @@ private fun StudySetQuizPage(
                                 onClick = {
                                     selectedOption = null
                                     showAnswer = false
-                                    index = (safeIndex - 1).coerceAtLeast(0)
+                                    selectedQuestionId = questions.getOrNull(safeIndex - 1)?.id ?: current.id
                                 },
                                 enabled = safeIndex > 0
                             ) { Text("上一题") }
                             Text(
-                                selectedOption?.let { "已选择" } ?: if (showAnswer) "已显示答案" else "作答后显示答案",
+                                selectedOption?.let { "已选择" } ?: if (showAnswer) "已显示答案" else "未作答",
                                 modifier = Modifier.weight(1.25f),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -2016,7 +2028,7 @@ private fun StudySetQuizPage(
                                 onClick = {
                                     selectedOption = null
                                     showAnswer = false
-                                    index = (safeIndex + 1).coerceAtMost(questions.lastIndex)
+                                    selectedQuestionId = questions.getOrNull(safeIndex + 1)?.id ?: current.id
                                 },
                                 enabled = safeIndex < questions.lastIndex
                             ) { Text("下一题") }
@@ -2029,22 +2041,36 @@ private fun StudySetQuizPage(
 }
 
 @Composable
-private fun StudySetLearningPage(
+internal fun StudySetLearningPage(
     studySet: StudySetSummary,
     cards: List<DueReviewItem>,
     onDismiss: () -> Unit,
     onEditCard: (DueReviewItem) -> Unit,
-    onReview: (DueReviewItem, Boolean) -> Unit
+    onReview: (DueReviewItem, Boolean, () -> Unit) -> Unit,
+    isReviewing: Boolean = false
 ) {
-    var index by rememberSaveable(studySet.id, cards.size) { mutableIntStateOf(0) }
-    var showAnswer by rememberSaveable(studySet.id, index) { mutableStateOf(false) }
+    var selectedCardId by rememberSaveable(studySet.id) { mutableStateOf<String?>(null) }
+    var reviewedCardIds by rememberSaveable(studySet.id) { mutableStateOf(emptyList<String>()) }
     var dragX by remember { mutableFloatStateOf(0f) }
     var dragY by remember { mutableFloatStateOf(0f) }
-    val safeIndex = index.coerceIn(0, (cards.size - 1).coerceAtLeast(0))
+    val safeIndex = cards.indexOfFirst { it.flashcardId == selectedCardId }.coerceAtLeast(0)
     val current = cards.getOrNull(safeIndex)
+    var showAnswer by rememberSaveable(studySet.id, current?.flashcardId) { mutableStateOf(false) }
+    val isComplete = cards.isNotEmpty() && cards.all { it.flashcardId in reviewedCardIds }
+    val canReview = current != null && !isReviewing && current.flashcardId !in reviewedCardIds
 
-    LaunchedEffect(cards.size) {
-        if (index >= cards.size) index = (cards.size - 1).coerceAtLeast(0)
+    fun review(remembered: Boolean) {
+        val card = current ?: return
+        if (!canReview) return
+        val nextCardId = cards.getOrNull(safeIndex + 1)?.flashcardId ?: card.flashcardId
+        onReview(card, remembered) {
+            reviewedCardIds = (reviewedCardIds + card.flashcardId).distinct()
+            if (selectedCardId == card.flashcardId) selectedCardId = nextCardId
+        }
+    }
+
+    LaunchedEffect(current?.flashcardId) {
+        selectedCardId = current?.flashcardId
     }
 
     Surface(
@@ -2054,15 +2080,16 @@ private fun StudySetLearningPage(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .safeDrawingPadding()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onDismiss) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "退出学习")
                 }
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(studySet.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold)
+                    Text(studySet.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                     Text(
                         if (cards.isEmpty()) "0 / 0" else "${safeIndex + 1} / ${cards.size}",
                         style = MaterialTheme.typography.labelMedium,
@@ -2076,7 +2103,18 @@ private fun StudySetLearningPage(
                 }
             }
 
-            if (current == null) {
+            if (isComplete) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
+                    Text("本轮学习完成", style = MaterialTheme.typography.titleMedium)
+                    Text("已复习 ${cards.size} 张卡片", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    TextButton(onClick = onDismiss) { Text("返回学习集") }
+                }
+            } else if (current == null) {
                 Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
                     EmptyStateCard("没有可学习的卡片", "这个学习集里还没有知识卡片。")
                 }
@@ -2085,7 +2123,7 @@ private fun StudySetLearningPage(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
-                        .pointerInput(current.flashcardId) {
+                        .pointerInput(current.flashcardId, canReview, isReviewing) {
                             detectDragGestures(
                                 onDragStart = {
                                     dragX = 0f
@@ -2097,16 +2135,17 @@ private fun StudySetLearningPage(
                                 },
                                 onDragEnd = {
                                     when {
+                                        isReviewing -> Unit
                                         abs(dragX) > abs(dragY) && abs(dragX) > 120f -> {
-                                            onReview(current, dragX > 0)
-                                            if (safeIndex < cards.lastIndex) index = safeIndex + 1
+                                            review(dragX > 0)
                                         }
                                         abs(dragY) > 90f -> {
-                                            index = if (dragY > 0) {
+                                            val nextIndex = if (dragY > 0) {
                                                 (safeIndex - 1).coerceAtLeast(0)
                                             } else {
                                                 (safeIndex + 1).coerceAtMost(cards.lastIndex)
                                             }
+                                            selectedCardId = cards.getOrNull(nextIndex)?.flashcardId ?: current.flashcardId
                                         }
                                     }
                                     dragX = 0f
@@ -2115,20 +2154,20 @@ private fun StudySetLearningPage(
                             )
                         },
                     color = MaterialTheme.colorScheme.surface,
-                    shape = MaterialTheme.shapes.extraLarge,
-                    tonalElevation = 2.dp
+                    shape = RoundedCornerShape(8.dp),
+                    tonalElevation = 0.dp
                 ) {
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(22.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Column(
                             modifier = Modifier
                                 .weight(1f)
                                 .verticalScroll(rememberScrollState()),
-                            verticalArrangement = Arrangement.spacedBy(14.dp)
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             Text(
                                 if (current.type == KnowledgeCardType.QA_FLASHCARD) "问答闪卡" else "知识点卡",
@@ -2137,7 +2176,7 @@ private fun StudySetLearningPage(
                             )
                             Text(
                                 current.title.ifBlank { current.front },
-                                style = MaterialTheme.typography.headlineMedium,
+                                style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold
                             )
                             if (current.type == KnowledgeCardType.QA_FLASHCARD) {
@@ -2166,10 +2205,8 @@ private fun StudySetLearningPage(
                         ) {
                             TextButton(
                                 modifier = Modifier.weight(1f),
-                                onClick = {
-                                    onReview(current, false)
-                                    if (safeIndex < cards.lastIndex) index = safeIndex + 1
-                                }
+                                onClick = { review(false) },
+                                enabled = canReview
                             ) {
                                 Text("没记清")
                             }
@@ -2184,10 +2221,8 @@ private fun StudySetLearningPage(
                             )
                             TextButton(
                                 modifier = Modifier.weight(1f),
-                                onClick = {
-                                    onReview(current, true)
-                                    if (safeIndex < cards.lastIndex) index = safeIndex + 1
-                                }
+                                onClick = { review(true) },
+                                enabled = canReview
                             ) {
                                 Text("记住了")
                             }
@@ -2196,17 +2231,17 @@ private fun StudySetLearningPage(
                 }
             }
 
-            Row(
+            if (!isComplete) Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 TextButton(
                     modifier = Modifier.weight(1f),
-                    onClick = { index = (safeIndex - 1).coerceAtLeast(0) },
-                    enabled = safeIndex > 0
+                    onClick = { selectedCardId = cards.getOrNull(safeIndex - 1)?.flashcardId ?: current?.flashcardId },
+                    enabled = safeIndex > 0 && !isReviewing
                 ) { Text("上一张") }
                 Text(
-                    "滑动复习 · 上下切换",
+                    "已复习 ${cards.count { it.flashcardId in reviewedCardIds }} / ${cards.size}",
                     modifier = Modifier.weight(1.25f),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -2216,8 +2251,8 @@ private fun StudySetLearningPage(
                 )
                 TextButton(
                     modifier = Modifier.weight(1f),
-                    onClick = { index = (safeIndex + 1).coerceAtMost(cards.lastIndex) },
-                    enabled = current != null && safeIndex < cards.lastIndex
+                    onClick = { selectedCardId = cards.getOrNull(safeIndex + 1)?.flashcardId ?: current?.flashcardId },
+                    enabled = current != null && safeIndex < cards.lastIndex && !isReviewing
                 ) { Text("下一张") }
             }
         }

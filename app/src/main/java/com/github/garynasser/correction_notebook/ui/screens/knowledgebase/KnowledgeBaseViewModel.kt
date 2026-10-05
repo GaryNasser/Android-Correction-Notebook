@@ -541,10 +541,13 @@ class KnowledgeBaseViewModel @Inject constructor(
         }
     }
 
-    fun markFlashcardReviewed(flashcardId: String, remembered: Boolean = true) {
+    fun markFlashcardReviewed(flashcardId: String, remembered: Boolean = true, onReviewed: () -> Unit = {}) {
         runLocalBusyAction("复习状态更新失败") {
             studySetRepository.markFlashcardReviewed(flashcardId, remembered = remembered)
-                .onSuccess { snackbarMessage.value = if (remembered) "已加入历史闪卡" else "已安排再次复习" }
+                .onSuccess {
+                    snackbarMessage.value = if (remembered) "已加入历史闪卡" else "已安排再次复习"
+                    onReviewed()
+                }
                 .onFailure { snackbarMessage.value = it.toUiMessage("复习状态更新失败") }
         }
     }

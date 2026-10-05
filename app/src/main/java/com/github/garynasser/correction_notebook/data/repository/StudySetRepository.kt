@@ -41,17 +41,17 @@ class StudySetRepository @Inject constructor(
             .map { rows -> rows.map { it.toDueReviewItem() } }
     }
 
-    fun observeKnowledgeCards(limit: Int = 80): Flow<List<DueReviewItem>> {
+    fun observeKnowledgeCards(limit: Int = -1): Flow<List<DueReviewItem>> {
         return dao.observeKnowledgeCards(limit)
             .map { rows -> rows.map { it.toDueReviewItem() } }
     }
 
-    fun observeReviewedCards(limit: Int = 80): Flow<List<DueReviewItem>> {
+    fun observeReviewedCards(limit: Int = -1): Flow<List<DueReviewItem>> {
         return dao.observeReviewedCards(limit)
             .map { rows -> rows.map { it.toDueReviewItem() } }
     }
 
-    fun observeQuizQuestions(limit: Int = 200): Flow<List<StudySetQuizItem>> {
+    fun observeQuizQuestions(limit: Int = -1): Flow<List<StudySetQuizItem>> {
         return dao.observeQuizQuestions(limit)
             .map { rows -> rows.map { it.toQuizItem() } }
     }
