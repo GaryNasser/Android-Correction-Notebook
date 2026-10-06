@@ -58,6 +58,21 @@ class AppUpdatePolicyTest {
         assertNotNull(update)
     }
 
+    @Test
+    fun neverOffersAnOlderBuildEvenWhenItsVersionNameIsHigher() {
+        assertNull(resolveAvailableUpdate(versionInfo("2.0.0", 12), "1.3.0", 13))
+    }
+
+    @Test
+    fun sameBuildWithADifferentNameIsNotAnInstallableUpdate() {
+        assertNull(resolveAvailableUpdate(versionInfo("2.0.0", 13), "1.3.0", 13))
+    }
+
+    @Test
+    fun forceFlagCannotTrapUsersWhoAlreadyInstalledTheLatestBuild() {
+        assertNull(resolveAvailableUpdate(versionInfo("1.3.0", 13).copy(forceUpdate = true), "1.3.0", 13))
+    }
+
     private fun versionInfo(
         versionName: String,
         versionCode: Long,

@@ -1,26 +1,16 @@
 package com.github.garynasser.correction_notebook
 
-import android.content.ActivityNotFoundException
-import android.content.Intent
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
@@ -51,6 +41,8 @@ import com.github.garynasser.correction_notebook.ui.screens.yanhe.CourseListScre
 import com.github.garynasser.correction_notebook.ui.screens.yanhe.CourseVideoListScreen
 import com.github.garynasser.correction_notebook.ui.screens.yanhe.PlayerScreen
 import com.github.garynasser.correction_notebook.ui.update.AppUpdateViewModel
+import com.github.garynasser.correction_notebook.ui.update.AppUpdateDialog
+import com.github.garynasser.correction_notebook.ui.update.openUpdateDownload
 
 @Composable
 fun MainContainer(
@@ -256,118 +248,15 @@ fun MainContainer(
         }
 
         appUpdateUiState.availableUpdate?.let { update ->
-            AlertDialog(
-                onDismissRequest = {
-                    if (!update.forceUpdate) {
-                        appUpdateViewModel.dismissUpdateDialog()
-                    }
-                },
-                shape = RoundedCornerShape(8.dp),
-                title = {
-                    Text(
-                        text = update.updateTitle,
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                },
-                text = {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 320.dp)
-                            .verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.48f),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.32f))
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                                verticalArrangement = Arrangement.spacedBy(2.dp)
-                            ) {
-                                Text(
-                                    text = "当前 ${appUpdateUiState.currentVersionName.ifBlank { "未知版本" }}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f)
-                                )
-                                Text(
-                                    text = "更新到 ${update.latestVersionName}",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
-                            }
-                        }
-                        Text(
-                            text = update.updateContent.ifBlank {
-                                "检测到新版本，建议尽快更新以获得更稳定的使用体验。"
-                            },
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        if (update.forceUpdate) {
-                            Text(
-                                text = "当前版本需要更新后继续使用。",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.error
-                            )
-                        }
-                        appUpdateUiState.downloadErrorMessage?.let { message ->
-                            Surface(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(8.dp),
-                                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.72f),
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.18f))
-                            ) {
-                                Text(
-                                    text = message,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onErrorContainer
-                                )
-                            }
-                        }
-                    }
-                },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            val downloadUrl = update.downloadUrl.trim()
-                            if (downloadUrl.isBlank()) {
-                                appUpdateViewModel.reportDownloadFailure("没有可用的下载地址")
-                                return@Button
-                            }
-                            try {
-                                val uri = downloadUrl.toUri()
-                                if (uri.scheme !in setOf("http", "https")) {
-                                    appUpdateViewModel.reportDownloadFailure("下载链接格式不正确")
-                                    return@Button
-                                }
-                                val intent = Intent(Intent.ACTION_VIEW, uri)
-                                context.startActivity(intent)
-                                if (!update.forceUpdate) {
-                                    appUpdateViewModel.dismissUpdateDialog()
-                                }
-                            } catch (_: ActivityNotFoundException) {
-                                appUpdateViewModel.reportDownloadFailure("没有可打开下载链接的应用")
-                            } catch (_: IllegalArgumentException) {
-                                appUpdateViewModel.reportDownloadFailure("下载链接格式不正确")
-                            } catch (_: SecurityException) {
-                                appUpdateViewModel.reportDownloadFailure("无法打开下载链接")
-                            }
-                        },
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text("立即更新")
-                    }
-                },
-                dismissButton = {
-                    if (!update.forceUpdate) {
-                        TextButton(onClick = { appUpdateViewModel.dismissUpdateDialog() }) {
-                            Text("稍后")
-                        }
-                    }
+            AppUpdateDialog(
+                update = update,
+                currentVersionName = appUpdateUiState.currentVersionName,
+                errorMessage = appUpdateUiState.downloadErrorMessage,
+                onDismiss = appUpdateViewModel::dismissUpdateDialog,
+                onUpdate = {
+                    val error = openUpdateDownload(context, update.downloadUrl)
+                    if (error != null) appUpdateViewModel.reportDownloadFailure(error)
+                    else appUpdateViewModel.dismissUpdateDialog()
                 }
             )
         }

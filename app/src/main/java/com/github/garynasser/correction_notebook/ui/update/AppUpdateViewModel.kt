@@ -11,11 +11,14 @@ import com.github.garynasser.correction_notebook.utils.isRemoteVersionNewer
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import retrofit2.HttpException
+import java.io.IOException
 import javax.inject.Inject
 
 data class AppUpdateUiState(
@@ -46,6 +49,7 @@ class AppUpdateViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 isChecking = true,
+                availableUpdate = null,
                 snackbarMessage = null,
                 downloadErrorMessage = null
             )
@@ -64,12 +68,22 @@ class AppUpdateViewModel @Inject constructor(
                         snackbarMessage = if (updateInfo == null && !silent) "当前已是最新版本" else null
                     )
                 }
+            } catch (_: TimeoutCancellationException) {
+                _uiState.update { it.copy(snackbarMessage = if (silent) null else "检查更新超时，请重试") }
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
                 _uiState.update {
                     it.copy(
-                        snackbarMessage = if (silent) null else (error.message ?: "检查更新失败")
+                        snackbarMessage = if (silent) null else when (error) {
+                            is HttpException -> when (error.code()) {
+                                404 -> "暂未找到可用的发布版本"
+                                403, 429 -> "更新服务暂时受限，请稍后重试"
+                                else -> "更新服务暂不可用，请稍后重试"
+                            }
+                            is IOException -> "无法连接更新服务，请检查网络后重试"
+                            else -> "检查更新失败，请稍后重试"
+                        }
                     )
                 }
             } finally {
@@ -81,6 +95,7 @@ class AppUpdateViewModel @Inject constructor(
     }
 
     fun dismissUpdateDialog() {
+        if (_uiState.value.availableUpdate?.forceUpdate == true) return
         _uiState.update { it.copy(availableUpdate = null, downloadErrorMessage = null) }
     }
 
@@ -113,13 +128,12 @@ internal fun resolveAvailableUpdate(
 ): AppVersionInfo? {
     val forceUpdate = latest.forceUpdate ||
         (latest.minSupportedVersionCode > 0 && currentVersionCode < latest.minSupportedVersionCode)
-    val hasNewerVersionCode = latest.latestVersionCode > 0 &&
+    val hasNewerVersion = if (latest.latestVersionCode > 0) {
         latest.latestVersionCode > currentVersionCode
-    val hasNewerVersionName = isRemoteVersionNewer(
-        remoteVersionName = latest.latestVersionName,
-        currentVersionName = currentVersionName
-    )
+    } else {
+        isRemoteVersionNewer(latest.latestVersionName, currentVersionName)
+    }
 
     return latest.copy(forceUpdate = forceUpdate)
-        .takeIf { forceUpdate || hasNewerVersionCode || hasNewerVersionName }
+        .takeIf { hasNewerVersion }
 }
