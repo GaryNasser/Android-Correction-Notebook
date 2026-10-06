@@ -51,6 +51,12 @@ data class BitShareSearchResult(
     val entityType: String
 )
 
+data class BitShareSearchPage(
+    val items: List<BitShareSearchResult>,
+    val total: Int,
+    val nextPage: Int?
+)
+
 data class BitShareFileDetail(
     val id: String,
     val title: String,
