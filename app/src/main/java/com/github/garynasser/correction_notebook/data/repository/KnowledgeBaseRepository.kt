@@ -129,8 +129,20 @@ class KnowledgeBaseRepository @Inject constructor(
             updatedAt = now
         )
 
-        dao.insertFolder(folder)
-        fileStorage.ensureFolderPath(getFolderPathIds(folder.id))
+        val pathIds = getFolderPathIds(parentId) + folder.id
+        withContext(NonCancellable) {
+            fileStorage.ensureFolderPath(pathIds)
+            try {
+                dao.insertFolder(folder)
+            } catch (error: Throwable) {
+                try {
+                    fileStorage.deleteFolder(pathIds)
+                } catch (cleanupError: Throwable) {
+                    error.addSuppressed(cleanupError)
+                }
+                throw error
+            }
+        }
     }
 
     suspend fun renameFolder(folderId: String, newName: String): Result<Unit> = runCatchingCancellable {
@@ -152,8 +164,20 @@ class KnowledgeBaseRepository @Inject constructor(
         val childFileCount = dao.countFilesByFolder(folderId)
         require(childFolderCount == 0 && childFileCount == 0) { "请先清空文件夹内容" }
 
-        dao.deleteFolder(folder)
-        fileStorage.deleteFolder(getFolderPathIds(folderId))
+        val pathIds = getFolderPathIds(folderId)
+        withContext(NonCancellable) {
+            fileStorage.deleteFolder(pathIds)
+            try {
+                dao.deleteFolder(folder)
+            } catch (error: Throwable) {
+                try {
+                    fileStorage.ensureFolderPath(pathIds)
+                } catch (rollbackError: Throwable) {
+                    error.addSuppressed(rollbackError)
+                }
+                throw error
+            }
+        }
     }
 
     suspend fun renameFile(fileId: String, newName: String): Result<Unit> = runCatchingCancellable {
@@ -174,25 +198,26 @@ class KnowledgeBaseRepository @Inject constructor(
         if (file.folderId == targetFolderId) return@runCatchingCancellable
 
         val originalFolderPathIds = getFolderPathIds(file.folderId)
-        val newPath = fileStorage.moveFile(file.localPath, getFolderPathIds(targetFolderId))
-
-        try {
-            dao.updateFile(
-                file.copy(
-                    folderId = targetFolderId,
-                    localPath = newPath,
-                    updatedAt = System.currentTimeMillis()
-                )
-            )
-        } catch (error: Throwable) {
+        val targetFolderPathIds = getFolderPathIds(targetFolderId)
+        // Complete the disk move and metadata update together, even if the caller leaves the screen.
+        withContext(NonCancellable) {
+            val newPath = fileStorage.moveFile(file.localPath, targetFolderPathIds)
             try {
-                withContext(NonCancellable) {
+                dao.updateFile(
+                    file.copy(
+                        folderId = targetFolderId,
+                        localPath = newPath,
+                        updatedAt = System.currentTimeMillis()
+                    )
+                )
+            } catch (error: Throwable) {
+                try {
                     fileStorage.moveFile(newPath, originalFolderPathIds)
+                } catch (rollbackError: Throwable) {
+                    error.addSuppressed(rollbackError)
                 }
-            } catch (rollbackError: Throwable) {
-                error.addSuppressed(rollbackError)
+                throw error
             }
-            throw error
         }
     }
 
@@ -296,50 +321,63 @@ class KnowledgeBaseRepository @Inject constructor(
         targetFolderId: String,
         inputStream: InputStream
     ): Result<Unit> = runCatchingCancellable {
-        val resolvedFolderId = targetFolderId.takeUnless { it == ROOT_FOLDER_ID }
-        val now = System.currentTimeMillis()
-        val displayName = resolveUniqueDisplayName(
-            folderId = resolvedFolderId,
-            preferredName = detail.originalName
-        )
-
-        val stored = fileStorage.writeFile(
-            folderPathIds = getFolderPathIds(resolvedFolderId),
-            preferredName = displayName,
-            inputStream = inputStream
-        )
-
-        insertImportedFile(
-            KnowledgeBaseFileEntity(
-                id = UUID.randomUUID().toString(),
+        var inputTransferredToStorage = false
+        try {
+            val resolvedFolderId = targetFolderId.takeUnless { it == ROOT_FOLDER_ID }
+            val folderPathIds = getFolderPathIds(resolvedFolderId)
+            val now = System.currentTimeMillis()
+            val displayName = resolveUniqueDisplayName(
                 folderId = resolvedFolderId,
-                displayName = displayName,
-                storedName = stored.storedName,
-                localPath = stored.absolutePath,
-                mimeType = detail.mimeType,
-                sizeBytes = stored.sizeBytes,
-                sourceType = "bitshare",
-                sourceFileId = detail.id,
-                sourceTitle = detail.title,
-                sourcePath = detail.path,
-                courseId = null,
-                courseName = null,
-                tags = "",
-                downloadedAt = now,
-                createdAt = now,
-                updatedAt = now
+                preferredName = detail.originalName
             )
-        )
+
+            inputTransferredToStorage = true
+            val stored = fileStorage.writeFile(
+                folderPathIds = folderPathIds,
+                preferredName = displayName,
+                inputStream = inputStream
+            )
+
+            insertImportedFile(
+                KnowledgeBaseFileEntity(
+                    id = UUID.randomUUID().toString(),
+                    folderId = resolvedFolderId,
+                    displayName = displayName,
+                    storedName = stored.storedName,
+                    localPath = stored.absolutePath,
+                    mimeType = detail.mimeType,
+                    sizeBytes = stored.sizeBytes,
+                    sourceType = "bitshare",
+                    sourceFileId = detail.id,
+                    sourceTitle = detail.title,
+                    sourcePath = detail.path,
+                    courseId = null,
+                    courseName = null,
+                    tags = "",
+                    downloadedAt = now,
+                    createdAt = now,
+                    updatedAt = now
+                )
+            )
+        } catch (error: Throwable) {
+            if (!inputTransferredToStorage) {
+                try {
+                    inputStream.close()
+                } catch (closeError: Throwable) {
+                    error.addSuppressed(closeError)
+                }
+            }
+            throw error
+        }
     }
 
-    private suspend fun insertImportedFile(file: KnowledgeBaseFileEntity) {
+    // Once copying succeeds, cancellation must not delete a file whose index already committed.
+    private suspend fun insertImportedFile(file: KnowledgeBaseFileEntity) = withContext(NonCancellable) {
         try {
             dao.insertFile(file)
         } catch (error: Throwable) {
             try {
-                withContext(NonCancellable) {
-                    fileStorage.deleteFile(file.localPath)
-                }
+                fileStorage.deleteFile(file.localPath)
             } catch (cleanupError: Throwable) {
                 error.addSuppressed(cleanupError)
             }
@@ -371,7 +409,11 @@ class KnowledgeBaseRepository @Inject constructor(
     private suspend fun getFolderPathIds(folderId: String?): List<String> {
         if (folderId == null) return emptyList()
         val folderMap = dao.getAllFolders().associateBy { it.id }
-        return buildFolderChain(folderId, folderMap).map { it.id }
+        val chain = buildFolderChain(folderId, folderMap)
+        require(chain.lastOrNull()?.id == folderId && chain.firstOrNull()?.parentId == null) {
+            "文件夹不存在或已删除，请重新选择位置"
+        }
+        return chain.map { it.id }
     }
 
     private suspend fun resolveUniqueDisplayName(folderId: String?, preferredName: String): String {

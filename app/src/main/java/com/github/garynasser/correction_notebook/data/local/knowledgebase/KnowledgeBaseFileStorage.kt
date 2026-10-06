@@ -35,14 +35,10 @@ class KnowledgeBaseFileStorage @Inject constructor(
 
     suspend fun ensureFolderPath(folderPathIds: List<String>): File = withContext(Dispatchers.IO) {
         var current = baseDirectory
-        if (!current.exists()) {
-            current.mkdirs()
-        }
+        check(current.isDirectory || current.mkdirs() || current.isDirectory) { "无法创建知识库目录" }
         folderPathIds.forEach { folderId ->
             current = File(current, folderId)
-            if (!current.exists()) {
-                current.mkdirs()
-            }
+            check(current.isDirectory || current.mkdirs() || current.isDirectory) { "无法创建本地文件夹" }
         }
         current
     }
@@ -97,6 +93,7 @@ class KnowledgeBaseFileStorage @Inject constructor(
         if (!sourceFile.exists()) {
             throw IllegalStateException("源文件不存在")
         }
+        if (sourceFile.canonicalFile == destinationFile.canonicalFile) return@withContext sourceFile.absolutePath
 
         sourceFile.copyTo(destinationFile, overwrite = true)
         if (!sourceFile.delete()) {
@@ -126,13 +123,16 @@ class KnowledgeBaseFileStorage @Inject constructor(
     }
 
     suspend fun deleteFolder(folderPathIds: List<String>) = withContext(Dispatchers.IO) {
+        require(folderPathIds.isNotEmpty()) { "不能删除知识库根目录" }
         var folder = baseDirectory
         folderPathIds.forEach { folderId ->
             folder = File(folder, folderId)
         }
-        if (folder.exists() && folder.listFiles().isNullOrEmpty()) {
-            folder.delete()
-        }
+        if (!folder.exists()) return@withContext
+        check(folder.isDirectory) { "本地文件夹路径无效" }
+        val children = checkNotNull(folder.listFiles()) { "无法读取本地文件夹" }
+        check(children.isEmpty()) { "文件夹仍有本地文件，请等待导入完成或清空内容" }
+        check(folder.delete()) { "无法删除本地文件夹" }
     }
 
     private fun String.sanitizeFileName(): String {
