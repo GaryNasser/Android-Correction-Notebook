@@ -11,6 +11,8 @@ import com.google.gson.Gson
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 import javax.inject.Singleton
 import androidx.core.net.toUri
@@ -20,8 +22,11 @@ class VideoRepository @Inject constructor(
     private val videoRemoteManager: VideoRemoteManager,
 ) {
     private val gson = Gson()
+    private val cacheLock = Any()
+    private val videoTokenMutex = Mutex()
+    private var cacheGeneration = 0L
     @Volatile private var cachedVideoToken: CachedVideoToken? = null
-    @Volatile private var cachedUserBadge: String? = null
+    @Volatile private var cachedUserBadge: CachedUserBadge? = null
 
     data class YanheAuthData(
         val authenticatedUrl: String,
@@ -30,15 +35,24 @@ class VideoRepository @Inject constructor(
 
     private data class CachedVideoToken(
         val token: String,
-        val expiredAtSeconds: Long
+        val expiredAtSeconds: Long,
+        val sessionVersion: Long,
+        val cacheGeneration: Long
     )
 
+    private data class CachedUserBadge(val badge: String, val sessionVersion: Long, val cacheGeneration: Long)
+
     fun clearSessionCache() {
-        cachedVideoToken = null
-        cachedUserBadge = null
+        synchronized(cacheLock) {
+            cacheGeneration++
+            cachedVideoToken = null
+            cachedUserBadge = null
+        }
     }
 
     suspend fun getYanheAuthData(originalUrl: String): YanheAuthData {
+        val generation = synchronized(cacheLock) { cacheGeneration }
+        val version = videoRemoteManager.sessionVersion
         val token = getFreshVideoToken()
         val signature = SignatureUtils.getSignature()
 
@@ -61,7 +75,10 @@ class VideoRepository @Inject constructor(
             "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         )
 
-        return YanheAuthData(finalUrl, headers)
+        return synchronized(cacheLock) {
+            ensureCacheCurrent(generation, version)
+            YanheAuthData(finalUrl, headers)
+        }
     }
 
     /**
@@ -495,13 +512,23 @@ class VideoRepository @Inject constructor(
      * 辅助函数：获取新鲜 Token
      */
     suspend fun getFreshVideoToken(): String {
-        val nowSeconds = System.currentTimeMillis() / 1000
-        cachedVideoToken
-            ?.takeIf { it.token.isNotBlank() && it.expiredAtSeconds > nowSeconds + 180 }
-            ?.let { return it.token }
+        val generation = synchronized(cacheLock) { cacheGeneration }
+        val version = videoRemoteManager.sessionVersion
+        return videoTokenMutex.withLock { requestFreshVideoToken(generation, version) }
+    }
 
-        val badge = getYanheUserBadge()
-        val response = videoRemoteManager.getVideoToken(id = badge)
+    private suspend fun requestFreshVideoToken(generation: Long, version: Long): String {
+        val nowSeconds = System.currentTimeMillis() / 1000
+        synchronized(cacheLock) {
+            ensureCacheCurrent(generation, version)
+            cachedVideoToken
+                ?.takeIf { it.sessionVersion == version && it.cacheGeneration == generation &&
+                    it.token.isNotBlank() && it.expiredAtSeconds > nowSeconds + 180 }
+                ?.let { return it.token }
+        }
+
+        val badge = getYanheUserBadge(generation, version)
+        val response = videoRemoteManager.getVideoToken(id = badge, expectedVersion = version)
             ?: throw Exception("无法获取有效的视频 Token")
         val data = response.data ?: throw Exception("无法获取有效的视频 Token")
         if (response.code != 0 && response.code != 200) {
@@ -510,16 +537,20 @@ class VideoRepository @Inject constructor(
         if (data.token.isBlank()) {
             throw Exception("延河课堂视频授权缺少 Token")
         }
-        cachedVideoToken = CachedVideoToken(
-            token = data.token,
-            expiredAtSeconds = data.expiredAt
-        )
-        return data.token
+        return synchronized(cacheLock) {
+            ensureCacheCurrent(generation, version)
+            cachedVideoToken = CachedVideoToken(data.token, data.expiredAt, version, generation)
+            data.token
+        }
     }
 
-    private suspend fun getYanheUserBadge(): String {
-        cachedUserBadge?.takeIf { it.isNotBlank() }?.let { return it }
-        val response = videoRemoteManager.getYanheUser()
+    private suspend fun getYanheUserBadge(generation: Long, version: Long): String {
+        synchronized(cacheLock) {
+            ensureCacheCurrent(generation, version)
+            cachedUserBadge?.takeIf { it.sessionVersion == version && it.cacheGeneration == generation }
+                ?.let { return it.badge }
+        }
+        val response = videoRemoteManager.getYanheUser(expectedVersion = version)
             ?: throw Exception("无法获取延河课堂用户信息")
         if (response.code != 0 && response.code != 200) {
             throw Exception(response.message.ifBlank { "延河课堂用户信息返回异常：${response.code}" })
@@ -530,8 +561,16 @@ class VideoRepository @Inject constructor(
             ?.stringValue("badge", "")
             ?.takeIf { it.isNotBlank() }
             ?: "0"
-        cachedUserBadge = badge
-        return badge
+        return synchronized(cacheLock) {
+            ensureCacheCurrent(generation, version)
+            cachedUserBadge = CachedUserBadge(badge, version, generation)
+            badge
+        }
+    }
+
+    private fun ensureCacheCurrent(generation: Long, version: Long) {
+        videoRemoteManager.ensureSession(version)
+        if (generation != cacheGeneration) throw CancellationException("视频授权缓存已清除")
     }
 
 }
