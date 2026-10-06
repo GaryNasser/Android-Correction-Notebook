@@ -9,6 +9,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
@@ -18,6 +19,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.viewModelScope
@@ -204,6 +206,47 @@ class CourseListFlowTest {
     @Test fun lightSearchAndSemesterFitNarrowScreenAndLargeFont() = checkLayout(false)
     @Test fun darkSearchAndSemesterFitNarrowScreenAndLargeFont() = checkLayout(true)
 
+    @Test fun shortLightCourseErrorKeepsRetryReachable() = checkErrorRecovery(false)
+    @Test fun shortDarkCourseErrorKeepsRetryReachable() = checkErrorRecovery(true)
+
+    @Test fun retryCanRecoverToAnEmptyPersonalListWithoutARepeatedAutomaticSync() = withFixture { f ->
+        f.api.failPersonal = true
+        withContext(Dispatchers.Main) { f.vm.refreshMySchedule() }
+        f.await { f.vm.uiState is CourseUiState.Error && !f.vm.isRefreshingSchedule }
+        compose.setContent { CorrectionNotebookTheme { CourseListScreen(f.vm) { _, _ -> } } }
+        f.api.failPersonal = false
+        f.api.emptyPersonal = true
+        compose.onNodeWithText("重试").performClick()
+        f.await { f.vm.uiState is CourseUiState.Success && !f.vm.isRefreshingSchedule }
+        compose.onNodeWithText("暂无个人课程").assertIsDisplayed()
+        compose.onNode(hasSetTextAction()).performImeAction()
+        compose.runOnIdle { assertEquals(2, f.api.personalCalls) }
+    }
+
+    private fun checkErrorRecovery(dark: Boolean) = withFixture { f ->
+        f.api.failPersonal = true
+        f.api.personalErrorMessage = (1..12).joinToString("\n") { "网络连接暂不可用，课程同步未完成（$it）。" }
+        withContext(Dispatchers.Main) { f.vm.refreshMySchedule() }
+        f.await { f.vm.uiState is CourseUiState.Error && !f.vm.isRefreshingSchedule }
+        val message = (f.vm.uiState as CourseUiState.Error).message
+        compose.setContent {
+            val density = LocalDensity.current.density
+            CompositionLocalProvider(LocalDensity provides Density(density, 1.3f)) {
+                CorrectionNotebookTheme(darkTheme = dark, dynamicColor = false) {
+                    Box(Modifier.size(width = 320.dp, height = 280.dp)) { CourseListScreen(f.vm) { _, _ -> } }
+                }
+            }
+        }
+        compose.onNodeWithText("重试").performScrollTo().assertIsDisplayed().assertIsEnabled()
+        assertFullText(message)
+        saveScreenshot("error-${if (dark) "dark" else "light"}")
+        f.api.failPersonal = false
+        compose.onNodeWithText("重试").performClick()
+        f.await { f.vm.uiState is CourseUiState.Success && !f.vm.isRefreshingSchedule }
+        compose.onNodeWithText("课程加载失败").assertDoesNotExist()
+        assertEquals(2, f.api.personalCalls)
+    }
+
     @Test fun imeSearchSubmitsTheTrimmedKeywordAndHidesTheKeyboard() = withFixture { f ->
         f.publicCourses("矩阵")
         var view: View? = null
@@ -357,6 +400,8 @@ class CourseListFlowTest {
         var personalGate: Gate? = null
         var publicGate: Gate? = null
         var failPersonal = false
+        var emptyPersonal = false
+        var personalErrorMessage = "Personal courses unavailable"
         var failPublicPage: Int? = null
         override suspend fun getCourseList(token: String, semester: Int?, page: Int, pageSize: Int, keyword: String?): ApiResponse<JsonElement> {
             publicCalls.add(page to keyword)
@@ -368,7 +413,8 @@ class CourseListFlowTest {
         override suspend fun getPrivateCourseList(token: String, page: Int, pageSize: Int, type: Int): ApiResponse<JsonElement> {
             personalCalls++
             personalGate?.await()
-            if (failPersonal) throw IllegalStateException("Personal courses unavailable")
+            if (failPersonal) throw IllegalStateException(personalErrorMessage)
+            if (emptyPersonal) return ApiResponse(0, data = JsonParser.parseString("[]"))
             return ApiResponse(0, data = JsonParser.parseString("""[
                 {"id":1,"name_zh":"矩阵分析","semester":"2025-2026 春季","professors":["张老师"]},
                 {"id":2,"name_zh":"机器学习","semester":"2024-2025 秋季","professors":["李老师"]}

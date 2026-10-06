@@ -18,7 +18,9 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Camera
@@ -338,14 +340,13 @@ private fun VideoListMessageState(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp)
-            .heightIn(min = 132.dp),
+            .padding(horizontal = 24.dp),
         shape = RoundedCornerShape(8.dp),
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.verticalScroll(rememberScrollState()).padding(16.dp),
             horizontalAlignment = horizontalAlignment,
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
