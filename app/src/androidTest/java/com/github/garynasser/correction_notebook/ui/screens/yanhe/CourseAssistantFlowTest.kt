@@ -2,8 +2,12 @@ package com.github.garynasser.correction_notebook.ui.screens.yanhe
 
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
@@ -230,6 +234,34 @@ class CourseAssistantFlowTest {
         compose.onNodeWithText("生成学习包").assertDoesNotExist()
     }
 
+    @Test fun shortLightVideoErrorKeepsRetryReachableAndRecovers() = checkVideoErrorRecovery(false)
+    @Test fun shortDarkVideoErrorKeepsRetryReachableAndRecovers() = checkVideoErrorRecovery(true)
+
+    private fun checkVideoErrorRecovery(dark: Boolean) = withFixture { f ->
+        f.listFailure = true
+        f.listErrorMessage = (1..12).joinToString("\n") { "课程视频暂不可用，请稍后重新获取（$it）。" }
+        withContext(Dispatchers.Main) { f.videos.getVideoList(12) }
+        f.await { f.videos.uiState is VideoUIState.Error }
+        val message = (f.videos.uiState as VideoUIState.Error).message
+        compose.setContent {
+            val density = LocalDensity.current.density
+            CompositionLocalProvider(LocalAiEnabled provides false, LocalDensity provides Density(density, 1.3f)) {
+                CorrectionNotebookTheme(darkTheme = dark, dynamicColor = false) {
+                    Box(Modifier.size(width = 320.dp, height = 220.dp)) {
+                        CourseVideoListScreen(f.videos, f.assistant, { _, _, _ -> }, {})
+                    }
+                }
+            }
+        }
+        compose.onNodeWithText("重试").performScrollTo().assertIsDisplayed().assertIsEnabled()
+        assertFullText(message)
+        f.listFailure = false
+        compose.onNodeWithText("重试").performClick()
+        f.await { f.videos.uiState is VideoUIState.Success }
+        compose.onNodeWithText("视频列表加载失败").assertDoesNotExist()
+        assertEquals(2, (f.videos.uiState as VideoUIState.Success).videos.size)
+    }
+
     @Test fun longStoredNotesExpandFullyAndSurviveScreenRestoration() = withFixture { f ->
         val content = SUMMARY.repeat(20)
         f.learning.saveNote(CourseNote(courseId = 12, sectionId = 34, sectionTitle = SECTION, content = content))
@@ -364,13 +396,14 @@ class CourseAssistantFlowTest {
         lateinit var videos: VideoListViewModel
         lateinit var assistant: CourseAssistantViewModel
         @Volatile var listFailure = false
+        var listErrorMessage = "离线"
         fun create() {
             val unused = Retrofit.Builder().baseUrl("https://unused.invalid/").client(network)
                 .addConverterFactory(GsonConverterFactory.create()).build().create(VideoApiService::class.java)
             val api = object : VideoApiService by unused {
                 override suspend fun getCourseSession(token: String, courseId: Int, withPage: Boolean?, page: Int?, pageSize: Int?,
                     orderType: String?, orderTypeWeight: String?): ApiResponse<JsonElement> {
-                    if (listFailure) throw java.io.IOException("离线")
+                    if (listFailure) throw java.io.IOException(listErrorMessage)
                     return ApiResponse(0, data = gson.toJsonTree(
                         listOf(CourseSection(id = 34, courseId = 12, title = SECTION), CourseSection(id = 35, courseId = 12, title = "另一节课"))))
                 }
