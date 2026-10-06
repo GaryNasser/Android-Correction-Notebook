@@ -128,6 +128,7 @@ import com.github.garynasser.correction_notebook.data.model.studyset.DueReviewIt
 import com.github.garynasser.correction_notebook.data.model.studyset.KnowledgeCardType
 import com.github.garynasser.correction_notebook.data.model.studyset.StudySetQuizItem
 import com.github.garynasser.correction_notebook.data.model.studyset.StudySetSummary
+import com.github.garynasser.correction_notebook.data.repository.KnowledgeBaseRepository
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -2850,7 +2851,7 @@ private fun RemoteFolderDetailDialog(
 }
 
 @Composable
-private fun FolderPickerDialog(
+internal fun FolderPickerDialog(
     title: String,
     folders: List<KnowledgeBaseFolderChoice>,
     onDismiss: () -> Unit,
@@ -2858,24 +2859,32 @@ private fun FolderPickerDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title) },
+        shape = RoundedCornerShape(8.dp),
+        title = { Text(title, style = MaterialTheme.typography.titleMedium) },
         text = {
             LazyColumn(
-                modifier = Modifier.heightIn(max = 360.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp)
             ) {
-                items(folders, key = { it.path }) { folder ->
-                    ElevatedCard(
+                items(folders, key = { it.id ?: KnowledgeBaseRepository.ROOT_FOLDER_ID }) { folder ->
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { onSelect(folder.id) }
+                            .padding(horizontal = 8.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        ListItem(
-                            headlineContent = { Text(folder.name) },
-                            supportingContent = { Text(folder.path) },
-                            leadingContent = { Icon(Icons.Default.Folder, contentDescription = null) }
-                        )
+                        Icon(Icons.Default.Folder, contentDescription = null, modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.primary)
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(folder.name, style = MaterialTheme.typography.bodyMedium)
+                            Text(folder.path, style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
                 }
             }
         },
@@ -2889,28 +2898,35 @@ private fun FolderPickerDialog(
 }
 
 @Composable
-private fun NameInputDialog(
+internal fun NameInputDialog(
     title: String,
     initialValue: String,
     confirmText: String,
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit
 ) {
-    var text by remember(initialValue) { mutableStateOf(initialValue) }
+    var text by rememberSaveable(initialValue) { mutableStateOf(initialValue) }
+    val submit = { if (text.isNotBlank()) onConfirm(text.trim()) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title) },
+        shape = RoundedCornerShape(8.dp),
+        title = { Text(title, style = MaterialTheme.typography.titleMedium) },
         text = {
             OutlinedTextField(
                 value = text,
                 onValueChange = { text = it },
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true
+                label = { Text("名称") },
+                textStyle = MaterialTheme.typography.bodyMedium,
+                shape = RoundedCornerShape(8.dp),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { submit() })
             )
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(text) }) {
+            TextButton(onClick = submit, enabled = text.isNotBlank()) {
                 Text(confirmText)
             }
         },
@@ -2923,7 +2939,7 @@ private fun NameInputDialog(
 }
 
 @Composable
-private fun ConfirmDialog(
+internal fun ConfirmDialog(
     title: String,
     message: String,
     confirmText: String,
@@ -2932,8 +2948,13 @@ private fun ConfirmDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = { Text(message) },
+        shape = RoundedCornerShape(8.dp),
+        title = { Text(title, style = MaterialTheme.typography.titleMedium) },
+        text = {
+            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+                Text(message, style = MaterialTheme.typography.bodySmall)
+            }
+        },
         confirmButton = {
             TextButton(onClick = onConfirm) {
                 Text(confirmText)
