@@ -15,6 +15,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -26,6 +28,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
@@ -73,6 +76,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -298,7 +302,7 @@ fun KnowledgeBaseFileViewerScreen(
     ) { innerPadding ->
         when {
             uiState.isLoading -> ViewerLoading(modifier = Modifier.padding(innerPadding))
-            uiState.file == null -> ViewerError(
+            uiState.file == null || (uiState.previewType == null && uiState.errorMessage != null) -> ViewerError(
                 modifier = Modifier.padding(innerPadding),
                 title = "文件不可用",
                 message = uiState.errorMessage ?: "无法读取文件",
@@ -389,7 +393,7 @@ fun KnowledgeBaseFileViewerScreen(
                                 isVideo = uiState.previewType == KnowledgeBasePreviewType.VIDEO
                             )
                             KnowledgeBasePreviewType.FALLBACK,
-                            null -> FallbackPreview(uiState.file)
+                            null -> FallbackPreview(uiState.file, viewModel::refresh)
                         }
                     }
                 }
@@ -668,19 +672,21 @@ private fun ViewerError(
         modifier = modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
-        ElevatedCard(
-            modifier = Modifier.padding(16.dp),
-            shape = RoundedCornerShape(8.dp)
+        Column(
+            modifier = Modifier
+                .widthIn(max = 480.dp)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(title, style = MaterialTheme.typography.titleMedium)
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(message, style = MaterialTheme.typography.bodySmall)
-                if (actionText != null && onAction != null) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    TextButton(onClick = onAction) {
-                        Text(actionText)
-                    }
+            Text(title, modifier = Modifier.fillMaxWidth(), style = MaterialTheme.typography.titleSmall, textAlign = TextAlign.Center)
+            Text(message, modifier = Modifier.fillMaxWidth(), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+            if (actionText != null && onAction != null) {
+                TextButton(onClick = onAction) {
+                    Text(actionText)
                 }
             }
         }
@@ -817,27 +823,39 @@ private fun PdfPreview(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun FallbackPreview(file: KnowledgeBaseFileSummary) {
+private fun FallbackPreview(file: KnowledgeBaseFileSummary, onRetry: () -> Unit) {
+    val context = LocalContext.current
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
-        ElevatedCard(
+        Column(
             modifier = Modifier
+                .widthIn(max = 560.dp)
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .padding(16.dp),
-            shape = RoundedCornerShape(8.dp)
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Icon(Icons.Default.Description, contentDescription = null)
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("当前格式暂不支持应用内深度预览", style = MaterialTheme.typography.titleMedium)
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    "你仍然可以使用“其他应用打开”、“分享”或“导出副本”处理 ${file.displayName}。",
-                    style = MaterialTheme.typography.bodySmall
-                )
+            Icon(Icons.Default.Description, contentDescription = null, modifier = Modifier.size(26.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("暂无可用预览", modifier = Modifier.fillMaxWidth(), style = MaterialTheme.typography.titleSmall, textAlign = TextAlign.Center)
+            Text(file.displayName, modifier = Modifier.fillMaxWidth(), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)) {
+                TextButton(onClick = onRetry) {
+                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("重试")
+                }
+                TextButton(onClick = { openFileExternally(context, file) }) {
+                    Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("其他应用打开")
+                }
             }
         }
     }
