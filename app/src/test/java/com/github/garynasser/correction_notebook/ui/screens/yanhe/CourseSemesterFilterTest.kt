@@ -25,6 +25,24 @@ class CourseSemesterFilterTest {
         assertEquals(listOf(ALL_SEMESTERS), buildCourseSemesters(emptyList()))
     }
 
+    @Test
+    fun calendarYearLabelsSortAcrossYearsAndPutFallAfterSpring() {
+        val courses = listOf(
+            course(1, "2025 秋季"), course(2, "2026 春季"), course(3, "2026 秋季")
+        )
+        assertEquals(listOf(ALL_SEMESTERS, "2026 秋季", "2026 春季", "2025 秋季"), buildCourseSemesters(courses))
+    }
+
+    @Test
+    fun academicYearAndCalendarYearLabelsUseTheSameChronology() {
+        val courses = listOf(
+            course(1, "2025-2026 秋季"), course(2, "2026 秋季"),
+            course(3, "2025-2026 春季"), course(4, "2025 春季")
+        )
+        assertEquals(listOf(ALL_SEMESTERS, "2026 秋季", "2025-2026 春季", "2025-2026 秋季", "2025 春季"),
+            buildCourseSemesters(courses))
+    }
+
     private fun course(id: Int, semester: String) = Course(
         nameZh = "测试课程",
         orientation = 0,

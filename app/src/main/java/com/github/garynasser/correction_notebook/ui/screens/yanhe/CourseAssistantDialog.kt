@@ -61,11 +61,11 @@ internal fun CourseAssistantDialog(
         onDismissRequest = ::dismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
     ) {
-        Box(Modifier.fillMaxSize().safeDrawingPadding().imePadding()
+        Box(Modifier.fillMaxSize()
             .onGloballyPositioned { contentPosition = it.positionInRoot() }
             .pointerInput(state.isActionBusy) {
                 detectTapGestures { position -> if (!panelBounds.contains(position + contentPosition)) dismiss() }
-            }, contentAlignment = Alignment.Center) {
+            }.safeDrawingPadding().imePadding(), contentAlignment = Alignment.Center) {
             Box(Modifier.padding(12.dp)) {
                 Surface(Modifier.widthIn(max = 560.dp).fillMaxWidth().onGloballyPositioned { panelBounds = it.boundsInRoot() },
                     shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surface) {

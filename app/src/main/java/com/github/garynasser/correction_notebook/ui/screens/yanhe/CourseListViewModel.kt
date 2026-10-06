@@ -51,6 +51,9 @@ class CourseListViewModel @Inject constructor(
     var isLoadingMore by mutableStateOf(false)
     val courses = mutableStateListOf<Course>()
     private var personalCourses: List<Course> = emptyList()
+    private var personalCoursesLoaded = false
+    private var hasSelectedSemester = false
+    private var appliedPublicKeyword: String? = null
     var isRefreshingSchedule by mutableStateOf(false)
         private set
     var loadMoreErrorMessage by mutableStateOf<String?>(null)
@@ -104,18 +107,22 @@ class CourseListViewModel @Inject constructor(
     }
 
     fun loadCourses(isNextPage: Boolean = false) {
-        if (isNextPage && (isLoadingMore || isEndReached || courseLoadJob?.isActive == true)) return
-        if (!isNextPage) {
-            courseLoadJob?.cancel()
-        }
         if (isPersonalCoursesMode) {
-            if (!isNextPage) {
-                applyPersonalCourseFilters()
+            if (!isNextPage && !isRefreshingSchedule) {
+                if (personalCoursesLoaded) applyPersonalCourseFilters() else refreshMySchedule()
             }
             return
         }
+        if (isNextPage && (isLoadingMore || isEndReached || courseLoadJob?.isActive == true)) return
 
         val request = ++courseRequest
+        if (!isNextPage) {
+            courseLoadJob?.cancel()
+            isRefreshingSchedule = false
+            isLoadingMore = false
+            appliedPublicKeyword = searchQuery.trim().ifBlank { null }
+        }
+        val keyword = appliedPublicKeyword
         courseLoadJob = viewModelScope.launch {
             if (!isNextPage) {
                 currentPage = 1
@@ -129,12 +136,8 @@ class CourseListViewModel @Inject constructor(
             }
 
             try {
-                val keywordParam = searchQuery.ifBlank { null }
-
-                val result = if (isPersonalCoursesMode) {
-                    videoRepository.getPersonalCourse(null, currentPage, 16, keywordParam)
-                } else {
-                    videoRepository.getCourse(null, currentPage, 16, keywordParam)
+                val result = awaitYanheResource(30_000, "课程请求超时，请重试") {
+                    videoRepository.getCourse(null, currentPage, 16, keyword)
                 }
                 if (request != courseRequest) return@launch
 
@@ -170,6 +173,12 @@ class CourseListViewModel @Inject constructor(
     }
 
     fun toggleCourseMode() {
+        courseRequest++
+        courseLoadJob?.cancel()
+        courseLoadJob = null
+        isRefreshingSchedule = false
+        isLoadingMore = false
+        loadMoreErrorMessage = null
         isPersonalCoursesMode = !isPersonalCoursesMode
         semesters = if (isPersonalCoursesMode) buildCourseSemesters(personalCourses) else publicSemesters
         selectedSemester = semesters.firstOrNull { it == selectedSemester } ?: semesters.first()
@@ -204,13 +213,20 @@ class CourseListViewModel @Inject constructor(
                 }.onSuccess { loadedCourses ->
                     if (request != courseRequest) return@onSuccess
                     personalCourses = loadedCourses
+                    personalCoursesLoaded = true
                     semesters = buildCourseSemesters(personalCourses)
-                    selectedSemester = pickLatestSemester(semesters)
+                    selectedSemester = if (!hasSelectedSemester) {
+                        pickLatestSemester(semesters)
+                    } else {
+                        selectedSemester.takeIf { it in semesters } ?: ALL_SEMESTERS
+                    }
                     applyPersonalCourseFilters()
                 }.onFailure { throwable ->
                     if (throwable is CancellationException) throw throwable
                     if (request != courseRequest) return@onFailure
                     personalCourses = emptyList()
+                    personalCoursesLoaded = false
+                    courses.clear()
                     semesters = listOf(ALL_SEMESTERS)
                     selectedSemester = ALL_SEMESTERS
                     uiState = CourseUiState.Error(formatYanheError(throwable))
@@ -223,6 +239,7 @@ class CourseListViewModel @Inject constructor(
             } catch (e: Exception) {
                 if (request != courseRequest) return@launch
                 personalCourses = emptyList()
+                personalCoursesLoaded = false
                 courses.clear()
                 semesters = listOf(ALL_SEMESTERS)
                 selectedSemester = ALL_SEMESTERS
@@ -234,6 +251,7 @@ class CourseListViewModel @Inject constructor(
     }
 
     fun selectSemester(semester: String) {
+        hasSelectedSemester = true
         selectedSemester = semester
         expanded = false
         loadCourses(isNextPage = false)
@@ -241,7 +259,7 @@ class CourseListViewModel @Inject constructor(
 
     fun updateSearchQuery(query: String) {
         searchQuery = query
-        if (isPersonalCoursesMode) {
+        if (isPersonalCoursesMode && personalCoursesLoaded && !isRefreshingSchedule) {
             applyPersonalCourseFilters()
         }
     }
@@ -271,6 +289,8 @@ class CourseListViewModel @Inject constructor(
         isLoadingMore = false
         loadMoreErrorMessage = null
         personalCourses = emptyList()
+        personalCoursesLoaded = false
+        hasSelectedSemester = false
         semesters = listOf(ALL_SEMESTERS)
         selectedSemester = ALL_SEMESTERS
         if (clearVisibleCourses) courses.clear()
@@ -302,11 +322,7 @@ internal fun buildCourseSemesters(courses: List<Course>): List<String> {
 }
 
 private fun semesterSortKey(semester: String): Int {
-    val year = Regex("(\\d{4})\\D+(\\d{4})").find(semester)
-        ?.groupValues
-        ?.getOrNull(2)
-        ?.toIntOrNull()
-        ?: 0
+    val academicYears = Regex("(\\d{4})\\D+(\\d{4})").find(semester)
     val term = Regex("第\\s*(\\d+)\\s*学期").find(semester)
         ?.groupValues
         ?.getOrNull(1)
@@ -316,5 +332,13 @@ private fun semesterSortKey(semester: String): Int {
             semester.contains("秋") -> 1
             else -> 0
         }
-    return year * 10 + term
+    val year = academicYears?.groupValues?.getOrNull(if (term == 1) 1 else 2)?.toIntOrNull()
+        ?: Regex("\\d{4}").find(semester)?.value?.toIntOrNull()
+        ?: 0
+    val seasonOrder = when (term) {
+        1 -> 2
+        2 -> 1
+        else -> term
+    }
+    return year * 10 + seasonOrder
 }

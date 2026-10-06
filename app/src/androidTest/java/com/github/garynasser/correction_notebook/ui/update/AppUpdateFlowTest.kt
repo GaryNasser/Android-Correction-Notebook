@@ -157,10 +157,13 @@ class AppUpdateFlowTest {
         }
         compose.onNodeWithText("稍后").assertDoesNotExist()
         compose.onNodeWithText("当前版本需要更新后继续使用。").assertIsDisplayed()
+        compose.onNode(isDialog()).performTouchInput { click(Offset(1f, height / 2f)) }
+        compose.runOnIdle { assertEquals(0, dismisses) }
         androidx.test.espresso.Espresso.pressBack()
         compose.waitForIdle()
         assertEquals(0, dismisses)
         compose.runOnIdle { forced = false }
+        compose.waitForIdle()
         compose.onNode(isDialog()).performTouchInput { click(Offset(1f, height / 2f)) }
         compose.runOnIdle { assertEquals(1, dismisses) }
         compose.onNodeWithText("稍后").performClick()
