@@ -895,7 +895,7 @@ private fun FileManagementPage(
         if (uiState.isImportingLocalFile || uiState.isLocalBusy) {
             KnowledgeBaseStatusStrip(
                 text = if (uiState.isImportingLocalFile) {
-                    "正在导入资料，完成后会自动出现在当前目录"
+                    "正在导入资料"
                 } else {
                     "正在更新知识库内容"
                 }

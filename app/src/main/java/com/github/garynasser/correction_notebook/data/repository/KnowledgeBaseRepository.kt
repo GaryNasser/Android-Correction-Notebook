@@ -276,44 +276,46 @@ class KnowledgeBaseRepository @Inject constructor(
     suspend fun importLocalFile(
         targetFolderId: String?,
         fileUri: Uri
-    ): Result<Unit> = runCatchingCancellable {
-        val resolvedFolderId = targetFolderId.takeUnless { it == ROOT_FOLDER_ID }
-        val metadata = resolveImportMetadata(fileUri)
-        val now = System.currentTimeMillis()
-        val displayName = resolveUniqueDisplayName(
-            folderId = resolvedFolderId,
-            preferredName = metadata.displayName
-        )
-
-        val stored = context.contentResolver.openInputStream(fileUri)?.use { inputStream ->
-            fileStorage.writeFile(
-                folderPathIds = getFolderPathIds(resolvedFolderId),
-                preferredName = displayName,
-                inputStream = inputStream
-            )
-        } ?: error("无法读取所选文件")
-
-        insertImportedFile(
-            KnowledgeBaseFileEntity(
-                id = UUID.randomUUID().toString(),
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatchingCancellable {
+            val resolvedFolderId = targetFolderId.takeUnless { it == ROOT_FOLDER_ID }
+            val metadata = resolveImportMetadata(fileUri)
+            val now = System.currentTimeMillis()
+            val displayName = resolveUniqueDisplayName(
                 folderId = resolvedFolderId,
-                displayName = displayName,
-                storedName = stored.storedName,
-                localPath = stored.absolutePath,
-                mimeType = metadata.mimeType,
-                sizeBytes = stored.sizeBytes,
-                sourceType = "local",
-                sourceFileId = null,
-                sourceTitle = metadata.displayName,
-                sourcePath = fileUri.toString(),
-                courseId = null,
-                courseName = null,
-                tags = "",
-                downloadedAt = now,
-                createdAt = now,
-                updatedAt = now
+                preferredName = metadata.displayName
             )
-        )
+
+            val stored = context.contentResolver.openInputStream(fileUri)?.use { inputStream ->
+                fileStorage.writeFile(
+                    folderPathIds = getFolderPathIds(resolvedFolderId),
+                    preferredName = displayName,
+                    inputStream = inputStream
+                )
+            } ?: error("无法读取所选文件")
+
+            insertImportedFile(
+                KnowledgeBaseFileEntity(
+                    id = UUID.randomUUID().toString(),
+                    folderId = resolvedFolderId,
+                    displayName = displayName,
+                    storedName = stored.storedName,
+                    localPath = stored.absolutePath,
+                    mimeType = metadata.mimeType,
+                    sizeBytes = stored.sizeBytes,
+                    sourceType = "local",
+                    sourceFileId = null,
+                    sourceTitle = metadata.displayName,
+                    sourcePath = fileUri.toString(),
+                    courseId = null,
+                    courseName = null,
+                    tags = "",
+                    downloadedAt = now,
+                    createdAt = now,
+                    updatedAt = now
+                )
+            )
+        }
     }
 
     suspend fun importDownloadedFile(
