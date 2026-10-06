@@ -15,13 +15,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.SubcomposeAsyncImage
 import com.github.garynasser.correction_notebook.data.model.yanhe.Course
@@ -48,8 +47,9 @@ fun CourseListScreen(
     }
 
     // 触发加载更多
-    LaunchedEffect(shouldLoadMore.value) {
-        if (shouldLoadMore.value) {
+    LaunchedEffect(shouldLoadMore.value, viewModel.uiState, viewModel.isPersonalCoursesMode) {
+        if (shouldLoadMore.value && viewModel.uiState is CourseUiState.Success &&
+            !viewModel.isPersonalCoursesMode && viewModel.loadMoreErrorMessage == null) {
             viewModel.loadCourses(isNextPage = true)
         }
     }
@@ -110,7 +110,7 @@ fun CourseListScreen(
                         is CourseUiState.Success -> {
                             LazyVerticalGrid(
                                 state = gridState,
-                                columns = GridCells.Adaptive(minSize = 152.dp),
+                                columns = GridCells.Adaptive(minSize = 148.dp),
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                                 verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -129,6 +129,12 @@ fun CourseListScreen(
                                     item(span = { GridItemSpan(maxLineSpan) }) {
                                         EmptyCourseState(
                                             isPersonalMode = viewModel.isPersonalCoursesMode,
+                                            hasFilters = viewModel.searchQuery.isNotBlank() ||
+                                                viewModel.selectedSemester != ALL_SEMESTERS,
+                                            onClearFilters = {
+                                                viewModel.updateSearchQuery("")
+                                                viewModel.selectSemester(ALL_SEMESTERS)
+                                            },
                                             onRefresh = { viewModel.refreshMySchedule() }
                                         )
                                     }
@@ -264,6 +270,8 @@ private fun CourseListMessageState(
 @Composable
 private fun EmptyCourseState(
     isPersonalMode: Boolean,
+    hasFilters: Boolean,
+    onClearFilters: () -> Unit,
     onRefresh: () -> Unit
 ) {
     Surface(
@@ -284,29 +292,22 @@ private fun EmptyCourseState(
                 tint = MaterialTheme.colorScheme.primary
             )
             Text(
-                text = if (isPersonalMode) "还没有显示我的课程" else "没有找到课程",
+                text = if (hasFilters) "没有匹配的课程" else if (isPersonalMode) "暂无个人课程" else "暂无课程",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )
-            Text(
-                text = if (isPersonalMode) {
-                    "点击右上角同步我的课程；未登录时会先打开统一认证。"
-                } else {
-                    "换个关键词或学期再试试。"
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center
-            )
-            if (isPersonalMode) {
+            if (hasFilters || isPersonalMode) {
                 TextButton(
-                    onClick = onRefresh,
+                    onClick = if (hasFilters) onClearFilters else onRefresh,
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Icon(
+                        if (hasFilters) Icons.Default.FilterAltOff else Icons.Default.Refresh,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
                     Spacer(Modifier.width(6.dp))
-                    Text("刷新课表")
+                    Text(if (hasFilters) "清除筛选" else "同步我的课程")
                 }
             }
         }
@@ -406,91 +407,84 @@ private fun RecentLearningRow(
 
 @Composable
 fun SearchAndFilterSection(viewModel: CourseListViewModel) {
-    Surface(
+    val keyboard = LocalSoftwareKeyboardController.current
+    val search = {
+        keyboard?.hide()
+        viewModel.loadCourses(false)
+    }
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 6.dp),
-        shape = RoundedCornerShape(8.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
-        tonalElevation = 1.dp
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Column(modifier = Modifier.padding(7.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-                if (viewModel.semesters.size <= 1) {
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            if (viewModel.semesters.size <= 1) {
+                CourseModeFilterRow(viewModel = viewModel, modifier = Modifier.fillMaxWidth())
+            } else if (shouldStackCourseFilters(maxWidth.value)) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     CourseModeFilterRow(viewModel = viewModel, modifier = Modifier.fillMaxWidth())
-                } else if (shouldStackCourseFilters(maxWidth.value)) {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        CourseModeFilterRow(viewModel = viewModel, modifier = Modifier.fillMaxWidth())
-                        SemesterMenu(
-                            selectedSemester = viewModel.selectedSemester,
-                            semesters = viewModel.semesters,
-                            expanded = viewModel.expanded,
-                            onExpandedChange = { viewModel.expanded = it },
-                            onSemesterSelected = viewModel::selectSemester,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                } else {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    SemesterMenu(
+                        selectedSemester = viewModel.selectedSemester,
+                        semesters = viewModel.semesters,
+                        expanded = viewModel.expanded,
+                        onExpandedChange = { viewModel.expanded = it },
+                        onSemesterSelected = viewModel::selectSemester,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    CourseModeFilterRow(viewModel = viewModel, modifier = Modifier.weight(2f))
+                    SemesterMenu(
+                        selectedSemester = viewModel.selectedSemester,
+                        semesters = viewModel.semesters,
+                        expanded = viewModel.expanded,
+                        onExpandedChange = { viewModel.expanded = it },
+                        onSemesterSelected = viewModel::selectSemester,
+                        modifier = Modifier.weight(1.25f)
+                    )
+                }
+            }
+        }
+
+        OutlinedTextField(
+            value = viewModel.searchQuery,
+            onValueChange = { viewModel.updateSearchQuery(it) },
+            modifier = Modifier.fillMaxWidth(),
+            textStyle = MaterialTheme.typography.bodyMedium,
+            placeholder = { Text("课程名称或老师", style = MaterialTheme.typography.bodyMedium) },
+            leadingIcon = {
+                IconButton(onClick = search) {
+                    Icon(Icons.Default.Search, contentDescription = "搜索课程", modifier = Modifier.size(18.dp))
+                }
+            },
+            trailingIcon = if (viewModel.searchQuery.isNotEmpty()) {
+                {
+                    IconButton(
+                        onClick = {
+                            viewModel.updateSearchQuery("")
+                            if (!viewModel.isPersonalCoursesMode) {
+                                viewModel.loadCourses(false)
+                            }
+                        }
                     ) {
-                        CourseModeFilterRow(viewModel = viewModel, modifier = Modifier.weight(2f))
-                        SemesterMenu(
-                            selectedSemester = viewModel.selectedSemester,
-                            semesters = viewModel.semesters,
-                            expanded = viewModel.expanded,
-                            onExpandedChange = { viewModel.expanded = it },
-                            onSemesterSelected = viewModel::selectSemester,
-                            modifier = Modifier.weight(1.25f)
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "清空搜索",
+                            modifier = Modifier.size(18.dp)
                         )
                     }
                 }
-            }
-
-            OutlinedTextField(
-                value = viewModel.searchQuery,
-                onValueChange = { viewModel.updateSearchQuery(it) },
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("搜索课程名称或老师") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                trailingIcon = {
-                    Row {
-                        if (viewModel.searchQuery.isNotBlank()) {
-                            IconButton(
-                                onClick = {
-                                    viewModel.updateSearchQuery("")
-                                    if (!viewModel.isPersonalCoursesMode) {
-                                        viewModel.loadCourses(false)
-                                    }
-                                }
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = "清空搜索",
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        }
-                        IconButton(
-                            onClick = {
-                                viewModel.loadCourses(false)
-                            }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Search,
-                                contentDescription = "搜索课程",
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    }
-                },
-                shape = RoundedCornerShape(8.dp),
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { viewModel.loadCourses(false) })
-            )
-        }
+            } else null,
+            shape = RoundedCornerShape(8.dp),
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { search() })
+        )
     }
 }
 
@@ -539,7 +533,7 @@ private fun CourseModeChip(
     FilterChip(
         selected = selected,
         onClick = onClick,
-        label = { Text(label, maxLines = 1) },
+        label = { Text(label, style = MaterialTheme.typography.labelMedium) },
         leadingIcon = {
             Icon(icon, contentDescription = null, modifier = Modifier.size(15.dp))
         },
@@ -586,8 +580,7 @@ private fun SemesterMenu(
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    maxLines = 2
                 )
                 Icon(
                     imageVector = Icons.Default.ArrowDropDown,
@@ -635,14 +628,7 @@ fun CourseCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(2f)
-                    .background(
-                        Brush.linearGradient(
-                            listOf(
-                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.78f),
-                                MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.62f)
-                            )
-                        )
-                    ),
+                    .background(MaterialTheme.colorScheme.surfaceContainer),
                 contentAlignment = Alignment.Center
             ) {
                 SubcomposeAsyncImage(
@@ -656,17 +642,11 @@ fun CourseCard(
                         }
                     },
                     error = {
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.48f),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                        ) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Icon(
                                 Icons.Default.PlayCircleOutline,
                                 contentDescription = null,
-                                modifier = Modifier
-                                    .padding(11.dp)
-                                    .size(24.dp),
+                                modifier = Modifier.size(28.dp),
                                 tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.62f)
                             )
                         }

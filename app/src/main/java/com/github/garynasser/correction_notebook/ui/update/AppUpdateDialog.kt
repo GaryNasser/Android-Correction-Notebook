@@ -37,11 +37,11 @@ internal fun AppUpdateDialog(
 
     Dialog(onDismissRequest = ::dismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
-        Box(Modifier.fillMaxSize().safeDrawingPadding().imePadding()
+        Box(Modifier.fillMaxSize()
             .onGloballyPositioned { contentPosition = it.positionInRoot() }
             .pointerInput(update.forceUpdate) {
                 detectTapGestures { position -> if (!panelBounds.contains(position + contentPosition)) dismiss() }
-            }, contentAlignment = Alignment.Center) {
+            }.safeDrawingPadding().imePadding(), contentAlignment = Alignment.Center) {
             Box(Modifier.padding(12.dp)) {
                 Surface(Modifier.widthIn(max = 560.dp).fillMaxWidth().heightIn(max = 560.dp)
                     .onGloballyPositioned { panelBounds = it.boundsInRoot() },
