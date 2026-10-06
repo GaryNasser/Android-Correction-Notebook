@@ -1,17 +1,27 @@
 package com.github.garynasser.correction_notebook.ui.screens.aitutor
 
 import android.graphics.Bitmap
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.lifecycle.ViewModelStore
 import androidx.room.Room
 import androidx.test.platform.app.InstrumentationRegistry
@@ -225,6 +235,52 @@ class AiChatFlowTest {
     @Test fun lightEmptyChatFitsNarrowScreenWithLargeFont() = checkLayout(dark = false, empty = true)
     @Test fun darkEmptyChatFitsNarrowScreenWithLargeFont() = checkLayout(dark = true, empty = true)
 
+    @Test fun lightUnconfiguredAiKeepsConfigurationReachable() = checkUnconfiguredLayout(false, false)
+    @Test fun darkUnconfiguredAiKeepsConfigurationReachable() = checkUnconfiguredLayout(true, false)
+    @Test fun lightUnconfiguredAiFitsShortWideScreen() = checkUnconfiguredLayout(false, true)
+    @Test fun darkUnconfiguredAiFitsShortWideScreen() = checkUnconfiguredLayout(true, true)
+
+    private fun checkUnconfiguredLayout(dark: Boolean, wide: Boolean) = withFixture { fixture ->
+        fixture.providers.deleteProvider(fixture.firstId)
+        fixture.providers.deleteProvider(fixture.secondId)
+        await { !fixture.vm.uiState.value.isConfigured && fixture.vm.uiState.value.providers.isEmpty() }
+        lateinit var density: Density
+        val width = if (wide) 640.dp else 320.dp
+        compose.setContent {
+            density = Density(LocalDensity.current.density / if (wide) 2f else 1f, 1.3f)
+            CompositionLocalProvider(LocalDensity provides density) {
+                CorrectionNotebookTheme(darkTheme = dark, dynamicColor = false) {
+                    Box(Modifier.size(width = width, height = 220.dp).testTag("unconfigured-pane")) {
+                        AITutorScreen(viewModel = fixture.vm)
+                    }
+                }
+            }
+        }
+        val bounds = compose.onNodeWithTag("unconfigured-pane").fetchSemanticsNode().boundsInRoot
+        assertEquals(with(density) { width.toPx() }, bounds.width, 1f)
+        val layouts = mutableListOf<TextLayoutResult>()
+        val title = compose.onNodeWithText("AI 未配置").assertIsDisplayed()
+        title.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        assertTrue(layouts.isNotEmpty())
+        layouts.forEach {
+            assertFalse(it.didOverflowHeight)
+            assertEquals("AI 未配置".length, it.getLineEnd(it.lineCount - 1))
+            repeat(it.lineCount) { line ->
+                assertFalse(it.isLineEllipsized(line))
+                assertTrue("AI title exceeds its rendered width", it.getLineRight(line) <= it.size.width + 1)
+            }
+        }
+        val titleBounds = title.fetchSemanticsNode().boundsInRoot
+        assertTrue(titleBounds.left >= bounds.left && titleBounds.right <= bounds.right &&
+            titleBounds.top >= bounds.top && titleBounds.bottom <= bounds.bottom)
+        compose.onNodeWithText("配置 AI").performScrollTo().assertIsDisplayed().assertIsEnabled()
+        saveScreenshot("unconfigured-${if (dark) "dark" else "light"}-${if (wide) "wide" else "narrow"}")
+        compose.onNodeWithText("配置 AI").performClick()
+        compose.onNodeWithText("AI Provider").assertIsDisplayed()
+        compose.onNodeWithText("新增").assertIsEnabled()
+        assertTrue(fixture.service.requests.isEmpty())
+    }
+
     private fun checkLayout(dark: Boolean, empty: Boolean) = withFixture { fixture ->
         if (empty) {
             fixture.chats.clearSessionMessages(fixture.firstSession)
@@ -241,11 +297,17 @@ class AiChatFlowTest {
         compose.onNode(hasSetTextAction()).assertIsDisplayed().assertIsEnabled()
         compose.onNodeWithText("普通").assertIsDisplayed()
         if (empty) compose.onNodeWithText("制定学习安排").assertIsDisplayed()
+        saveScreenshot("${if (dark) "dark" else "light"}-${if (empty) "empty" else "history"}")
+    }
+
+    private fun saveScreenshot(name: String) {
+        compose.waitForIdle()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
+        instrumentation.waitForIdleSync()
+        android.os.SystemClock.sleep(350)
         val bitmap = instrumentation.uiAutomation.takeScreenshot()
         try {
-            File(instrumentation.targetContext.getExternalFilesDir(null),
-                "qa-chat-${if (dark) "dark" else "light"}-${if (empty) "empty" else "history"}.png")
+            File(instrumentation.targetContext.getExternalFilesDir(null), "qa-chat-$name.png")
                 .outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         } finally { bitmap.recycle() }
     }

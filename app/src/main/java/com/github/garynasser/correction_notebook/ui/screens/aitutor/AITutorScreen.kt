@@ -478,32 +478,29 @@ fun AITutorScreen(
 @Composable
 private fun EmptyAiState(onConfigure: () -> Unit) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Surface(
+        Column(
             modifier = Modifier
+                .widthIn(max = 420.dp)
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
-            shape = RoundedCornerShape(8.dp),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Column(
-                modifier = Modifier.padding(18.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(
                     Icons.Default.SmartToy,
                     contentDescription = null,
-                    modifier = Modifier.size(40.dp),
-                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.68f)
+                    modifier = Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.primary
                 )
-                Text("AI Provider 未配置", style = MaterialTheme.typography.titleMedium)
-                Text(
-                    "添加 OpenAI 兼容或 Anthropic 兼容接口后即可使用",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Button(onClick = onConfigure, shape = RoundedCornerShape(8.dp)) { Text("配置 AI") }
+                Text("AI 未配置", style = MaterialTheme.typography.titleSmall)
+            }
+            Button(onClick = onConfigure, shape = RoundedCornerShape(8.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
+                Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("配置 AI")
             }
         }
     }
