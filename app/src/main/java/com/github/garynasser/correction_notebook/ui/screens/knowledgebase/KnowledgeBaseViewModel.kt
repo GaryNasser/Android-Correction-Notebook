@@ -138,6 +138,8 @@ class KnowledgeBaseViewModel @Inject constructor(
     private val activeDownloadId = MutableStateFlow<String?>(null)
     private val snackbarMessage = MutableStateFlow<String?>(null)
     private var remoteSearchJob: Job? = null
+    private var remoteDetailJob: Job? = null
+    private var latestRemoteDetailRequestId = 0L
     private var downloadJob: Job? = null
     private var latestRemoteSearchRequestId = 0L
     private var activeRemoteSearchQuery: String? = null
@@ -295,6 +297,7 @@ class KnowledgeBaseViewModel @Inject constructor(
     )
 
     fun selectTab(index: Int) {
+        if (index != 2) dismissRemoteDetail()
         selectedTabIndex.value = index
     }
 
@@ -322,6 +325,7 @@ class KnowledgeBaseViewModel @Inject constructor(
         val queryChanged = remoteQuery.value.trim() != query.trim()
         remoteQuery.value = query
         if (queryChanged) {
+            dismissRemoteDetail()
             remoteResults.value = emptyList()
             remoteErrorMessage.value = null
         }
@@ -388,24 +392,34 @@ class KnowledgeBaseViewModel @Inject constructor(
 
     fun loadRemoteDetail(fileId: String) {
         if (isRemoteDetailLoading.value || isRemoteFolderLoading.value) return
+        val requestId = ++latestRemoteDetailRequestId
         isRemoteDetailLoading.value = true
-        viewModelScope.launch {
+        remoteDetailJob = viewModelScope.launch {
             remoteErrorMessage.value = null
             try {
                 bitShareRepository.getFileDetail(fileId)
                     .onSuccess {
-                        selectedRemoteDetail.value = it
-                        remoteErrorMessage.value = null
+                        if (requestId == latestRemoteDetailRequestId) {
+                            selectedRemoteDetail.value = it
+                            remoteErrorMessage.value = null
+                        }
                     }
                     .onFailure {
-                        remoteErrorMessage.value = it.message ?: "加载详情失败"
+                        if (requestId == latestRemoteDetailRequestId) {
+                            remoteErrorMessage.value = it.message ?: "加载详情失败"
+                        }
                     }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                remoteErrorMessage.value = e.message ?: "加载详情失败"
+                if (requestId == latestRemoteDetailRequestId) {
+                    remoteErrorMessage.value = e.message ?: "加载详情失败"
+                }
             } finally {
-                isRemoteDetailLoading.value = false
+                if (requestId == latestRemoteDetailRequestId) {
+                    isRemoteDetailLoading.value = false
+                    remoteDetailJob = null
+                }
             }
         }
     }
@@ -417,34 +431,50 @@ class KnowledgeBaseViewModel @Inject constructor(
      */
     fun loadRemoteFolderDetail(folderId: String) {
         if (isRemoteFolderLoading.value || isRemoteDetailLoading.value) return
+        val requestId = ++latestRemoteDetailRequestId
         isRemoteFolderLoading.value = true
-        viewModelScope.launch {
+        remoteDetailJob = viewModelScope.launch {
             remoteErrorMessage.value = null
             try {
                 bitShareRepository.getFolderDetail(folderId)
                     .onSuccess {
-                        selectedRemoteFolderDetail.value = it
-                        remoteErrorMessage.value = null
+                        if (requestId == latestRemoteDetailRequestId) {
+                            selectedRemoteFolderDetail.value = it
+                            remoteErrorMessage.value = null
+                        }
                     }
                     .onFailure {
-                        remoteErrorMessage.value = it.message ?: "加载目录详情失败"
+                        if (requestId == latestRemoteDetailRequestId) {
+                            remoteErrorMessage.value = it.message ?: "加载目录详情失败"
+                        }
                     }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                remoteErrorMessage.value = e.message ?: "加载目录详情失败"
+                if (requestId == latestRemoteDetailRequestId) {
+                    remoteErrorMessage.value = e.message ?: "加载目录详情失败"
+                }
             } finally {
-                isRemoteFolderLoading.value = false
+                if (requestId == latestRemoteDetailRequestId) {
+                    isRemoteFolderLoading.value = false
+                    remoteDetailJob = null
+                }
             }
         }
     }
 
     fun dismissRemoteDetail() {
+        latestRemoteDetailRequestId += 1
+        remoteDetailJob?.cancel()
+        remoteDetailJob = null
+        isRemoteDetailLoading.value = false
+        isRemoteFolderLoading.value = false
         selectedRemoteDetail.value = null
+        selectedRemoteFolderDetail.value = null
     }
 
     fun dismissRemoteFolderDetail() {
-        selectedRemoteFolderDetail.value = null
+        dismissRemoteDetail()
     }
 
     fun createFolder(name: String) {
@@ -793,8 +823,9 @@ class KnowledgeBaseViewModel @Inject constructor(
             .onSuccess {
                 val folderName = knowledgeBaseRepository.getFolderName(folderId)
                 snackbarMessage.value = "已保存到 $folderName"
-                selectedTabIndex.value = 0
-                selectedRemoteDetail.value = null
+                currentFolderId.value = folderId.takeUnless { it == KnowledgeBaseRepository.ROOT_FOLDER_ID }
+                localSearchQuery.value = ""
+                selectTab(0)
             }
             .onFailure {
                 if (it is CancellationException) throw it
