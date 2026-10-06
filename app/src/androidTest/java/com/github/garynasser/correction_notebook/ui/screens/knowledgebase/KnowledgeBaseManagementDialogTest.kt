@@ -37,7 +37,7 @@ class KnowledgeBaseManagementDialogTest {
         val selected = mutableListOf<String?>()
         var dismissals = 0
         compose.setContent {
-            themed(dark) { FolderPickerDialog("移动到", folders, { dismissals++ }, { selected += it }) }
+            Themed(dark) { FolderPickerDialog("移动到", folders, { dismissals++ }, { selected += it }) }
         }
         compose.onAllNodesWithText("矩阵分析")[0].performClick()
         compose.onAllNodesWithText("矩阵分析")[1].performClick()
@@ -52,7 +52,7 @@ class KnowledgeBaseManagementDialogTest {
 
     @Test fun aBlankNameCannotDismissTheFormOrSubmit() {
         val submissions = mutableListOf<String>()
-        compose.setContent { themed { NameInputDialog("新建文件夹", "", "创建", {}, { submissions += it }) } }
+        compose.setContent { Themed { NameInputDialog("新建文件夹", "", "创建", {}, { submissions += it }) } }
         compose.onNodeWithText("创建").assertIsNotEnabled()
         compose.onNode(hasSetTextAction()).performTextInput("   ")
         compose.onNodeWithText("创建").assertIsNotEnabled()
@@ -64,7 +64,7 @@ class KnowledgeBaseManagementDialogTest {
 
     @Test fun keyboardDoneSubmitsTheTrimmedName() {
         val submissions = mutableListOf<String>()
-        compose.setContent { themed { NameInputDialog("重命名文件", "原名称.txt", "保存", {}, { submissions += it }) } }
+        compose.setContent { Themed { NameInputDialog("重命名文件", "原名称.txt", "保存", {}, { submissions += it }) } }
         compose.onNode(hasSetTextAction()).performTextReplacement("  新名称.txt  ")
         compose.onNode(hasSetTextAction()).performImeAction()
         compose.runOnIdle { assertEquals(listOf("新名称.txt"), submissions) }
@@ -72,7 +72,7 @@ class KnowledgeBaseManagementDialogTest {
 
     @Test fun anUnsubmittedNameSurvivesSavedStateRestoration() {
         val restoration = StateRestorationTester(compose)
-        restoration.setContent { themed { NameInputDialog("新建文件夹", "", "创建", {}, {}) } }
+        restoration.setContent { Themed { NameInputDialog("新建文件夹", "", "创建", {}, {}) } }
         compose.onNode(hasSetTextAction()).performTextInput("矩阵分析复习")
         restoration.emulateSavedInstanceStateRestore()
         compose.onNode(hasSetTextAction()).assertTextContains("矩阵分析复习")
@@ -86,7 +86,7 @@ class KnowledgeBaseManagementDialogTest {
         val message = "仅支持删除空文件夹。确定删除“${"矩阵分析讲义与课后练习 ".repeat(60)}”吗？"
         var deletions = 0
         var dismissals = 0
-        compose.setContent { themed(dark) { ConfirmDialog("删除文件夹", message, "删除", { dismissals++ }, { deletions++ }) } }
+        compose.setContent { Themed(dark) { ConfirmDialog("删除文件夹", message, "删除", { dismissals++ }, { deletions++ }) } }
         compose.onNodeWithText(message).performScrollTo().assertIsDisplayed()
         val layouts = mutableListOf<TextLayoutResult>()
         compose.onNodeWithText(message).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
@@ -118,7 +118,7 @@ class KnowledgeBaseManagementDialogTest {
         } finally { database.close(); directory.deleteRecursively() }
     }
 
-    @Composable private fun themed(dark: Boolean = false, content: @Composable () -> Unit) {
+    @Composable private fun Themed(dark: Boolean = false, content: @Composable () -> Unit) {
         CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, 1.3f)) {
             CorrectionNotebookTheme(darkTheme = dark, dynamicColor = false, content = content)
         }
