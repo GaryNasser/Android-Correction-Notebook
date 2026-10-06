@@ -106,6 +106,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -150,6 +151,11 @@ fun KnowledgeBaseScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
+    val searchRemoteResources = {
+        focusManager.clearFocus()
+        viewModel.searchRemoteResources()
+    }
     val importLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments()
     ) { uris: List<Uri> ->
@@ -175,7 +181,6 @@ fun KnowledgeBaseScreen(
     var showBatchMovePicker by remember { mutableStateOf(false) }
     var showBatchDeleteConfirm by remember { mutableStateOf(false) }
     var showDownloadFolderPicker by rememberSaveable { mutableStateOf(false) }
-    var pendingRemoteDownload by remember { mutableStateOf<BitShareSearchResult?>(null) }
     var fileSortMode by rememberSaveable { mutableStateOf(FileSortMode.UPDATED) }
     var isSearchExpanded by rememberSaveable { mutableStateOf(false) }
     var isSelectionMode by remember { mutableStateOf(false) }
@@ -350,22 +355,17 @@ fun KnowledgeBaseScreen(
         )
     }
 
-    if (showDownloadFolderPicker && pendingRemoteDownload != null) {
+    if (showDownloadFolderPicker && uiState.selectedRemoteDetail != null) {
         FolderPickerDialog(
             title = "下载到知识库",
             folders = uiState.folderChoices,
             onDismiss = {
                 showDownloadFolderPicker = false
-                pendingRemoteDownload = null
                 viewModel.dismissRemoteDetail()
             },
             onSelect = { folderId ->
-                pendingRemoteDownload?.let { result ->
-                    viewModel.downloadSearchResultToFolder(result, folderId)
-                }
+                viewModel.downloadRemoteFileToFolder(folderId)
                 showDownloadFolderPicker = false
-                pendingRemoteDownload = null
-                viewModel.dismissRemoteDetail()
             }
         )
     }
@@ -498,11 +498,12 @@ fun KnowledgeBaseScreen(
             detail = detail,
             isDownloading = uiState.activeDownloadId == detail.id,
             onDismiss = {
-                pendingRemoteDownload = null
+                showDownloadFolderPicker = false
                 viewModel.dismissRemoteDetail()
             },
             onCancelClick = viewModel::cancelRemoteDownload,
-            onDownloadClick = { showDownloadFolderPicker = true }
+            onDownloadClick = { showDownloadFolderPicker = true },
+            canDownload = uiState.activeDownloadId == null
         )
     }
 
@@ -563,7 +564,7 @@ fun KnowledgeBaseScreen(
                     actions = {
                         if (uiState.selectedTabIndex == 2) {
                             IconButton(
-                                onClick = { viewModel.searchRemoteResources() },
+                                onClick = searchRemoteResources,
                                 enabled = !uiState.isRemoteSearching
                             ) {
                                 Icon(Icons.Default.Refresh, contentDescription = "刷新搜索")
@@ -719,12 +720,12 @@ fun KnowledgeBaseScreen(
                         onSortChanged = {
                             viewModel.updateRemoteSort(it)
                             if (uiState.remoteQuery.isNotBlank()) {
-                                viewModel.searchRemoteResources()
+                                searchRemoteResources()
                             }
                         },
-                        onSearchClick = viewModel::searchRemoteResources,
+                        onSearchClick = searchRemoteResources,
                         onOpenDetail = {
-                            pendingRemoteDownload = it
+                            showDownloadFolderPicker = false
                             viewModel.loadRemoteDetail(it.id)
                         },
                         onOpenFolderDetail = viewModel::loadRemoteFolderDetail
@@ -2272,8 +2273,8 @@ private fun BitSharePage(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             OutlinedTextField(
                 value = uiState.remoteQuery,
@@ -2282,7 +2283,9 @@ private fun BitSharePage(
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = { onSearchClick() }),
-                label = { Text("搜索课程资料") },
+                label = { Text("搜索课程资料", style = MaterialTheme.typography.bodySmall) },
+                textStyle = MaterialTheme.typography.bodyMedium,
+                shape = RoundedCornerShape(8.dp),
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                 trailingIcon = {
                     if (uiState.isRemoteSearching) {
@@ -2294,7 +2297,7 @@ private fun BitSharePage(
                         )
                     } else {
                         IconButton(onClick = onSearchClick) {
-                            Icon(Icons.Default.CloudDownload, contentDescription = "搜索")
+                            Icon(Icons.Default.Search, contentDescription = "搜索")
                         }
                     }
                 }
@@ -2315,27 +2318,22 @@ private fun BitSharePage(
                 }
             }
 
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.58f),
-                shape = MaterialTheme.shapes.large
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Default.Warning,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onTertiaryContainer
-                    )
-                    Text(
-                        text = "仅支持 BIT 校园网内网访问，请在连接校园 WiFi 或 VPN 后使用",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onTertiaryContainer
-                    )
-                }
+                Icon(
+                    Icons.Default.Warning,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "需校园网或 VPN",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
 
             if (uiState.isRemoteDetailLoading || uiState.isRemoteFolderLoading) {
@@ -2729,10 +2727,12 @@ internal fun RemoteDetailDialog(
     isDownloading: Boolean,
     onDismiss: () -> Unit,
     onCancelClick: () -> Unit,
-    onDownloadClick: () -> Unit
+    onDownloadClick: () -> Unit,
+    canDownload: Boolean = true
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(8.dp),
         title = { Text("文件详情", style = MaterialTheme.typography.titleMedium) },
         text = {
             Column(
@@ -2764,7 +2764,7 @@ internal fun RemoteDetailDialog(
                     Text("取消下载")
                 }
             } else {
-                Button(onClick = onDownloadClick) {
+                Button(onClick = onDownloadClick, enabled = canDownload) {
                     Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
                     Text("下载到知识库")
