@@ -45,7 +45,7 @@ data class GitHubReleaseAssetDto(
 fun GitHubReleaseDto.toDomain(): AppVersionInfo {
     val downloadUrl = assets
         .orEmpty()
-        .firstOrNull { it.name.endsWith(".apk", ignoreCase = true) }
+        .firstOrNull { it.name.endsWith(".apk", ignoreCase = true) && it.browserDownloadUrl.isNotBlank() }
         ?.browserDownloadUrl
         ?: htmlUrl
 
