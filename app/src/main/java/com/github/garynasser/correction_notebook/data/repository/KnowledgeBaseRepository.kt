@@ -397,6 +397,7 @@ class KnowledgeBaseRepository @Inject constructor(
         courseName: String?,
         tags: List<String>
     ): Result<Unit> = runCatchingCancellable {
+        require(courseId == null || courseId > 0) { "课程 ID 需为有效的正整数" }
         val file = requireNotNull(dao.getFileById(fileId)) { "文件不存在" }
         dao.updateFile(
             file.copy(

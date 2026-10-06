@@ -36,6 +36,8 @@ import kotlinx.coroutines.withContext
 import java.time.OffsetDateTime
 import javax.inject.Inject
 
+data class LearningContextSaveResult(val fileId: String, val errorMessage: String? = null)
+
 data class KnowledgeBaseUiState(
     val selectedTabIndex: Int = 0,
     val currentFolderId: String? = null,
@@ -67,7 +69,8 @@ data class KnowledgeBaseUiState(
     val quizQuestions: List<StudySetQuizItem> = emptyList(),
     val isLocalBusy: Boolean = false,
     val activeDownloadId: String? = null,
-    val snackbarMessage: String? = null
+    val snackbarMessage: String? = null,
+    val learningContextSaveResult: LearningContextSaveResult? = null
 )
 
 private data class LocalUiSnapshot(
@@ -151,6 +154,7 @@ class KnowledgeBaseViewModel @Inject constructor(
     private val isLocalBusy = MutableStateFlow(false)
     private val activeDownloadId = MutableStateFlow<String?>(null)
     private val snackbarMessage = MutableStateFlow<String?>(null)
+    private val learningContextSaveResult = MutableStateFlow<LearningContextSaveResult?>(null)
     private var remoteSearchJob: Job? = null
     private var remoteDetailJob: Job? = null
     private var latestRemoteDetailRequestId = 0L
@@ -289,8 +293,9 @@ class KnowledgeBaseViewModel @Inject constructor(
         remoteUiSnapshot,
         combine(studySets, knowledgeCards, reviewedCards, quizQuestions) { sets, cards, reviewed, quizzes ->
             StudyContentSnapshot(sets, cards, reviewed, quizzes)
-        }
-    ) { local, remote, study ->
+        },
+        learningContextSaveResult
+    ) { local, remote, study, contextResult ->
         KnowledgeBaseUiState(
             selectedTabIndex = local.selectedTabIndex,
             currentFolderId = local.currentFolderId,
@@ -318,7 +323,8 @@ class KnowledgeBaseViewModel @Inject constructor(
             quizQuestions = study.quizQuestions,
             isLocalBusy = remote.isLocalBusy,
             activeDownloadId = remote.activeDownloadId,
-            snackbarMessage = remote.snackbarMessage
+            snackbarMessage = remote.snackbarMessage,
+            learningContextSaveResult = contextResult
         )
     }.stateIn(
         scope = viewModelScope,
@@ -623,11 +629,24 @@ class KnowledgeBaseViewModel @Inject constructor(
         courseName: String?,
         tags: List<String>
     ) {
+        if (isLocalBusy.value) return
+        learningContextSaveResult.value = null
         runLocalBusyAction("更新失败") {
             knowledgeBaseRepository.updateFileLearningContext(fileId, courseId, courseName, tags)
-                .onSuccess { snackbarMessage.value = "已更新资料学习信息" }
-                .onFailure { snackbarMessage.value = it.toUiMessage("更新失败") }
+                .onSuccess {
+                    learningContextSaveResult.value = LearningContextSaveResult(fileId)
+                    snackbarMessage.value = "已更新资料学习信息"
+                }
+                .onFailure {
+                    val message = it.toUiMessage("更新失败")
+                    learningContextSaveResult.value = LearningContextSaveResult(fileId, message)
+                    snackbarMessage.value = message
+                }
         }
+    }
+
+    fun clearLearningContextSaveResult() {
+        learningContextSaveResult.value = null
     }
 
     fun markFlashcardReviewed(flashcardId: String, remembered: Boolean = true, onReviewed: () -> Unit = {}) {
