@@ -166,9 +166,9 @@ fun KnowledgeBaseScreen(
     }
 
     var showCreateFolderDialog by rememberSaveable { mutableStateOf(false) }
-    var folderToRename by remember { mutableStateOf<KnowledgeBaseFolderSummary?>(null) }
+    var folderToRenameId by rememberSaveable { mutableStateOf<String?>(null) }
     var folderToDelete by remember { mutableStateOf<KnowledgeBaseFolderSummary?>(null) }
-    var fileToRename by remember { mutableStateOf<KnowledgeBaseFileSummary?>(null) }
+    var fileToRenameId by rememberSaveable { mutableStateOf<String?>(null) }
     var fileToDelete by remember { mutableStateOf<KnowledgeBaseFileSummary?>(null) }
     var fileToMove by remember { mutableStateOf<KnowledgeBaseFileSummary?>(null) }
     var fileToContext by remember { mutableStateOf<KnowledgeBaseFileSummary?>(null) }
@@ -182,12 +182,12 @@ fun KnowledgeBaseScreen(
     var selectedFileIds by remember { mutableStateOf(emptySet<String>()) }
     var showManualKnowledgeDialog by rememberSaveable { mutableStateOf(false) }
     var selectedKnowledgeCard by remember { mutableStateOf<DueReviewItem?>(null) }
-    var editingKnowledgeCard by remember { mutableStateOf<DueReviewItem?>(null) }
+    var editingKnowledgeCardId by rememberSaveable { mutableStateOf<String?>(null) }
     var movingKnowledgeCard by remember { mutableStateOf<DueReviewItem?>(null) }
     var cardToDelete by remember { mutableStateOf<DueReviewItem?>(null) }
-    var manualCardTargetStudySet by remember { mutableStateOf<StudySetSummary?>(null) }
+    var manualCardTargetStudySetId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedStudySetId by rememberSaveable { mutableStateOf<String?>(null) }
-    var studySetToRename by remember { mutableStateOf<StudySetSummary?>(null) }
+    var studySetToRenameId by rememberSaveable { mutableStateOf<String?>(null) }
     var studySetToDelete by remember { mutableStateOf<StudySetSummary?>(null) }
     var studySetToMerge by remember { mutableStateOf<StudySetSummary?>(null) }
     var learningStudySetId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -204,6 +204,9 @@ fun KnowledgeBaseScreen(
         sortedFiles.filter { it.id in selectedFileIds }
     }
     val selectedStudySet = selectedStudySetId?.let { id ->
+        uiState.studySets.firstOrNull { it.id == id }
+    }
+    val manualCardTargetStudySet = manualCardTargetStudySetId?.let { id ->
         uiState.studySets.firstOrNull { it.id == id }
     }
     val learningStudySet = learningStudySetId?.let { id ->
@@ -243,28 +246,28 @@ fun KnowledgeBaseScreen(
         )
     }
 
-    folderToRename?.let { folder ->
+    uiState.folderChoices.firstOrNull { it.id == folderToRenameId && folderToRenameId != null }?.let { folder ->
         NameInputDialog(
             title = "重命名文件夹",
             initialValue = folder.name,
             confirmText = "保存",
-            onDismiss = { folderToRename = null },
+            onDismiss = { folderToRenameId = null },
             onConfirm = {
-                viewModel.renameFolder(folder.id, it)
-                folderToRename = null
+                viewModel.renameFolder(requireNotNull(folder.id), it)
+                folderToRenameId = null
             }
         )
     }
 
-    fileToRename?.let { file ->
+    uiState.folderContent.files.firstOrNull { it.id == fileToRenameId }?.let { file ->
         NameInputDialog(
             title = "重命名文件",
             initialValue = file.displayName,
             confirmText = "保存",
-            onDismiss = { fileToRename = null },
+            onDismiss = { fileToRenameId = null },
             onConfirm = {
                 viewModel.renameFile(file.id, it)
-                fileToRename = null
+                fileToRenameId = null
             }
         )
     }
@@ -367,11 +370,11 @@ fun KnowledgeBaseScreen(
         )
     }
 
-    if (showManualKnowledgeDialog) {
+    if (showManualKnowledgeDialog && (manualCardTargetStudySetId == null || manualCardTargetStudySet != null)) {
         ManualKnowledgeCardDialog(
             targetStudySetTitle = manualCardTargetStudySet?.title,
             onDismiss = {
-                manualCardTargetStudySet = null
+                manualCardTargetStudySetId = null
                 showManualKnowledgeDialog = false
             },
             onConfirm = { title, type, front, back, hint, courseName, explanation, example, pitfall, formula, tags ->
@@ -387,9 +390,9 @@ fun KnowledgeBaseScreen(
                     pitfall = pitfall,
                     formula = formula,
                     tags = tags,
-                    studySetId = manualCardTargetStudySet?.id
+                    studySetId = manualCardTargetStudySetId
                 )
-                manualCardTargetStudySet = null
+                manualCardTargetStudySetId = null
                 showManualKnowledgeDialog = false
             }
         )
@@ -401,7 +404,7 @@ fun KnowledgeBaseScreen(
             onDismiss = { selectedKnowledgeCard = null },
             onEdit = {
                 selectedKnowledgeCard = null
-                editingKnowledgeCard = card
+                editingKnowledgeCardId = card.flashcardId
             },
             onDelete = {
                 cardToDelete = card
@@ -439,26 +442,26 @@ fun KnowledgeBaseScreen(
         )
     }
 
-    editingKnowledgeCard?.let { card ->
+    uiState.knowledgeCards.firstOrNull { it.flashcardId == editingKnowledgeCardId }?.let { card ->
         EditKnowledgeCardDialog(
             item = card,
-            onDismiss = { editingKnowledgeCard = null },
+            onDismiss = { editingKnowledgeCardId = null },
             onSave = {
                 viewModel.updateKnowledgeCard(it)
-                editingKnowledgeCard = null
+                editingKnowledgeCardId = null
             }
         )
     }
 
-    studySetToRename?.let { studySet ->
+    uiState.studySets.firstOrNull { it.id == studySetToRenameId }?.let { studySet ->
         NameInputDialog(
             title = "重命名学习集",
             initialValue = studySet.title,
             confirmText = "保存",
-            onDismiss = { studySetToRename = null },
+            onDismiss = { studySetToRenameId = null },
             onConfirm = {
                 viewModel.renameStudySet(studySet.id, it)
-                studySetToRename = null
+                studySetToRenameId = null
             }
         )
     }
@@ -589,7 +592,7 @@ fun KnowledgeBaseScreen(
                     studySet = requireNotNull(learningStudySet),
                     cards = learningCards,
                     onDismiss = { learningStudySetId = null },
-                    onEditCard = { editingKnowledgeCard = it },
+                    onEditCard = { editingKnowledgeCardId = it.flashcardId },
                     onReview = { card, remembered, onReviewed ->
                         viewModel.markFlashcardReviewed(card.flashcardId, remembered, onReviewed)
                     },
@@ -634,7 +637,7 @@ fun KnowledgeBaseScreen(
                         onLocalSearchChanged = viewModel::updateLocalSearchQuery,
                         onBack = viewModel::navigateBack,
                         onFolderClick = viewModel::enterFolder,
-                        onFolderRename = { folderToRename = it },
+                        onFolderRename = { folderToRenameId = it.id },
                         onFolderDelete = { folderToDelete = it },
                         onFileOpen = { onOpenFile(it.id) },
                         onToggleSelectionMode = {
@@ -658,7 +661,7 @@ fun KnowledgeBaseScreen(
                             selectedFileIds = emptySet()
                             isSelectionMode = false
                         },
-                        onFileRename = { fileToRename = it },
+                        onFileRename = { fileToRenameId = it.id },
                         onFileDelete = { fileToDelete = it },
                         onFileMove = { fileToMove = it },
                         onFileContext = { fileToContext = it },
@@ -682,12 +685,12 @@ fun KnowledgeBaseScreen(
                         quizQuestions = uiState.quizQuestions,
                         selectedStudySet = selectedStudySet,
                         onAddManualCard = {
-                            manualCardTargetStudySet = null
+                            manualCardTargetStudySetId = null
                             showManualKnowledgeDialog = true
                         },
                         onOpenStudySet = { selectedStudySetId = it.id },
                         onBackToStudySets = { selectedStudySetId = null },
-                        onRenameStudySet = { studySetToRename = it },
+                        onRenameStudySet = { studySetToRenameId = it.id },
                         onDeleteStudySet = { studySetToDelete = it },
                         onMergeStudySet = { studySetToMerge = it },
                         onStartStudySet = { learningStudySetId = it.id },
@@ -696,11 +699,11 @@ fun KnowledgeBaseScreen(
                             quizStartQuestionId = null
                         },
                         onAddCardToStudySet = {
-                            manualCardTargetStudySet = it
+                            manualCardTargetStudySetId = it.id
                             showManualKnowledgeDialog = true
                         },
                         onOpenCard = { selectedKnowledgeCard = it },
-                        onEditCard = { editingKnowledgeCard = it },
+                        onEditCard = { editingKnowledgeCardId = it.flashcardId },
                         onMoveCard = { movingKnowledgeCard = it },
                         onDeleteCard = { cardToDelete = it },
                         onOpenQuiz = {
@@ -1019,19 +1022,14 @@ private fun KnowledgeSpacePage(
     ) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("知识空间", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text(
-                        "按学习集管理知识卡片，进入后再学习和复习",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                OutlinedButton(
-                    onClick = onAddManualCard,
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = null)
+                Text(
+                    "知识空间",
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                IconButton(onClick = onAddManualCard) {
+                    Icon(Icons.Default.Add, contentDescription = "新建学习集卡片")
                 }
             }
         }
@@ -1616,7 +1614,7 @@ private fun ManualKnowledgeCardDialog(
             ) {
                 item {
                     Text(
-                        targetStudySetTitle?.let { "保存到：$it" } ?: "保存后会自动创建一个新的学习集",
+                        "保存到：${targetStudySetTitle ?: "新学习集"}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1698,8 +1696,9 @@ private fun KnowledgeDialogTextField(
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        label = { Text(label) },
+        label = { Text(label, style = MaterialTheme.typography.bodySmall) },
         modifier = modifier.fillMaxWidth(),
+        textStyle = MaterialTheme.typography.bodyMedium,
         singleLine = singleLine,
         minLines = minLines,
         shape = RoundedCornerShape(8.dp)
