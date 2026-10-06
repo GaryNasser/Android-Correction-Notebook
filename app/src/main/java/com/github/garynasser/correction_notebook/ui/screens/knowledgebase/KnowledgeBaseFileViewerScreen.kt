@@ -393,7 +393,7 @@ fun KnowledgeBaseFileViewerScreen(
                                 isVideo = uiState.previewType == KnowledgeBasePreviewType.VIDEO
                             )
                             KnowledgeBasePreviewType.FALLBACK,
-                            null -> FallbackPreview(uiState.file, viewModel::refresh)
+                            null -> FallbackPreview(uiState.file, viewModel::refresh, enabled = !uiState.isDeletingFile)
                         }
                     }
                 }
@@ -700,13 +700,15 @@ private fun FileInfoDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("文件信息") },
+        shape = RoundedCornerShape(8.dp),
+        title = { Text("文件信息", style = MaterialTheme.typography.titleMedium) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("名称: ${file.displayName}")
-                Text("大小: ${formatFileSize(file.sizeBytes)}")
-                Text("类型: ${file.mimeType.ifBlank { "未知类型" }}")
-                file.sourceTitle?.let { Text("来源: $it") }
+            Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("名称: ${file.displayName}", style = MaterialTheme.typography.bodySmall)
+                Text("大小: ${formatFileSize(file.sizeBytes)}", style = MaterialTheme.typography.bodySmall)
+                Text("类型: ${file.mimeType.ifBlank { "未知类型" }}", style = MaterialTheme.typography.bodySmall)
+                file.sourceTitle?.let { Text("来源: $it", style = MaterialTheme.typography.bodySmall) }
             }
         },
         confirmButton = {
@@ -825,7 +827,7 @@ private fun PdfPreview(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun FallbackPreview(file: KnowledgeBaseFileSummary, onRetry: () -> Unit) {
+private fun FallbackPreview(file: KnowledgeBaseFileSummary, onRetry: () -> Unit, enabled: Boolean) {
     val context = LocalContext.current
     Box(
         modifier = Modifier.fillMaxSize(),
@@ -846,12 +848,12 @@ private fun FallbackPreview(file: KnowledgeBaseFileSummary, onRetry: () -> Unit)
             Text(file.displayName, modifier = Modifier.fillMaxWidth(), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)) {
-                TextButton(onClick = onRetry) {
+                TextButton(onClick = onRetry, enabled = enabled) {
                     Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
                     Text("重试")
                 }
-                TextButton(onClick = { openFileExternally(context, file) }) {
+                TextButton(onClick = { openFileExternally(context, file) }, enabled = enabled) {
                     Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
                     Text("其他应用打开")
@@ -956,8 +958,13 @@ private fun FileViewerConfirmDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = { Text(message) },
+        shape = RoundedCornerShape(8.dp),
+        title = { Text(title, style = MaterialTheme.typography.titleMedium) },
+        text = {
+            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+                Text(message, style = MaterialTheme.typography.bodySmall)
+            }
+        },
         confirmButton = {
             TextButton(
                 onClick = onConfirm,

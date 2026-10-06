@@ -25,6 +25,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -87,16 +88,24 @@ class KnowledgeBaseFileViewerViewModel @Inject constructor(
     private var saveDraftJob: Job? = null
     private var indexJob: Job? = null
     private var deleteJob: Job? = null
+    private val isDeletingOrDeleted: Boolean
+        get() = uiState.value.isDeletingFile || uiState.value.isDeleted || deleteJob?.isActive == true
 
     init {
         loadFile()
     }
 
     fun refresh() {
+        if (isDeletingOrDeleted) return
         loadFile()
     }
 
     fun exportFile(fileId: String, targetUri: Uri) {
+        if (fileId == args.fileId && isDeletingOrDeleted) {
+            exportMessage = "文件正在删除或已删除，无法导出"
+            isExportError = true
+            return
+        }
         viewModelScope.launch {
             exportMessage = "正在导出文件..."
             isExportError = false
@@ -113,7 +122,7 @@ class KnowledgeBaseFileViewerViewModel @Inject constructor(
     }
 
     fun runAiAction(mode: KnowledgeAiMode) {
-        if (uiState.value.isAiLoading || aiJob?.isActive == true) return
+        if (isDeletingOrDeleted || uiState.value.isAiLoading || aiJob?.isActive == true) return
         val fileId = uiState.value.file?.id ?: return
         val fileName = uiState.value.file?.displayName ?: "资料"
         aiJob = viewModelScope.launch {
@@ -153,7 +162,7 @@ class KnowledgeBaseFileViewerViewModel @Inject constructor(
     }
 
     fun generateStudySet() {
-        if (uiState.value.isAiLoading || studySetJob?.isActive == true) return
+        if (isDeletingOrDeleted || uiState.value.isAiLoading || studySetJob?.isActive == true) return
         val fileId = uiState.value.file?.id ?: return
         studySetJob = viewModelScope.launch {
             uiState.value = uiState.value.copy(
@@ -189,7 +198,7 @@ class KnowledgeBaseFileViewerViewModel @Inject constructor(
     }
 
     fun saveStudySetDraft() {
-        if (uiState.value.isSavingStudySetDraft || saveDraftJob?.isActive == true) return
+        if (isDeletingOrDeleted || uiState.value.isSavingStudySetDraft || saveDraftJob?.isActive == true) return
         val file = uiState.value.file ?: return
         val draft = uiState.value.studySetDraft ?: return
         saveDraftJob = viewModelScope.launch {
@@ -222,7 +231,7 @@ class KnowledgeBaseFileViewerViewModel @Inject constructor(
     }
 
     fun rebuildIndex() {
-        if (uiState.value.isIndexing || indexJob?.isActive == true) return
+        if (isDeletingOrDeleted || uiState.value.isIndexing || indexJob?.isActive == true) return
         val fileId = uiState.value.file?.id ?: return
         indexJob = viewModelScope.launch {
             uiState.value = uiState.value.copy(isIndexing = true, errorMessage = null)
@@ -254,11 +263,23 @@ class KnowledgeBaseFileViewerViewModel @Inject constructor(
     }
 
     fun deleteCurrentFile() {
-        if (uiState.value.isDeletingFile || deleteJob?.isActive == true) return
+        if (isDeletingOrDeleted) return
         val file = uiState.value.file ?: return
         deleteJob = viewModelScope.launch {
-            uiState.value = uiState.value.copy(isDeletingFile = true, errorMessage = null)
+            uiState.value = uiState.value.copy(
+                isDeletingFile = true,
+                isAiLoading = false,
+                isSavingStudySetDraft = false,
+                isIndexing = false,
+                errorMessage = null
+            )
             try {
+                // Stop readers and derived-data writers before the file deletion transaction.
+                loadJob?.cancelAndJoin()
+                aiJob?.cancelAndJoin()
+                studySetJob?.cancelAndJoin()
+                saveDraftJob?.cancelAndJoin()
+                indexJob?.cancelAndJoin()
                 knowledgeBaseRepository.deleteFile(file.id)
                     .onSuccess {
                         recyclePdfPages(uiState.value.pdfPages)

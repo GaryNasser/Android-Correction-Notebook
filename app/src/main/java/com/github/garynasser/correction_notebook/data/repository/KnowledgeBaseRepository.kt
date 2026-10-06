@@ -1,5 +1,6 @@
 package com.github.garynasser.correction_notebook.data.repository
 
+import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -224,7 +225,16 @@ class KnowledgeBaseRepository @Inject constructor(
     suspend fun exportFile(fileId: String, targetUri: Uri): Result<Unit> = withContext(Dispatchers.IO) {
         runCatchingCancellable {
             val file = requireNotNull(dao.getFileById(fileId)) { "文件不存在，无法导出" }
-            File(file.localPath).inputStream().use { input ->
+            val source = File(file.localPath)
+            require(targetUri.scheme != ContentResolver.SCHEME_FILE ||
+                File(requireNotNull(targetUri.path)).canonicalFile != source.canonicalFile) {
+                "导出位置不能是源文件，请选择其他位置"
+            }
+            require(targetUri.scheme != ContentResolver.SCHEME_CONTENT ||
+                targetUri.authority != "${context.packageName}.fileprovider") {
+                "不能覆盖应用内的知识库文件，请选择其他导出位置"
+            }
+            source.inputStream().use { input ->
                 context.contentResolver.openOutputStream(targetUri, "wt")?.use { output ->
                     input.copyTo(output)
                 } ?: error("无法写入导出位置")
