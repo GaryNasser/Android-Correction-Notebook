@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -60,6 +61,7 @@ import androidx.compose.material.icons.filled.Style
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Warning
@@ -717,13 +719,9 @@ fun KnowledgeBaseScreen(
                     2 -> BitSharePage(
                         uiState = uiState,
                         onQueryChanged = viewModel::updateRemoteQuery,
-                        onSortChanged = {
-                            viewModel.updateRemoteSort(it)
-                            if (uiState.remoteQuery.isNotBlank()) {
-                                searchRemoteResources()
-                            }
-                        },
+                        onSortChanged = viewModel::updateRemoteSort,
                         onSearchClick = searchRemoteResources,
+                        onLoadMore = viewModel::loadMoreRemoteResources,
                         onOpenDetail = {
                             showDownloadFolderPicker = false
                             viewModel.loadRemoteDetail(it.id)
@@ -2266,9 +2264,13 @@ private fun BitSharePage(
     onQueryChanged: (String) -> Unit,
     onSortChanged: (BitShareSortOption) -> Unit,
     onSearchClick: () -> Unit,
+    onLoadMore: () -> Unit,
     onOpenDetail: (BitShareSearchResult) -> Unit,
     onOpenFolderDetail: (String) -> Unit
 ) {
+    val listState = rememberSaveable(uiState.remoteQuery.trim(), uiState.remoteSort, saver = LazyListState.Saver) {
+        LazyListState()
+    }
     Column(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
@@ -2387,12 +2389,19 @@ private fun BitSharePage(
             }
 
             else -> {
+                Text(
+                    text = "已加载 ${uiState.remoteResults.size} / ${uiState.remoteTotal ?: uiState.remoteResults.size} 项",
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(bottom = 88.dp)
+                    contentPadding = PaddingValues(bottom = 12.dp)
                 ) {
-                    items(uiState.remoteResults, key = { it.id }) { result ->
+                    items(uiState.remoteResults, key = { "${it.entityType}:${it.id}" }) { result ->
                         RemoteResultRow(
                             result = result,
                             onClick = {
@@ -2403,6 +2412,39 @@ private fun BitSharePage(
                                 }
                             }
                         )
+                    }
+                    item(key = "pagination") {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            if (uiState.remoteLoadMoreError != null) {
+                                Text(
+                                    text = uiState.remoteLoadMoreError,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
+                            when {
+                                uiState.isLoadingMoreRemote -> Row(
+                                    modifier = Modifier.heightIn(min = 48.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                                    Text("正在加载更多", style = MaterialTheme.typography.bodySmall)
+                                }
+                                uiState.canLoadMoreRemote -> TextButton(onClick = onLoadMore) {
+                                    Icon(
+                                        if (uiState.remoteLoadMoreError == null) Icons.Default.ExpandMore else Icons.Default.Refresh,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(if (uiState.remoteLoadMoreError == null) "加载更多" else "重试加载")
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -2622,22 +2664,25 @@ private fun RemoteResultRow(
     ) {
         ListItem(
             headlineContent = {
-                Text(result.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(result.title, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
             },
             supportingContent = {
                 if (isFolder) {
                     Text(
                         "目录 · ${result.downloadCount} 次下载",
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 } else {
-                    Text(
-                        "${result.originalName} · ${formatFileSize(result.sizeBytes)} · 下载 ${result.downloadCount}",
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(result.originalName, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            "${formatFileSize(result.sizeBytes)} · 下载 ${result.downloadCount}",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                 }
             },
             leadingContent = {
@@ -2653,7 +2698,7 @@ private fun RemoteResultRow(
                         Text("查看", style = MaterialTheme.typography.labelSmall)
                     }
                 } else {
-                    Icon(Icons.Default.CloudDownload, contentDescription = "下载")
+                    Icon(Icons.Default.CloudDownload, contentDescription = "查看文件详情")
                 }
             }
         )

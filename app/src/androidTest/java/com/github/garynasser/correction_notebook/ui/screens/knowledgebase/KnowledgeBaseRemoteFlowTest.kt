@@ -48,6 +48,165 @@ class KnowledgeBaseRemoteFlowTest {
     @Test fun restoredFolderPickerDownloadsTheDisplayedFileIntoTheChosenFolder() = checkDownload(restore = true)
     @Test fun clickingAnotherResultDuringLoadingCannotChangeTheDisplayedDownloadTarget() = checkDownload(restore = false)
 
+    @Test fun searchCanContinueBeyondTheFirstTwentyResults() = withFixture { f ->
+        f.searchItems = pagedItems()
+        compose.setContent { TestScreen(f.model, dark = false) }
+        search(f, expectedCount = 20)
+        compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("加载更多"))
+        compose.onNodeWithText("加载更多").assertIsDisplayed().performClick()
+        f.await { f.model.uiState.value.remoteResults.size == 25 }
+        assertEquals(listOf(1, 2), f.searchCalls.map { it.second })
+        compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("课程资料 25"))
+        compose.onNodeWithText("课程资料 25").assertIsDisplayed()
+        capture("remote-pagination-light")
+    }
+
+    @Test fun failedNextPageKeepsResultsAndRestoredRetryLoadsTheSamePage() = withFixture { f ->
+        f.searchItems = pagedItems()
+        val restoration = StateRestorationTester(compose)
+        restoration.setContent { TestScreen(f.model, dark = true) }
+        search(f, expectedCount = 20)
+        f.failSearchPage = 2
+        compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("加载更多"))
+        compose.onNodeWithText("加载更多").performClick()
+        f.await { f.model.uiState.value.remoteLoadMoreError != null && !f.model.uiState.value.isLoadingMoreRemote }
+        assertEquals(20, f.model.uiState.value.remoteResults.size)
+        assertTrue(f.model.uiState.value.canLoadMoreRemote)
+        assertNull(f.model.uiState.value.remoteErrorMessage)
+        compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("重试加载"))
+        compose.onNodeWithText("重试加载").assertIsDisplayed()
+        restoration.emulateSavedInstanceStateRestore()
+        compose.onNodeWithText("重试加载").assertIsDisplayed()
+        compose.onNodeWithText("已加载 20 / 25 项").assertIsDisplayed()
+        compose.onNodeWithText("重试加载").assertIsDisplayed()
+        capture("remote-pagination-error-dark")
+        f.failSearchPage = null
+        compose.onNodeWithText("重试加载").performClick()
+        f.await { f.model.uiState.value.remoteResults.size == 25 && !f.model.uiState.value.isLoadingMoreRemote }
+        assertEquals(listOf(1, 2, 2), f.searchCalls.map { it.second })
+        assertFalse(f.model.uiState.value.canLoadMoreRemote)
+        assertNull(f.model.uiState.value.remoteLoadMoreError)
+        compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("课程资料 25"))
+        compose.onNodeWithText("课程资料 25").assertIsDisplayed()
+        capture("remote-pagination-recovered-dark")
+    }
+
+    @Test fun repeatedContinuationIsIgnoredAndEditingRejectsTheOldPage() = withFixture { f ->
+        f.searchItems = pagedItems()
+        compose.setContent { TestScreen(f.model, dark = false) }
+        search(f, expectedCount = 20)
+        val gate = Gate().also { f.searchGate = it }
+        withContext(Dispatchers.Main) { repeat(3) { f.model.loadMoreRemoteResources() } }
+        assertTrue(gate.entered.await(5, TimeUnit.SECONDS))
+        compose.onNode(hasSetTextAction()).performTextClearance()
+        compose.onNode(hasSetTextAction()).performTextInput("新课程")
+        f.searchItems = pagedItems(3).map { it.copy(name = "新课程 ${it.id}") }
+        compose.onNode(hasSetTextAction()).performImeAction()
+        f.await { f.model.uiState.value.remoteResults.size == 3 && !f.model.uiState.value.isRemoteSearching }
+        gate.release.countDown()
+        assertTrue(gate.returned.await(5, TimeUnit.SECONDS))
+        compose.waitForIdle()
+        assertEquals(listOf("课程" to 1, "课程" to 2, "新课程" to 1), f.searchCalls.toList())
+        assertTrue(f.model.uiState.value.remoteResults.all { it.title.startsWith("新课程") })
+        assertFalse(f.model.uiState.value.canLoadMoreRemote)
+        assertFalse(f.model.uiState.value.isLoadingMoreRemote)
+        assertNull(f.model.uiState.value.remoteLoadMoreError)
+    }
+
+    @Test fun refreshingLoadedPagesReplacesResultsAndResetsTheContinuation() = withFixture { f ->
+        f.searchItems = pagedItems()
+        compose.setContent { TestScreen(f.model, dark = false) }
+        search(f, expectedCount = 20)
+        withContext(Dispatchers.Main) { f.model.loadMoreRemoteResources() }
+        f.await { f.model.uiState.value.remoteResults.size == 25 }
+        f.searchItems = pagedItems(26).map { it.copy(name = "更新 ${it.name}") }
+        compose.onNodeWithContentDescription("刷新搜索").performClick()
+        f.await { !f.model.uiState.value.isRemoteSearching && f.model.uiState.value.remoteResults.size == 20 }
+        assertTrue(f.model.uiState.value.remoteResults.all { it.title.startsWith("更新") })
+        withContext(Dispatchers.Main) { f.model.loadMoreRemoteResources() }
+        f.await { f.model.uiState.value.remoteResults.size == 26 }
+        assertEquals(listOf(1, 2, 1, 2), f.searchCalls.map { it.second })
+        assertFalse(f.model.uiState.value.canLoadMoreRemote)
+    }
+
+    @Test fun sortingLoadedResultsKeepsEveryPageWithoutAnotherRequest() = withFixture { f ->
+        f.searchItems = pagedItems().map { item ->
+            item.copy(uploadedAt = when (item.id) {
+                "file-22" -> "invalid timestamp"
+                "file-23" -> "2026-10-25T10:00:00.200+02:00"
+                "file-24" -> "2026-10-25T08:00:00.100Z"
+                "file-25" -> "2026-10-25T08:00:00Z"
+                else -> item.uploadedAt
+            })
+        }
+        compose.setContent { TestScreen(f.model, dark = false) }
+        search(f, expectedCount = 20)
+        withContext(Dispatchers.Main) { f.model.loadMoreRemoteResources() }
+        f.await { f.model.uiState.value.remoteResults.size == 25 }
+        compose.onNodeWithText("下载量").performClick()
+        f.await { f.model.uiState.value.remoteSort == BitShareSortOption.DOWNLOADS }
+        assertEquals((25 downTo 1).map { "file-$it" }, f.model.uiState.value.remoteResults.map { it.id })
+        compose.onNodeWithText("课程资料 25").assertIsDisplayed()
+        compose.onNodeWithText("最新").performClick()
+        f.await { f.model.uiState.value.remoteSort == BitShareSortOption.LATEST }
+        assertEquals(listOf("file-23", "file-24", "file-25"), f.model.uiState.value.remoteResults.take(3).map { it.id })
+        assertEquals("file-22", f.model.uiState.value.remoteResults.last().id)
+        compose.onNodeWithText("综合").performClick()
+        f.await { f.model.uiState.value.remoteSort == BitShareSortOption.RELEVANCE }
+        assertEquals((1..25).map { "file-$it" }, f.model.uiState.value.remoteResults.map { it.id })
+        assertEquals(listOf(1, 2), f.searchCalls.map { it.second })
+        assertFalse(f.model.uiState.value.canLoadMoreRemote)
+    }
+
+    @Test fun overlappingPagesDeduplicateFilesButKeepSameIdFoldersUsable() = withFixture { f ->
+        f.searchItems = pagedItems()
+        val folder = f.searchItems.first().copy(entityType = "folder", name = "课程目录")
+        f.searchResponses = mapOf(2 to BitShareSearchResponse(
+            listOf(f.searchItems.first(), folder) + f.searchItems.drop(20), 2, 20, 27
+        ))
+        compose.setContent { TestScreen(f.model, dark = false) }
+        search(f, expectedCount = 20)
+        withContext(Dispatchers.Main) { f.model.loadMoreRemoteResources() }
+        f.await { f.model.uiState.value.remoteResults.size == 26 }
+        assertEquals(1, f.model.uiState.value.remoteResults.count { it.id == "file-1" && it.entityType == "file" })
+        assertEquals(1, f.model.uiState.value.remoteResults.count { it.id == "file-1" && it.entityType == "folder" })
+        compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("课程目录"))
+        compose.onNodeWithText("课程目录").assertIsDisplayed().performClick()
+        f.await { f.model.uiState.value.selectedRemoteFolderDetail?.id == "file-1" }
+    }
+
+    @Test fun invalidContinuationMetadataKeepsThePageAvailableForRetry() = withFixture { f ->
+        f.searchItems = pagedItems()
+        compose.setContent { TestScreen(f.model, dark = false) }
+        search(f, expectedCount = 20)
+        f.searchResponses = mapOf(2 to BitShareSearchResponse(f.searchItems.drop(20), 1, 20, 25))
+        withContext(Dispatchers.Main) { f.model.loadMoreRemoteResources() }
+        f.await { f.model.uiState.value.remoteLoadMoreError != null && !f.model.uiState.value.isLoadingMoreRemote }
+        assertEquals(20, f.model.uiState.value.remoteResults.size)
+        assertTrue(f.model.uiState.value.canLoadMoreRemote)
+        f.searchResponses = emptyMap()
+        withContext(Dispatchers.Main) { f.model.loadMoreRemoteResources() }
+        f.await { f.model.uiState.value.remoteResults.size == 25 }
+        assertEquals(listOf(1, 2, 2), f.searchCalls.map { it.second })
+    }
+
+    @Test fun emptyContinuationEndsLoadingWithoutAnExtraRequest() = withFixture { f ->
+        f.searchItems = pagedItems()
+        f.searchResponses = mapOf(2 to BitShareSearchResponse(emptyList(), 2, 20, 25))
+        compose.setContent { TestScreen(f.model, dark = false) }
+        search(f, expectedCount = 20)
+        withContext(Dispatchers.Main) { f.model.loadMoreRemoteResources() }
+        f.await { !f.model.uiState.value.isLoadingMoreRemote && !f.model.uiState.value.canLoadMoreRemote }
+        withContext(Dispatchers.Main) { f.model.loadMoreRemoteResources() }
+        assertEquals(20, f.model.uiState.value.remoteResults.size)
+        assertEquals(listOf(1, 2), f.searchCalls.map { it.second })
+    }
+
+    private fun pagedItems(count: Int = 25) = (1..count).map { index ->
+        BitShareSearchItemDto("file", "file-$index", "课程资料 $index", "资料$index.txt", "txt", 9, index,
+            "2026-10-${index.toString().padStart(2, '0')}T08:00:00Z")
+    }
+
     private fun checkDownload(restore: Boolean) = withFixture { f ->
         f.local.createFolder(null, "课程资料").getOrThrow()
         f.await { f.model.uiState.value.folderChoices.size == 2 }
@@ -117,12 +276,12 @@ class KnowledgeBaseRemoteFlowTest {
         assertTrue(f.database.knowledgeBaseDao().getAllFiles().isEmpty())
     }
 
-    private suspend fun search(f: Fixture) {
+    private suspend fun search(f: Fixture, expectedCount: Int = 2) {
         compose.onNodeWithText("BITShare").performClick()
         compose.onNode(hasSetTextAction()).performTextInput("课程")
         compose.onNode(hasSetTextAction()).performImeAction()
         compose.onNode(hasSetTextAction()).assertIsNotFocused()
-        f.await { f.model.uiState.value.remoteResults.size == 2 }
+        f.await { f.model.uiState.value.remoteResults.size == expectedCount && !f.model.uiState.value.isRemoteSearching }
     }
 
     @Composable private fun TestScreen(model: KnowledgeBaseViewModel, dark: Boolean, onOpenFile: (String) -> Unit = {}) {
@@ -186,6 +345,8 @@ class KnowledgeBaseRemoteFlowTest {
                     f.activeGate?.release?.countDown()
                     f.downloadGate?.release?.countDown()
                     f.activeDownloadGate?.release?.countDown()
+                    f.searchGate?.release?.countDown()
+                    f.activeSearchGate?.release?.countDown()
                     withContext(Dispatchers.Main) { f.store.clear() }
                     f.model.viewModelScope.coroutineContext[Job]?.join()
                     f.collector?.cancelAndJoin()
@@ -201,7 +362,11 @@ class KnowledgeBaseRemoteFlowTest {
     private class Gate {
         val entered = CountDownLatch(1)
         val release = CountDownLatch(1)
-        fun await() { entered.countDown(); check(release.await(5, TimeUnit.SECONDS)) }
+        val returned = CountDownLatch(1)
+        fun await() {
+            entered.countDown()
+            try { check(release.await(5, TimeUnit.SECONDS)) } finally { returned.countDown() }
+        }
     }
 
     private class Fixture {
@@ -211,6 +376,15 @@ class KnowledgeBaseRemoteFlowTest {
         val database = Room.inMemoryDatabaseBuilder(context, KnowledgeBaseDatabase::class.java).build()
         val local = KnowledgeBaseRepository(database.knowledgeBaseDao(), KnowledgeBaseFileStorage(context), context)
         val downloads = CopyOnWriteArrayList<String>()
+        val searchCalls = CopyOnWriteArrayList<Pair<String, Int>>()
+        var searchItems = listOf(
+            BitShareSearchItemDto("file", "a", "矩阵分析讲义", "矩阵分析.txt", "txt", 9, 0, null),
+            BitShareSearchItemDto("file", "b", "算法设计讲义", "算法设计.txt", "txt", 9, 0, null)
+        )
+        @Volatile var failSearchPage: Int? = null
+        var searchResponses = emptyMap<Int, BitShareSearchResponse>()
+        @Volatile var searchGate: Gate? = null
+        @Volatile var activeSearchGate: Gate? = null
         @Volatile var gate: Gate? = null
         @Volatile var activeGate: Gate? = null
         @Volatile var downloadGate: Gate? = null
@@ -226,15 +400,20 @@ class KnowledgeBaseRemoteFlowTest {
             }
             val body = when {
                 download -> path.substringBeforeLast('/').substringAfterLast('/').let { downloads += it; "payload-$it" }
-                path == "/api/public/search" -> gson.toJson(BitShareSearchResponse(listOf(
-                    BitShareSearchItemDto("file", "a", "矩阵分析讲义", "矩阵分析.txt", "txt", 9, 0, null),
-                    BitShareSearchItemDto("file", "b", "算法设计讲义", "算法设计.txt", "txt", 9, 0, null)
-                ), 1, 20, 2))
+                path == "/api/public/search" -> {
+                    val page = chain.request().url.queryParameter("page")!!.toInt()
+                    val size = chain.request().url.queryParameter("page_size")!!.toInt()
+                    searchCalls += chain.request().url.queryParameter("q")!! to page
+                    val response = searchResponses[page] ?: BitShareSearchResponse(searchItems.drop((page - 1) * size).take(size), page, size, searchItems.size)
+                    searchGate?.also { searchGate = null; activeSearchGate = it }?.await()
+                    gson.toJson(response)
+                }
                 path.contains("/folders/") -> gson.toJson(BitShareFolderDetailDto(id, "课程目录", "课程资料", null, emptyList(), 2, 0, 18, null))
                 else -> gson.toJson(BitShareFileDetailDto(id, if (id == "a") "矩阵分析讲义" else "算法设计讲义", "txt", null, null, null,
                     if (id == "a") "矩阵分析.txt" else "算法设计.txt", "text/plain", 9, null, 0))
             }
-            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+            val failed = path == "/api/public/search" && chain.request().url.queryParameter("page")?.toInt() == failSearchPage
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(if (failed) 500 else 200).message(if (failed) "Search unavailable" else "OK")
                 .body(body.toResponseBody(if (download) "text/plain".toMediaType() else "application/json".toMediaType())).build()
         }.build()
         val store = ViewModelStore()

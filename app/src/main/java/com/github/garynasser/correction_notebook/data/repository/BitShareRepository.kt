@@ -2,7 +2,7 @@ package com.github.garynasser.correction_notebook.data.repository
 
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitShareFileDetail
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitShareSearchResult
-import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitShareSortOption
+import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitShareSearchPage
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitShareFolderDetail
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitShareFolderSummary
 import com.github.garynasser.correction_notebook.data.remote.api.BitShareApiService
@@ -31,13 +31,18 @@ class BitShareRepository internal constructor(
      */
     suspend fun searchFiles(
         query: String,
-        sortOption: BitShareSortOption
-    ): Result<List<BitShareSearchResult>> = runCatchingCancellable {
+        page: Int = 1
+    ): Result<BitShareSearchPage> = runCatchingCancellable {
+        require(page > 0) { "搜索页码无效" }
         if (query.isBlank()) {
-            emptyList()
+            BitShareSearchPage(emptyList(), 0, null)
         } else {
-            apiService.searchFiles(query = query.trim()).items
-                .map { item ->
+            val response = apiService.searchFiles(query = query.trim(), page = page)
+            check(response.page == page && response.pageSize > 0 && response.total >= 0) {
+                "搜索分页信息无效，请重试"
+            }
+            BitShareSearchPage(
+                items = response.items.map { item ->
                     BitShareSearchResult(
                         id = item.id,
                         title = item.name,
@@ -48,21 +53,12 @@ class BitShareRepository internal constructor(
                         uploadedAt = item.uploadedAt,
                         entityType = item.entityType
                     )
-                }
-                .let { results ->
-                    // 文件和文件夹分开处理
-                    val folders = results.filter { it.entityType == "folder" }
-                    val files = results.filter { it.entityType == "file" }
-
-                    when (sortOption) {
-                        BitShareSortOption.RELEVANCE -> folders + files
-                        BitShareSortOption.DOWNLOADS -> folders + files.sortedByDescending { it.downloadCount }
-                        BitShareSortOption.LATEST -> folders + files.sortedByDescending {
-                            // ISO 8601 格式字符串可直接按字典序比较
-                            it.uploadedAt ?: ""
-                        }
-                    }
-                }
+                },
+                total = response.total,
+                nextPage = if (response.items.isNotEmpty() && page.toLong() * response.pageSize < response.total) {
+                    page + 1
+                } else null
+            )
         }
     }
 

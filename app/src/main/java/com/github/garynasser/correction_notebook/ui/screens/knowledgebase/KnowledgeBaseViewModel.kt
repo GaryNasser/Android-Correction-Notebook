@@ -33,6 +33,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.time.OffsetDateTime
 import javax.inject.Inject
 
 data class KnowledgeBaseUiState(
@@ -49,6 +50,10 @@ data class KnowledgeBaseUiState(
     val remoteQuery: String = "",
     val remoteSort: BitShareSortOption = BitShareSortOption.RELEVANCE,
     val remoteResults: List<BitShareSearchResult> = emptyList(),
+    val remoteTotal: Int? = null,
+    val canLoadMoreRemote: Boolean = false,
+    val isLoadingMoreRemote: Boolean = false,
+    val remoteLoadMoreError: String? = null,
     val selectedRemoteDetail: BitShareFileDetail? = null,
     val selectedRemoteFolderDetail: BitShareFolderDetail? = null,
     val isRemoteSearching: Boolean = false,
@@ -78,6 +83,7 @@ private data class RemoteUiSnapshot(
     val remoteQuery: String,
     val remoteSort: BitShareSortOption,
     val remoteResults: List<BitShareSearchResult>,
+    val searchPage: RemoteSearchSnapshot,
     val selectedRemoteDetail: BitShareFileDetail?,
     val selectedRemoteFolderDetail: BitShareFolderDetail?,
     val isRemoteSearching: Boolean,
@@ -88,6 +94,14 @@ private data class RemoteUiSnapshot(
     val isLocalBusy: Boolean,
     val activeDownloadId: String?,
     val snackbarMessage: String?
+)
+
+private data class RemoteSearchSnapshot(
+    val results: List<BitShareSearchResult> = emptyList(),
+    val total: Int? = null,
+    val nextPage: Int? = null,
+    val isLoadingMore: Boolean = false,
+    val loadMoreError: String? = null
 )
 
 private data class RemoteLoadingSnapshot(
@@ -126,7 +140,7 @@ class KnowledgeBaseViewModel @Inject constructor(
     private val remoteQuery = MutableStateFlow("")
     private val remoteSort = MutableStateFlow(BitShareSortOption.RELEVANCE)
 
-    private val remoteResults = MutableStateFlow<List<BitShareSearchResult>>(emptyList())
+    private val remoteSearch = MutableStateFlow(RemoteSearchSnapshot())
     private val selectedRemoteDetail = MutableStateFlow<BitShareFileDetail?>(null)
     private val selectedRemoteFolderDetail = MutableStateFlow<BitShareFolderDetail?>(null)
     private val isRemoteSearching = MutableStateFlow(false)
@@ -143,6 +157,7 @@ class KnowledgeBaseViewModel @Inject constructor(
     private var downloadJob: Job? = null
     private var latestRemoteSearchRequestId = 0L
     private var activeRemoteSearchQuery: String? = null
+    private var appliedRemoteSearchQuery: String? = null
 
     private val folderContent: StateFlow<KnowledgeBaseFolderContent> = combine(
         currentFolderId,
@@ -216,8 +231,8 @@ class KnowledgeBaseViewModel @Inject constructor(
     }
 
     private val remoteUiSnapshot = combine(
-        combine(remoteQuery, remoteSort, remoteResults) { query, sort, results ->
-            Triple(query, sort, results)
+        combine(remoteQuery, remoteSort, remoteSearch) { query, sort, page ->
+            Triple(query, sort, page)
         },
         combine(selectedRemoteDetail, selectedRemoteFolderDetail) { detail, folderDetail ->
             Pair(detail, folderDetail)
@@ -244,7 +259,18 @@ class KnowledgeBaseViewModel @Inject constructor(
         RemoteUiSnapshot(
             remoteQuery = searchMeta.first,
             remoteSort = searchMeta.second,
-            remoteResults = searchMeta.third,
+            remoteResults = searchMeta.third.results.let { results ->
+                val folders = results.filter { it.entityType == "folder" }
+                val files = results.filter { it.entityType != "folder" }
+                folders + when (searchMeta.second) {
+                    BitShareSortOption.RELEVANCE -> files
+                    BitShareSortOption.DOWNLOADS -> files.sortedByDescending { it.downloadCount }
+                    BitShareSortOption.LATEST -> files.sortedByDescending {
+                        it.uploadedAt?.let { timestamp -> runCatching { OffsetDateTime.parse(timestamp).toInstant() }.getOrNull() }
+                    }
+                }
+            },
+            searchPage = searchMeta.third,
             selectedRemoteDetail = detailMeta.first,
             selectedRemoteFolderDetail = detailMeta.second,
             isRemoteSearching = loadingMeta.isRemoteSearching,
@@ -275,6 +301,10 @@ class KnowledgeBaseViewModel @Inject constructor(
             remoteQuery = remote.remoteQuery,
             remoteSort = remote.remoteSort,
             remoteResults = remote.remoteResults,
+            remoteTotal = remote.searchPage.total,
+            canLoadMoreRemote = remote.searchPage.nextPage != null,
+            isLoadingMoreRemote = remote.searchPage.isLoadingMore,
+            remoteLoadMoreError = remote.searchPage.loadMoreError,
             selectedRemoteDetail = remote.selectedRemoteDetail,
             selectedRemoteFolderDetail = remote.selectedRemoteFolderDetail,
             isRemoteSearching = remote.isRemoteSearching,
@@ -326,7 +356,8 @@ class KnowledgeBaseViewModel @Inject constructor(
         remoteQuery.value = query
         if (queryChanged) {
             dismissRemoteDetail()
-            remoteResults.value = emptyList()
+            remoteSearch.value = RemoteSearchSnapshot()
+            appliedRemoteSearchQuery = null
             remoteErrorMessage.value = null
         }
         if (shouldCancelRemoteSearch(activeRemoteSearchQuery, query)) {
@@ -338,47 +369,74 @@ class KnowledgeBaseViewModel @Inject constructor(
         remoteSort.value = sortOption
     }
 
-    fun searchRemoteResources() {
+    fun loadMoreRemoteResources() = searchRemoteResources(loadMore = true)
+
+    fun searchRemoteResources(loadMore: Boolean = false) {
         val query = remoteQuery.value.trim()
         if (query.isBlank()) {
             cancelRemoteSearch()
-            remoteResults.value = emptyList()
+            remoteSearch.value = RemoteSearchSnapshot()
+            appliedRemoteSearchQuery = null
             remoteErrorMessage.value = null
             return
         }
 
-        val sort = remoteSort.value
+        val page = if (loadMore) {
+            if (isRemoteSearching.value || remoteSearch.value.isLoadingMore || query != appliedRemoteSearchQuery) return
+            remoteSearch.value.nextPage ?: return
+        } else 1
         val requestId = ++latestRemoteSearchRequestId
         remoteSearchJob?.cancel()
         activeRemoteSearchQuery = query
-        isRemoteSearching.value = true
+        if (loadMore) {
+            remoteSearch.value = remoteSearch.value.copy(isLoadingMore = true, loadMoreError = null)
+        } else {
+            dismissRemoteDetail()
+            appliedRemoteSearchQuery = query
+            remoteSearch.value = RemoteSearchSnapshot()
+            isRemoteSearching.value = true
+        }
         remoteErrorMessage.value = null
         remoteSearchJob = viewModelScope.launch {
             try {
-                bitShareRepository.searchFiles(query, sort)
-                    .onSuccess { results ->
+                bitShareRepository.searchFiles(query, page)
+                    .onSuccess { result ->
                         if (isLatestRemoteSearch(requestId, latestRemoteSearchRequestId)) {
-                            remoteResults.value = results
+                            remoteSearch.value = RemoteSearchSnapshot(
+                                results = ((if (loadMore) remoteSearch.value.results else emptyList()) + result.items)
+                                    .distinctBy { it.entityType to it.id },
+                                total = result.total,
+                                nextPage = result.nextPage
+                            )
                         }
                     }
                     .onFailure { error ->
                         if (isLatestRemoteSearch(requestId, latestRemoteSearchRequestId)) {
-                            remoteErrorMessage.value = error.message ?: "搜索失败"
+                            publishRemoteSearchError(error, loadMore)
                         }
                     }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 if (isLatestRemoteSearch(requestId, latestRemoteSearchRequestId)) {
-                    remoteErrorMessage.value = e.message ?: "搜索失败"
+                    publishRemoteSearchError(e, loadMore)
                 }
             } finally {
                 if (isLatestRemoteSearch(requestId, latestRemoteSearchRequestId)) {
                     isRemoteSearching.value = false
+                    remoteSearch.value = remoteSearch.value.copy(isLoadingMore = false)
                     activeRemoteSearchQuery = null
                     remoteSearchJob = null
                 }
             }
+        }
+    }
+
+    private fun publishRemoteSearchError(error: Throwable, loadMore: Boolean) {
+        if (loadMore) {
+            remoteSearch.value = remoteSearch.value.copy(loadMoreError = error.message ?: "继续加载失败")
+        } else {
+            remoteErrorMessage.value = error.message ?: "搜索失败"
         }
     }
 
@@ -388,6 +446,7 @@ class KnowledgeBaseViewModel @Inject constructor(
         remoteSearchJob = null
         activeRemoteSearchQuery = null
         isRemoteSearching.value = false
+        remoteSearch.value = remoteSearch.value.copy(isLoadingMore = false)
     }
 
     fun loadRemoteDetail(fileId: String) {
