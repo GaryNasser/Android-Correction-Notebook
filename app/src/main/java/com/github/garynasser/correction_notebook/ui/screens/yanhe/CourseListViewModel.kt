@@ -17,6 +17,9 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.flow.combine
 import javax.inject.Inject
 
 sealed interface CourseUiState {
@@ -53,6 +56,8 @@ class CourseListViewModel @Inject constructor(
     var loadMoreErrorMessage by mutableStateOf<String?>(null)
         private set
     private var courseLoadJob: Job? = null
+    private var courseRequest = 0L
+    private var observedSessionVersion = yanheRepository.sessionVersion
 
     // UI 状态
     var uiState: CourseUiState by mutableStateOf(CourseUiState.Loading)
@@ -76,17 +81,25 @@ class CourseListViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            authStateManager.authState.collect { state ->
-                when (state) {
-                    is AuthState.Authenticated -> {
-                        if (isPersonalCoursesMode && personalCourses.isEmpty()) {
-                            refreshMySchedule()
+            combine(authStateManager.authState, yanheRepository.sessionRevision) { state, version -> state to version }
+                .collect { (state, version) ->
+                    val changed = observedSessionVersion != version
+                    observedSessionVersion = version
+                    if (changed) clearPersonalCourseState(clearVisibleCourses = true)
+                    when (state) {
+                        is AuthState.Authenticated -> {
+                            if (yanheRepository.isSignedOut) {
+                                clearPersonalCourseState()
+                            } else if (isPersonalCoursesMode && personalCourses.isEmpty()) {
+                                refreshMySchedule()
+                            } else if (changed && !isPersonalCoursesMode) {
+                                loadCourses()
+                            }
                         }
+                        is AuthState.Unauthenticated -> clearPersonalCourseState()
+                        else -> Unit
                     }
-                    is AuthState.Unauthenticated -> clearPersonalCourseState()
-                    else -> Unit
                 }
-            }
         }
     }
 
@@ -102,6 +115,7 @@ class CourseListViewModel @Inject constructor(
             return
         }
 
+        val request = ++courseRequest
         courseLoadJob = viewModelScope.launch {
             if (!isNextPage) {
                 currentPage = 1
@@ -122,6 +136,7 @@ class CourseListViewModel @Inject constructor(
                 } else {
                     videoRepository.getCourse(null, currentPage, 16, keywordParam)
                 }
+                if (request != courseRequest) return@launch
 
                 if (result.isEmpty()) {
                     isEndReached = true
@@ -137,15 +152,19 @@ class CourseListViewModel @Inject constructor(
 
                 uiState = CourseUiState.Success(courses.toList())
             } catch (e: CancellationException) {
+                if (request == courseRequest && currentCoroutineContext().isActive) {
+                    uiState = CourseUiState.Error("登录状态已变化，请重新加载课程")
+                }
                 throw e
             } catch (e: Exception) {
+                if (request != courseRequest) return@launch
                 if (!isNextPage) {
                     uiState = CourseUiState.Error("加载失败: ${e.message ?: "课程资源请求失败"}")
                 } else {
                     loadMoreErrorMessage = "继续加载失败：${e.message ?: "请稍后再试"}"
                 }
             } finally {
-                isLoadingMore = false
+                if (request == courseRequest) isLoadingMore = false
             }
         }
     }
@@ -169,6 +188,7 @@ class CourseListViewModel @Inject constructor(
         if (isRefreshingSchedule) return
         isRefreshingSchedule = true
         courseLoadJob?.cancel()
+        val request = ++courseRequest
         courseLoadJob = viewModelScope.launch {
             uiState = CourseUiState.Loading
             loadMoreErrorMessage = null
@@ -182,27 +202,33 @@ class CourseListViewModel @Inject constructor(
                         videoRepository.getAllPersonalCourses()
                     }
                 }.onSuccess { loadedCourses ->
+                    if (request != courseRequest) return@onSuccess
                     personalCourses = loadedCourses
                     semesters = buildCourseSemesters(personalCourses)
                     selectedSemester = pickLatestSemester(semesters)
                     applyPersonalCourseFilters()
                 }.onFailure { throwable ->
                     if (throwable is CancellationException) throw throwable
+                    if (request != courseRequest) return@onFailure
                     personalCourses = emptyList()
                     semesters = listOf(ALL_SEMESTERS)
                     selectedSemester = ALL_SEMESTERS
                     uiState = CourseUiState.Error(formatYanheError(throwable))
                 }
             } catch (e: CancellationException) {
+                if (request == courseRequest && currentCoroutineContext().isActive) {
+                    uiState = CourseUiState.Error("登录状态已变化，请重新加载课程")
+                }
                 throw e
             } catch (e: Exception) {
+                if (request != courseRequest) return@launch
                 personalCourses = emptyList()
                 courses.clear()
                 semesters = listOf(ALL_SEMESTERS)
                 selectedSemester = ALL_SEMESTERS
                 uiState = CourseUiState.Error(formatYanheError(e))
             } finally {
-                isRefreshingSchedule = false
+                if (request == courseRequest) isRefreshingSchedule = false
             }
         }
     }
@@ -237,15 +263,18 @@ class CourseListViewModel @Inject constructor(
         uiState = CourseUiState.Success(filtered)
     }
 
-    private fun clearPersonalCourseState() {
+    private fun clearPersonalCourseState(clearVisibleCourses: Boolean = isPersonalCoursesMode) {
+        courseRequest++
+        courseLoadJob?.cancel()
+        courseLoadJob = null
+        isRefreshingSchedule = false
+        isLoadingMore = false
+        loadMoreErrorMessage = null
         personalCourses = emptyList()
         semesters = listOf(ALL_SEMESTERS)
         selectedSemester = ALL_SEMESTERS
-        if (isPersonalCoursesMode) {
-            courseLoadJob?.cancel()
-            courses.clear()
-            uiState = CourseUiState.Success(emptyList())
-        }
+        if (clearVisibleCourses) courses.clear()
+        uiState = CourseUiState.Success(courses.toList())
     }
 
     private fun pickLatestSemester(options: List<String>): String {

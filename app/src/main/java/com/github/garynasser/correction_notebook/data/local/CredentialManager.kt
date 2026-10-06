@@ -1,6 +1,7 @@
 package com.github.garynasser.correction_notebook.data.local
 
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.github.garynasser.correction_notebook.data.model.auth.UserCredential
@@ -10,20 +11,16 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class CredentialManager @Inject constructor(
-    @ApplicationContext private val context: Context
-){
-    private val masterKey = MasterKey.Builder(context)
-        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-        .build()
-
-    private val sharedPreferences = EncryptedSharedPreferences.create(
+class CredentialManager internal constructor(
+    private val sharedPreferences: SharedPreferences
+) {
+    @Inject constructor(@ApplicationContext context: Context) : this(EncryptedSharedPreferences.create(
         context,
-        "bit_student_credential", // 文件名
-        masterKey,
+        "bit_student_credential",
+        MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
         EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
         EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-    )
+    ))
 
     fun saveCredentials(credential: UserCredential) {
         sharedPreferences.edit().apply {

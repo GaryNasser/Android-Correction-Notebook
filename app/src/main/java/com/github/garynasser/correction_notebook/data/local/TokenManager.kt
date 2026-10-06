@@ -19,9 +19,10 @@ import javax.inject.Singleton
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore("user_prefs")
 
 @Singleton
-class TokenManager@Inject constructor(
-    @ApplicationContext private val context: Context
+class TokenManager internal constructor(
+    private val dataStore: DataStore<Preferences>
 ) {
+    @Inject constructor(@ApplicationContext context: Context) : this(context.dataStore)
     companion object {
         private val ACCESS_TOKEN_KEY = stringPreferencesKey("access_token")
         private val REFRESH_TOKEN_KEY = stringPreferencesKey("refresh_token")
@@ -29,7 +30,7 @@ class TokenManager@Inject constructor(
         private val YANHE_LOGIN_TOKEN_KEY = stringPreferencesKey("yanhe_login_key")
     }
 
-    val accessToken: Flow<String?> = context.dataStore.data
+    val accessToken: Flow<String?> = dataStore.data
         .catch { exception ->
             if (exception is IOException) {
                 emit(emptyPreferences())
@@ -41,7 +42,7 @@ class TokenManager@Inject constructor(
             preferences[ACCESS_TOKEN_KEY]
         }
 
-    val refreshToken: Flow<String?> = context.dataStore.data
+    val refreshToken: Flow<String?> = dataStore.data
         .catch { exception ->
             if (exception is IOException) {
                 emit(emptyPreferences())
@@ -53,7 +54,7 @@ class TokenManager@Inject constructor(
             preferences[REFRESH_TOKEN_KEY]
         }
 
-    val yanheLoginToken: Flow<String?> = context.dataStore.data
+    val yanheLoginToken: Flow<String?> = dataStore.data
         .catch { exception ->
             if (exception is IOException) {
                 emit(emptyPreferences())
@@ -66,33 +67,33 @@ class TokenManager@Inject constructor(
     }
 
     suspend fun saveLoginTokens(access: String, refresh: String) {
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[ACCESS_TOKEN_KEY] = access
             preferences[REFRESH_TOKEN_KEY] = refresh
         }
     }
 
     suspend fun saveYanheLoginTokens(token: String) {
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[YANHE_LOGIN_TOKEN_KEY] = token
         }
     }
 
     suspend fun updateAccessToken(access: String) {
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[ACCESS_TOKEN_KEY] = access
         }
     }
 
     suspend fun removeLoginToken() {
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences.remove(ACCESS_TOKEN_KEY)
             preferences.remove(REFRESH_TOKEN_KEY)
         }
     }
 
     suspend fun removeYanheLoginToken() {
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences.remove(YANHE_LOGIN_TOKEN_KEY)
         }
     }

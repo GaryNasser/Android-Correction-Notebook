@@ -16,6 +16,8 @@ import com.github.garynasser.correction_notebook.ui.navigation.VideoList
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -93,6 +95,9 @@ class VideoListViewModel @Inject constructor(
                 uiState = VideoUIState.Success(results)
                 loadProgress()
             } catch (e: CancellationException) {
+                if (currentCoroutineContext().isActive) {
+                    uiState = VideoUIState.Error("登录状态已变化，请重新加载课程")
+                }
                 throw e
             } catch (e: Exception) {
                 uiState = VideoUIState.Error("加载失败: ${e.message ?: "延河课堂课程资源请求超时"}")
@@ -131,6 +136,7 @@ class VideoListViewModel @Inject constructor(
                     }
                 }
             } catch (e: CancellationException) {
+                if (currentCoroutineContext().isActive) playState = PlayState.Idle
                 throw e
             } catch (e: Exception) {
                 playState = PlayState.Error("播放失败: ${e.message ?: "延河课堂视频地址获取失败"}")
