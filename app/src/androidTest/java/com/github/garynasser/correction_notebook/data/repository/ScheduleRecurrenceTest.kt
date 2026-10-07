@@ -103,7 +103,7 @@ class ScheduleRecurrenceTest {
         sourceEventUid = "shared-course", recurrenceRule = "FREQ=WEEKLY;COUNT=3")
 
     private fun withEvents(events: List<ScheduleEvent>, block: suspend (ScheduleRepository, Set<String>) -> Unit) = runBlocking {
-        val repository = ScheduleRepository(ApplicationProvider.getApplicationContext())
+        val repository = ScheduleRepository(context = ApplicationProvider.getApplicationContext())
         try {
             events.forEach { repository.addEvent(it) }
             block(repository, events.map { it.id }.toSet())

@@ -306,6 +306,7 @@ fun HomeScreen(
     if (uiState.showAddTodoDialog) {
         AddTodoDialog(
             isSaving = uiState.isAddingTodo,
+            saveError = uiState.addTodoError,
             onDismiss = { homeViewModel.hideAddTodoDialog() },
             onAdd = { todo -> homeViewModel.addTodo(todo) }
         )
@@ -315,6 +316,7 @@ fun HomeScreen(
         AddScheduleDialog(
             initialDate = uiState.selectedDate,
             isSaving = uiState.isEditingSchedule,
+            saveError = uiState.addScheduleError,
             onDismiss = { homeViewModel.hideAddScheduleDialog() },
             onAdd = { event -> homeViewModel.addSchedule(event) }
         )
