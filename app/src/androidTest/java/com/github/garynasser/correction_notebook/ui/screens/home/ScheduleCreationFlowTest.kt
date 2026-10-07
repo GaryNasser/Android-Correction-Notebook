@@ -37,7 +37,7 @@ class ScheduleCreationFlowTest {
             compose.activityRule.scenario.recreate()
             compose.onNodeWithText(title).assertExists()
             compose.onNodeWithText("文萃楼 M134").assertExists()
-            compose.onNodeWithText("保存").performClick()
+            compose.onNodeWithContentDescription("保存").performClick()
             compose.waitUntil(5_000) {
                 runBlocking { repository.scheduleEvents.first().any { it.title == title } }
             }

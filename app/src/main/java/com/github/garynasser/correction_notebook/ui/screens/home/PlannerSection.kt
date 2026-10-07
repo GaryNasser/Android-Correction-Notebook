@@ -2,20 +2,28 @@ package com.github.garynasser.correction_notebook.ui.screens.home
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
@@ -25,6 +33,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.History
@@ -36,6 +46,15 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.PlainTooltip
+import androidx.compose.material3.Surface
+import androidx.compose.material3.TooltipAnchorPosition
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -61,17 +80,26 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.github.garynasser.correction_notebook.data.model.home.IcsDiffItem
 import com.github.garynasser.correction_notebook.data.model.home.IcsImportPreview
 import com.github.garynasser.correction_notebook.data.model.home.ImportDecision
@@ -606,188 +634,195 @@ fun AddScheduleDialog(
     var endHour by rememberSaveable { mutableStateOf("10") }
     var endMinute by rememberSaveable { mutableStateOf("00") }
     val fieldShape = RoundedCornerShape(8.dp)
+    var panelBounds by remember { mutableStateOf(Rect.Zero) }
+    var contentPosition by remember { mutableStateOf(Offset.Zero) }
+    fun dismiss() { if (!isSaving) onDismiss() }
 
-    AlertDialog(
-        onDismissRequest = {
-            if (!isSaving) onDismiss()
-        },
-        shape = RoundedCornerShape(8.dp),
-        containerColor = MaterialTheme.colorScheme.surface,
-        title = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("添加日程", style = MaterialTheme.typography.titleMedium)
-                saveError?.let { message ->
-                    Text(
-                        text = message,
-                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall
-                    )
+    Dialog(
+        onDismissRequest = ::dismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+    ) {
+        val focusManager = LocalFocusManager.current
+        val keyboard = LocalSoftwareKeyboardController.current
+        val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+        val save = {
+            if (!isSaving && title.isNotBlank()) {
+                val start = if (allDay) selectedDate.atStartOfDay() else {
+                    scheduleTimeFromInput(startHour, startMinute)?.let(selectedDate::atTime)
+                }
+                val end = if (allDay) selectedDate.plusDays(1).atStartOfDay() else {
+                    scheduleTimeFromInput(endHour, endMinute)?.let(selectedDate::atTime)
+                }
+                when {
+                    start == null || end == null -> validationMessage = "请填写完整的开始和结束时间"
+                    !end.isAfter(start) -> validationMessage = "结束时间需要晚于开始时间"
+                    else -> {
+                        focusManager.clearFocus()
+                        keyboard?.hide()
+                        onAdd(ScheduleEvent(title = title.trim(), description = description.trim(),
+                            location = location.trim(), startAt = start, endAt = end, allDay = allDay))
+                    }
                 }
             }
-        },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 520.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+        }
+        BoxWithConstraints(
+            modifier = Modifier.fillMaxSize()
+                .onGloballyPositioned { contentPosition = it.positionInRoot() }
+                .pointerInput(isSaving) {
+                    detectTapGestures { position ->
+                        if (!panelBounds.contains(position + contentPosition)) dismiss()
+                    }
+                }
+                .safeDrawingPadding().imePadding().padding(horizontal = 12.dp, vertical = 4.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            val compactEditor = keyboardVisible && maxHeight < 320.dp
+            Surface(
+                modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth()
+                    .onGloballyPositioned { panelBounds = it.boundsInRoot() },
+                shape = fieldShape,
+                color = MaterialTheme.colorScheme.surface
             ) {
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = {
-                        title = it
-                        validationMessage = null
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("活动标题") },
-                    enabled = !isSaving,
-                    singleLine = true,
-                    textStyle = MaterialTheme.typography.bodyMedium,
-                    shape = fieldShape
-                )
-                OutlinedTextField(
-                    value = location,
-                    onValueChange = {
-                        location = it
-                        validationMessage = null
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("地点") },
-                    enabled = !isSaving,
-                    singleLine = true,
-                    textStyle = MaterialTheme.typography.bodyMedium,
-                    shape = fieldShape
-                )
-                OutlinedTextField(
-                    value = description,
-                    onValueChange = { description = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("备注") },
-                    enabled = !isSaving,
-                    maxLines = 3,
-                    textStyle = MaterialTheme.typography.bodyMedium,
-                    shape = fieldShape
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Column(
+                    Modifier.padding(if (compactEditor) 8.dp else 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(if (compactEditor) 4.dp else 8.dp)
                 ) {
-                    Text("全天安排", style = MaterialTheme.typography.bodyMedium)
-                    androidx.compose.material3.Switch(
-                        checked = allDay,
-                        onCheckedChange = {
-                            allDay = it
-                            validationMessage = null
-                        },
-                        enabled = !isSaving,
-                        modifier = Modifier.semantics { contentDescription = "全天安排" }
-                    )
-                }
-                OutlinedButton(
-                    onClick = { showDatePicker = true },
-                    enabled = !isSaving,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 48.dp),
-                    shape = fieldShape
-                ) {
-                    androidx.compose.material3.Icon(
-                        Icons.Default.CalendarMonth,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(selectedDate.format(DateTimeFormatter.ofPattern("yyyy/MM/dd")))
-                }
-                if (!allDay) {
-                    CompactTimeInput(
-                        label = "开始",
-                        hour = startHour,
-                        minute = startMinute,
-                        enabled = !isSaving,
-                        onHourChange = {
-                            startHour = it
-                            validationMessage = null
-                        },
-                        onMinuteChange = {
-                            startMinute = it
-                            validationMessage = null
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("添加日程", modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        TooltipBox(
+                            positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
+                            tooltip = { PlainTooltip { Text("取消") } }, state = rememberTooltipState()
+                        ) {
+                            IconButton(onClick = ::dismiss, enabled = !isSaving) {
+                                Icon(Icons.Default.Close, contentDescription = "取消", modifier = Modifier.size(20.dp))
+                            }
                         }
-                    )
-                    CompactTimeInput(
-                        label = "结束",
-                        hour = endHour,
-                        minute = endMinute,
-                        enabled = !isSaving,
-                        onHourChange = {
-                            endHour = it
-                            validationMessage = null
-                        },
-                        onMinuteChange = {
-                            endMinute = it
-                            validationMessage = null
+                        TooltipBox(
+                            positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
+                            tooltip = { PlainTooltip { Text(if (isSaving) "保存中" else "保存") } }, state = rememberTooltipState()
+                        ) {
+                            FilledTonalIconButton(
+                                onClick = save, enabled = title.isNotBlank() && !isSaving, shape = fieldShape,
+                                modifier = Modifier.semantics { contentDescription = if (isSaving) "保存中" else "保存" }
+                            ) {
+                                if (isSaving) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                                else Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(20.dp))
+                            }
                         }
-                    )
-                }
-                validationMessage?.let { message ->
-                    Text(
-                        text = message,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            val focusManager = LocalFocusManager.current
-            val keyboard = LocalSoftwareKeyboardController.current
-            Button(
-                onClick = {
-                    val start = if (allDay) selectedDate.atStartOfDay() else {
-                        scheduleTimeFromInput(startHour, startMinute)?.let(selectedDate::atTime)
                     }
-                    val end = if (allDay) {
-                        selectedDate.plusDays(1).atStartOfDay()
-                    } else {
-                        scheduleTimeFromInput(endHour, endMinute)?.let(selectedDate::atTime)
+                    (validationMessage ?: saveError)?.let { message ->
+                        Text(text = message, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                            color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                     }
-                    when {
-                        title.isBlank() -> validationMessage = "请填写活动标题"
-                        start == null || end == null -> validationMessage = "请填写完整的开始和结束时间"
-                        !end.isAfter(start) -> validationMessage = "结束时间需要晚于开始时间"
-                        else -> {
-                            focusManager.clearFocus()
-                            keyboard?.hide()
-                            onAdd(
-                                ScheduleEvent(
-                                    title = title.trim(),
-                                    description = description.trim(),
-                                    location = location.trim(),
-                                    startAt = start,
-                                    endAt = end,
-                                    allDay = allDay
-                                )
+                    Column(
+                        modifier = Modifier.fillMaxWidth().weight(1f, fill = false)
+                            .heightIn(max = 520.dp).verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = title,
+                            onValueChange = {
+                                title = it
+                                validationMessage = null
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("活动标题", style = MaterialTheme.typography.bodySmall) },
+                            enabled = !isSaving,
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodyMedium,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                            shape = fieldShape
+                        )
+                        OutlinedTextField(
+                            value = location,
+                            onValueChange = {
+                                location = it
+                                validationMessage = null
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("地点", style = MaterialTheme.typography.bodySmall) },
+                            enabled = !isSaving,
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodyMedium,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                            shape = fieldShape
+                        )
+                        OutlinedTextField(
+                            value = description,
+                            onValueChange = { description = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("备注", style = MaterialTheme.typography.bodySmall) },
+                            enabled = !isSaving,
+                            maxLines = if (compactEditor) 1 else 3,
+                            textStyle = MaterialTheme.typography.bodyMedium,
+                            shape = fieldShape
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("全天安排", style = MaterialTheme.typography.bodyMedium)
+                            androidx.compose.material3.Switch(
+                                checked = allDay,
+                                onCheckedChange = {
+                                    allDay = it
+                                    validationMessage = null
+                                },
+                                enabled = !isSaving,
+                                modifier = Modifier.semantics { contentDescription = "全天安排" }
+                            )
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                focusManager.clearFocus()
+                                keyboard?.hide()
+                                showDatePicker = true
+                            },
+                            enabled = !isSaving,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                            shape = fieldShape
+                        ) {
+                            Icon(Icons.Default.CalendarMonth, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(selectedDate.format(DateTimeFormatter.ofPattern("yyyy/MM/dd")))
+                        }
+                        if (!allDay) {
+                            CompactTimeInput(
+                                label = "开始",
+                                hour = startHour,
+                                minute = startMinute,
+                                enabled = !isSaving,
+                                onHourChange = {
+                                    startHour = it
+                                    validationMessage = null
+                                },
+                                onMinuteChange = {
+                                    startMinute = it
+                                    validationMessage = null
+                                }
+                            )
+                            CompactTimeInput(
+                                label = "结束",
+                                hour = endHour,
+                                minute = endMinute,
+                                enabled = !isSaving,
+                                onHourChange = {
+                                    endHour = it
+                                    validationMessage = null
+                                },
+                                onMinuteChange = {
+                                    endMinute = it
+                                    validationMessage = null
+                                }
                             )
                         }
                     }
-                },
-                enabled = title.isNotBlank() && !isSaving,
-                shape = RoundedCornerShape(8.dp)
-            ) {
-                Text(if (isSaving) "保存中" else "保存")
+                }
             }
-        },
-        dismissButton = {
-            TextButton(
-                onClick = onDismiss,
-                enabled = !isSaving,
-                shape = RoundedCornerShape(8.dp)
-            ) { Text("取消") }
         }
-    )
+    }
 
     if (showDatePicker) {
         val datePickerState = rememberDatePickerState(
