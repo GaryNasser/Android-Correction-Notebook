@@ -118,6 +118,8 @@ class KnowledgeBaseLearningContextFlowTest {
         val gate = Gate().also { f.saveGate = it }
         compose.onNodeWithText("保存").performClick()
         assertTrue(gate.entered.await(5, TimeUnit.SECONDS))
+        assertEquals(f.fileId, f.model.uiState.value.learningContextSaveResult?.fileId)
+        assertTrue(f.model.uiState.value.learningContextSaveResult?.isSaving == true)
         compose.onNodeWithText("取消").assertIsNotEnabled()
         restoration.emulateSavedInstanceStateRestore()
         compose.onNodeWithText("取消").assertIsDisplayed().assertIsNotEnabled()
@@ -145,6 +147,45 @@ class KnowledgeBaseLearningContextFlowTest {
         field("课程名称").assertTextContains("原课程")
         assertEquals(203, f.dao.getFileById(f.fileId)?.courseId)
         assertNull(f.model.uiState.value.learningContextSaveResult)
+    }
+
+    @Test fun anotherFilesPendingRenameDoesNotPreventCancellingTheEditor() = withFixture { f ->
+        show(f)
+        val gate = Gate().also { f.saveGate = it }
+        withContext(Dispatchers.Main) { f.model.renameFile(f.otherFileId, "后台重命名.txt") }
+        assertTrue(gate.entered.await(5, TimeUnit.SECONDS))
+        openEditor()
+        capture("unrelated-busy-cancel")
+        compose.onNodeWithText("保存").assertIsNotEnabled()
+        compose.onNodeWithText("保存中").assertDoesNotExist()
+        compose.onNodeWithText("取消").assertIsEnabled().performClick()
+        compose.onNodeWithText("关联课程/标签").assertDoesNotExist()
+        assertNull(f.model.uiState.value.learningContextSaveResult)
+        gate.release.countDown()
+        f.await { !f.model.uiState.value.isLocalBusy }
+        assertEquals("原课程", f.dao.getFileById(f.fileId)?.courseName)
+        assertEquals("后台重命名.txt", f.dao.getFileById(f.otherFileId)?.displayName)
+    }
+
+    @Test fun anotherFilesPendingRenameKeepsTheDraftEditableUntilItCanBeSaved() = withFixture { f ->
+        show(f, dark = true)
+        val gate = Gate().also { f.saveGate = it }
+        withContext(Dispatchers.Main) { f.model.renameFile(f.otherFileId, "后台重命名.txt") }
+        assertTrue(gate.entered.await(5, TimeUnit.SECONDS))
+        openEditor()
+        field("课程名称").assertIsEnabled()
+        field("课程名称").performTextReplacement("矩阵分析")
+        compose.onNodeWithText("保存").assertIsNotEnabled()
+        assertNull(f.model.uiState.value.learningContextSaveResult)
+        gate.release.countDown()
+        f.await { !f.model.uiState.value.isLocalBusy }
+        field("课程名称").assertTextContains("矩阵分析")
+        field("课程 ID，可留空").performTextReplacement("224")
+        field("标签，用逗号分隔").performTextReplacement("期末，重点, 重点")
+        compose.onNodeWithText("保存").assertIsEnabled().performClick()
+        awaitSaved(f)
+        assertSaved(f)
+        assertEquals("后台重命名.txt", f.dao.getFileById(f.otherFileId)?.displayName)
     }
 
     @Test fun aLongFilenameDoesNotHideSaveErrorsAndTheDraftCanBeRetried() {

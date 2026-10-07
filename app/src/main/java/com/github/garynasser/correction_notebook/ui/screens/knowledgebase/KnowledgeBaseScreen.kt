@@ -251,7 +251,7 @@ fun KnowledgeBaseScreen(
 
     LaunchedEffect(uiState.learningContextSaveResult) {
         val result = uiState.learningContextSaveResult ?: return@LaunchedEffect
-        if (result.fileId == fileToContextId && result.errorMessage == null) {
+        if (result.fileId == fileToContextId && !result.isSaving && result.errorMessage == null) {
             fileToContextId = null
             viewModel.clearLearningContextSaveResult()
         }
@@ -380,10 +380,12 @@ fun KnowledgeBaseScreen(
     }
 
     uiState.folderContent.files.firstOrNull { it.id == fileToContextId }?.let { file ->
+        val saveResult = uiState.learningContextSaveResult?.takeIf { it.fileId == file.id }
         LearningContextDialog(
             file = file,
-            isSaving = uiState.isLocalBusy,
-            errorMessage = uiState.learningContextSaveResult?.takeIf { it.fileId == file.id }?.errorMessage,
+            isSaving = saveResult?.isSaving == true,
+            isBusy = uiState.isLocalBusy,
+            errorMessage = saveResult?.errorMessage,
             onDismiss = {
                 fileToContextId = null
                 viewModel.clearLearningContextSaveResult()
@@ -2824,6 +2826,7 @@ private fun RemoteResultRow(
 private fun LearningContextDialog(
     file: KnowledgeBaseFileSummary,
     isSaving: Boolean,
+    isBusy: Boolean,
     errorMessage: String?,
     onDismiss: () -> Unit,
     onConfirm: (Int?, String?, List<String>) -> Unit
@@ -2882,13 +2885,13 @@ private fun LearningContextDialog(
         },
         confirmButton = {
             TextButton(
-                onClick = knowledgeSaveClick(courseIdValid && !isSaving) {
+                onClick = knowledgeSaveClick(courseIdValid && !isBusy && !isSaving) {
                     val courseId = courseIdText.trim().toIntOrNull()
                     if (courseIdText.isBlank() || (courseId != null && courseId > 0)) {
                         onConfirm(courseId, courseName.trim().takeIf { it.isNotBlank() }, parseKnowledgeTags(tagsText))
                     }
                 },
-                enabled = courseIdValid && !isSaving,
+                enabled = courseIdValid && !isBusy && !isSaving,
                 shape = RoundedCornerShape(8.dp)
             ) { Text(if (isSaving) "保存中" else "保存") }
         },

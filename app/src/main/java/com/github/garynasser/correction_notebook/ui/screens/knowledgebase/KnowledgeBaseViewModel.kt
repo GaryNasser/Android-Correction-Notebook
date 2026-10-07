@@ -37,7 +37,11 @@ import kotlinx.coroutines.withContext
 import java.time.OffsetDateTime
 import javax.inject.Inject
 
-data class LearningContextSaveResult(val fileId: String, val errorMessage: String? = null)
+data class LearningContextSaveResult(
+    val fileId: String,
+    val isSaving: Boolean = false,
+    val errorMessage: String? = null
+)
 
 data class KnowledgeCardSaveResult(
     val cardId: String?,
@@ -650,7 +654,7 @@ class KnowledgeBaseViewModel @Inject constructor(
         tags: List<String>
     ) {
         if (isLocalBusy.value) return
-        learningContextSaveResult.value = null
+        learningContextSaveResult.value = LearningContextSaveResult(fileId, isSaving = true)
         runLocalBusyAction("更新失败") {
             knowledgeBaseRepository.updateFileLearningContext(fileId, courseId, courseName, tags)
                 .onSuccess {
@@ -659,7 +663,7 @@ class KnowledgeBaseViewModel @Inject constructor(
                 }
                 .onFailure {
                     val message = it.toUiMessage("更新失败")
-                    learningContextSaveResult.value = LearningContextSaveResult(fileId, message)
+                    learningContextSaveResult.value = LearningContextSaveResult(fileId, errorMessage = message)
                 }
         }
     }
