@@ -38,6 +38,13 @@ import javax.inject.Inject
 
 data class LearningContextSaveResult(val fileId: String, val errorMessage: String? = null)
 
+data class KnowledgeCardSaveResult(
+    val cardId: String?,
+    val studySetId: String?,
+    val isSaving: Boolean = false,
+    val errorMessage: String? = null
+)
+
 data class KnowledgeBaseUiState(
     val selectedTabIndex: Int = 0,
     val currentFolderId: String? = null,
@@ -70,7 +77,8 @@ data class KnowledgeBaseUiState(
     val isLocalBusy: Boolean = false,
     val activeDownloadId: String? = null,
     val snackbarMessage: String? = null,
-    val learningContextSaveResult: LearningContextSaveResult? = null
+    val learningContextSaveResult: LearningContextSaveResult? = null,
+    val knowledgeCardSaveResult: KnowledgeCardSaveResult? = null
 )
 
 private data class LocalUiSnapshot(
@@ -155,6 +163,7 @@ class KnowledgeBaseViewModel @Inject constructor(
     private val activeDownloadId = MutableStateFlow<String?>(null)
     private val snackbarMessage = MutableStateFlow<String?>(null)
     private val learningContextSaveResult = MutableStateFlow<LearningContextSaveResult?>(null)
+    private val knowledgeCardSaveResult = MutableStateFlow<KnowledgeCardSaveResult?>(null)
     private var remoteSearchJob: Job? = null
     private var remoteDetailJob: Job? = null
     private var latestRemoteDetailRequestId = 0L
@@ -294,8 +303,9 @@ class KnowledgeBaseViewModel @Inject constructor(
         combine(studySets, knowledgeCards, reviewedCards, quizQuestions) { sets, cards, reviewed, quizzes ->
             StudyContentSnapshot(sets, cards, reviewed, quizzes)
         },
-        learningContextSaveResult
-    ) { local, remote, study, contextResult ->
+        learningContextSaveResult,
+        knowledgeCardSaveResult
+    ) { local, remote, study, contextResult, cardResult ->
         KnowledgeBaseUiState(
             selectedTabIndex = local.selectedTabIndex,
             currentFolderId = local.currentFolderId,
@@ -324,7 +334,8 @@ class KnowledgeBaseViewModel @Inject constructor(
             isLocalBusy = remote.isLocalBusy,
             activeDownloadId = remote.activeDownloadId,
             snackbarMessage = remote.snackbarMessage,
-            learningContextSaveResult = contextResult
+            learningContextSaveResult = contextResult,
+            knowledgeCardSaveResult = cardResult
         )
     }.stateIn(
         scope = viewModelScope,
@@ -675,41 +686,53 @@ class KnowledgeBaseViewModel @Inject constructor(
         studySetId: String? = null
     ) {
         if (isLocalBusy.value) return
-        isLocalBusy.value = true
-        viewModelScope.launch {
-            try {
-                studySetRepository.saveManualCard(
-                    title = title,
-                    type = type,
-                    front = front,
-                    back = back,
-                    hint = hint,
-                    courseName = courseName,
-                    explanation = explanation,
-                    example = example,
-                    pitfall = pitfall,
-                    formula = formula,
-                    tags = tags,
-                    studySetId = studySetId
-                )
-                    .onSuccess { snackbarMessage.value = "知识点已保存" }
-                    .onFailure { snackbarMessage.value = it.message ?: "保存知识点失败" }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                snackbarMessage.value = e.message ?: "保存知识点失败"
-            } finally {
-                isLocalBusy.value = false
-            }
+        knowledgeCardSaveResult.value = KnowledgeCardSaveResult(null, studySetId, isSaving = true)
+        runLocalBusyAction("保存知识点失败") {
+            studySetRepository.saveManualCard(
+                title = title,
+                type = type,
+                front = front,
+                back = back,
+                hint = hint,
+                courseName = courseName,
+                explanation = explanation,
+                example = example,
+                pitfall = pitfall,
+                formula = formula,
+                tags = tags,
+                studySetId = studySetId
+            )
+                .onSuccess {
+                    knowledgeCardSaveResult.value = KnowledgeCardSaveResult(null, studySetId)
+                    snackbarMessage.value = "知识点已保存"
+                }
+                .onFailure {
+                    val message = it.toUiMessage("保存知识点失败")
+                    knowledgeCardSaveResult.value = KnowledgeCardSaveResult(null, studySetId, errorMessage = message)
+                    snackbarMessage.value = message
+                }
         }
     }
 
     fun updateKnowledgeCard(card: DueReviewItem) {
+        if (isLocalBusy.value) return
+        knowledgeCardSaveResult.value = KnowledgeCardSaveResult(card.flashcardId, card.studySetId, isSaving = true)
         runLocalBusyAction("更新知识卡片失败") {
             studySetRepository.updateKnowledgeCard(card)
-                .onSuccess { snackbarMessage.value = "知识卡片已更新" }
-                .onFailure { snackbarMessage.value = it.toUiMessage("更新知识卡片失败") }
+                .onSuccess {
+                    knowledgeCardSaveResult.value = KnowledgeCardSaveResult(card.flashcardId, card.studySetId)
+                    snackbarMessage.value = "知识卡片已更新"
+                }
+                .onFailure {
+                    val message = it.toUiMessage("更新知识卡片失败")
+                    knowledgeCardSaveResult.value = KnowledgeCardSaveResult(card.flashcardId, card.studySetId, errorMessage = message)
+                    snackbarMessage.value = message
+                }
         }
+    }
+
+    fun clearKnowledgeCardSaveResult() {
+        knowledgeCardSaveResult.value = null
     }
 
     fun deleteKnowledgeCard(cardId: String) {

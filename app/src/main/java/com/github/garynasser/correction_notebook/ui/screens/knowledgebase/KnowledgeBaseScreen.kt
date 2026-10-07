@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -252,6 +253,19 @@ fun KnowledgeBaseScreen(
         }
     }
 
+    LaunchedEffect(uiState.knowledgeCardSaveResult) {
+        val result = uiState.knowledgeCardSaveResult ?: return@LaunchedEffect
+        if (result.isSaving || result.errorMessage != null) return@LaunchedEffect
+        if (result.cardId != null && result.cardId == editingKnowledgeCardId) {
+            editingKnowledgeCardId = null
+            viewModel.clearKnowledgeCardSaveResult()
+        } else if (result.cardId == null && showManualKnowledgeDialog && result.studySetId == manualCardTargetStudySetId) {
+            manualCardTargetStudySetId = null
+            showManualKnowledgeDialog = false
+            viewModel.clearKnowledgeCardSaveResult()
+        }
+    }
+
     if (showCreateFolderDialog) {
         NameInputDialog(
             title = "新建文件夹",
@@ -389,11 +403,16 @@ fun KnowledgeBaseScreen(
     }
 
     if (showManualKnowledgeDialog && (manualCardTargetStudySetId == null || manualCardTargetStudySet != null)) {
+        val saveResult = uiState.knowledgeCardSaveResult?.takeIf { it.cardId == null && it.studySetId == manualCardTargetStudySetId }
         ManualKnowledgeCardDialog(
             targetStudySetTitle = manualCardTargetStudySet?.title,
+            isSaving = saveResult?.isSaving == true,
+            isBusy = uiState.isLocalBusy,
+            errorMessage = saveResult?.errorMessage,
             onDismiss = {
                 manualCardTargetStudySetId = null
                 showManualKnowledgeDialog = false
+                viewModel.clearKnowledgeCardSaveResult()
             },
             onConfirm = { title, type, front, back, hint, courseName, explanation, example, pitfall, formula, tags ->
                 viewModel.addManualKnowledgeCard(
@@ -410,8 +429,6 @@ fun KnowledgeBaseScreen(
                     tags = tags,
                     studySetId = manualCardTargetStudySetId
                 )
-                manualCardTargetStudySetId = null
-                showManualKnowledgeDialog = false
             }
         )
     }
@@ -422,6 +439,7 @@ fun KnowledgeBaseScreen(
             onDismiss = { selectedKnowledgeCard = null },
             onEdit = {
                 selectedKnowledgeCard = null
+                viewModel.clearKnowledgeCardSaveResult()
                 editingKnowledgeCardId = card.flashcardId
             },
             onDelete = {
@@ -461,13 +479,17 @@ fun KnowledgeBaseScreen(
     }
 
     uiState.knowledgeCards.firstOrNull { it.flashcardId == editingKnowledgeCardId }?.let { card ->
+        val saveResult = uiState.knowledgeCardSaveResult?.takeIf { it.cardId == card.flashcardId }
         EditKnowledgeCardDialog(
             item = card,
-            onDismiss = { editingKnowledgeCardId = null },
-            onSave = {
-                viewModel.updateKnowledgeCard(it)
+            isSaving = saveResult?.isSaving == true,
+            isBusy = uiState.isLocalBusy,
+            errorMessage = saveResult?.errorMessage,
+            onDismiss = {
                 editingKnowledgeCardId = null
-            }
+                viewModel.clearKnowledgeCardSaveResult()
+            },
+            onSave = viewModel::updateKnowledgeCard
         )
     }
 
@@ -611,7 +633,10 @@ fun KnowledgeBaseScreen(
                     studySet = requireNotNull(learningStudySet),
                     cards = learningCards,
                     onDismiss = { learningStudySetId = null },
-                    onEditCard = { editingKnowledgeCardId = it.flashcardId },
+                    onEditCard = {
+                        viewModel.clearKnowledgeCardSaveResult()
+                        editingKnowledgeCardId = it.flashcardId
+                    },
                     onReview = { card, remembered, onReviewed ->
                         viewModel.markFlashcardReviewed(card.flashcardId, remembered, onReviewed)
                     },
@@ -707,6 +732,7 @@ fun KnowledgeBaseScreen(
                         quizQuestions = uiState.quizQuestions,
                         selectedStudySet = selectedStudySet,
                         onAddManualCard = {
+                            viewModel.clearKnowledgeCardSaveResult()
                             manualCardTargetStudySetId = null
                             showManualKnowledgeDialog = true
                         },
@@ -721,11 +747,15 @@ fun KnowledgeBaseScreen(
                             quizStartQuestionId = null
                         },
                         onAddCardToStudySet = {
+                            viewModel.clearKnowledgeCardSaveResult()
                             manualCardTargetStudySetId = it.id
                             showManualKnowledgeDialog = true
                         },
                         onOpenCard = { selectedKnowledgeCard = it },
-                        onEditCard = { editingKnowledgeCardId = it.flashcardId },
+                        onEditCard = {
+                            viewModel.clearKnowledgeCardSaveResult()
+                            editingKnowledgeCardId = it.flashcardId
+                        },
                         onMoveCard = { movingKnowledgeCard = it },
                         onDeleteCard = { cardToDelete = it },
                         onOpenQuiz = {
@@ -1582,6 +1612,9 @@ private fun DetailBlock(label: String, content: String) {
 @Composable
 private fun ManualKnowledgeCardDialog(
     targetStudySetTitle: String?,
+    isSaving: Boolean,
+    isBusy: Boolean,
+    errorMessage: String?,
     onDismiss: () -> Unit,
     onConfirm: (
         title: String,
@@ -1608,6 +1641,10 @@ private fun ManualKnowledgeCardDialog(
     var pitfall by rememberSaveable { mutableStateOf("") }
     var formula by rememberSaveable { mutableStateOf("") }
     var tags by rememberSaveable { mutableStateOf("") }
+    val listState = rememberLazyListState()
+    LaunchedEffect(errorMessage) {
+        if (errorMessage != null) listState.scrollToItem(0)
+    }
     val canSave = if (type == KnowledgeCardType.QA_FLASHCARD) {
         front.isNotBlank() && back.isNotBlank()
     } else {
@@ -1615,7 +1652,7 @@ private fun ManualKnowledgeCardDialog(
     }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!isSaving) onDismiss() },
         shape = RoundedCornerShape(8.dp),
         title = {
             Text(
@@ -1625,19 +1662,23 @@ private fun ManualKnowledgeCardDialog(
         },
         text = {
             LazyColumn(
+                state = listState,
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(max = 480.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                item {
+                if (errorMessage != null) item(key = "save-error") {
+                    Text(errorMessage, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
+                item(key = "destination") {
                     Text(
                         "保存到：${targetStudySetTitle ?: "新学习集"}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                item {
+                item(key = "type") {
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -1645,36 +1686,38 @@ private fun ManualKnowledgeCardDialog(
                         FilterChip(
                             selected = type == KnowledgeCardType.QA_FLASHCARD,
                             onClick = { type = KnowledgeCardType.QA_FLASHCARD },
+                            enabled = !isSaving,
                             label = { Text("问答闪卡") },
                             shape = RoundedCornerShape(8.dp)
                         )
                         FilterChip(
                             selected = type == KnowledgeCardType.KNOWLEDGE_CARD,
                             onClick = { type = KnowledgeCardType.KNOWLEDGE_CARD },
+                            enabled = !isSaving,
                             label = { Text("知识点卡") },
                             shape = RoundedCornerShape(8.dp)
                         )
                     }
                 }
                 if (type == KnowledgeCardType.QA_FLASHCARD) {
-                    item { KnowledgeDialogTextField(value = title, onValueChange = { title = it }, label = "标题，可留空", singleLine = true) }
+                    item(key = "title") { KnowledgeDialogTextField(value = title, onValueChange = { title = it }, label = "标题，可留空", singleLine = true, enabled = !isSaving) }
                     if (targetStudySetTitle == null) {
-                        item { KnowledgeDialogTextField(value = courseName, onValueChange = { courseName = it }, label = "课程，可留空", singleLine = true) }
+                        item(key = "course") { KnowledgeDialogTextField(value = courseName, onValueChange = { courseName = it }, label = "课程，可留空", singleLine = true, enabled = !isSaving) }
                     }
-                    item { KnowledgeDialogTextField(value = front, onValueChange = { front = it }, label = "问题", minLines = 2) }
-                    item { KnowledgeDialogTextField(value = back, onValueChange = { back = it }, label = "答案", minLines = 3) }
-                    item { KnowledgeDialogTextField(value = hint, onValueChange = { hint = it }, label = "提示关键词，可留空", singleLine = true) }
+                    item(key = "question") { KnowledgeDialogTextField(value = front, onValueChange = { front = it }, label = "问题", minLines = 2, enabled = !isSaving) }
+                    item(key = "answer") { KnowledgeDialogTextField(value = back, onValueChange = { back = it }, label = "答案", minLines = 3, enabled = !isSaving) }
+                    item(key = "hint") { KnowledgeDialogTextField(value = hint, onValueChange = { hint = it }, label = "提示关键词，可留空", singleLine = true, enabled = !isSaving) }
                 } else {
-                    item { KnowledgeDialogTextField(value = title, onValueChange = { title = it }, label = "知识点标题", singleLine = true) }
+                    item(key = "title") { KnowledgeDialogTextField(value = title, onValueChange = { title = it }, label = "知识点标题", singleLine = true, enabled = !isSaving) }
                     if (targetStudySetTitle == null) {
-                        item { KnowledgeDialogTextField(value = courseName, onValueChange = { courseName = it }, label = "课程，可留空", singleLine = true) }
+                        item(key = "course") { KnowledgeDialogTextField(value = courseName, onValueChange = { courseName = it }, label = "课程，可留空", singleLine = true, enabled = !isSaving) }
                     }
-                    item { KnowledgeDialogTextField(value = explanation, onValueChange = { explanation = it }, label = "核心解释", minLines = 3) }
-                    item { KnowledgeDialogTextField(value = example, onValueChange = { example = it }, label = "例子，可留空", minLines = 2) }
-                    item { KnowledgeDialogTextField(value = pitfall, onValueChange = { pitfall = it }, label = "易错点，可留空", minLines = 2) }
-                    item { KnowledgeDialogTextField(value = formula, onValueChange = { formula = it }, label = "公式/术语，可留空") }
+                    item(key = "explanation") { KnowledgeDialogTextField(value = explanation, onValueChange = { explanation = it }, label = "核心解释", minLines = 3, enabled = !isSaving) }
+                    item(key = "example") { KnowledgeDialogTextField(value = example, onValueChange = { example = it }, label = "例子，可留空", minLines = 2, enabled = !isSaving) }
+                    item(key = "pitfall") { KnowledgeDialogTextField(value = pitfall, onValueChange = { pitfall = it }, label = "易错点，可留空", minLines = 2, enabled = !isSaving) }
+                    item(key = "formula") { KnowledgeDialogTextField(value = formula, onValueChange = { formula = it }, label = "公式/术语，可留空", enabled = !isSaving) }
                 }
-                item { KnowledgeDialogTextField(value = tags, onValueChange = { tags = it }, label = "标签，用逗号分隔", singleLine = true) }
+                item(key = "tags") { KnowledgeDialogTextField(value = tags, onValueChange = { tags = it }, label = "标签，用逗号分隔", singleLine = true, enabled = !isSaving) }
             }
         },
         confirmButton = {
@@ -1694,11 +1737,11 @@ private fun ManualKnowledgeCardDialog(
                         parseKnowledgeTags(tags)
                     )
                 },
-                enabled = canSave,
+                enabled = canSave && !isBusy && !isSaving,
                 shape = RoundedCornerShape(8.dp)
-            ) { Text("保存") }
+            ) { Text(if (isSaving) "保存中" else "保存") }
         },
-        dismissButton = { TextButton(onClick = onDismiss, shape = RoundedCornerShape(8.dp)) { Text("取消") } }
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !isSaving, shape = RoundedCornerShape(8.dp)) { Text("取消") } }
     )
 }
 
@@ -1728,6 +1771,9 @@ private fun KnowledgeDialogTextField(
 @Composable
 private fun EditKnowledgeCardDialog(
     item: DueReviewItem,
+    isSaving: Boolean,
+    isBusy: Boolean,
+    errorMessage: String?,
     onDismiss: () -> Unit,
     onSave: (DueReviewItem) -> Unit
 ) {
@@ -1740,6 +1786,10 @@ private fun EditKnowledgeCardDialog(
     var pitfall by rememberSaveable(item.flashcardId) { mutableStateOf(item.pitfall) }
     var formula by rememberSaveable(item.flashcardId) { mutableStateOf(item.formula) }
     var tags by rememberSaveable(item.flashcardId) { mutableStateOf(item.tags.joinToString(", ")) }
+    val listState = rememberLazyListState()
+    LaunchedEffect(errorMessage) {
+        if (errorMessage != null) listState.scrollToItem(0)
+    }
     val canSave = if (item.type == KnowledgeCardType.QA_FLASHCARD) {
         front.isNotBlank() && back.isNotBlank()
     } else {
@@ -1747,7 +1797,7 @@ private fun EditKnowledgeCardDialog(
     }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!isSaving) onDismiss() },
         shape = RoundedCornerShape(8.dp),
         title = {
             Text(
@@ -1757,25 +1807,29 @@ private fun EditKnowledgeCardDialog(
         },
         text = {
             LazyColumn(
+                state = listState,
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(max = 480.dp)
             ) {
-                item {
-                    KnowledgeDialogTextField(value = title, onValueChange = { title = it }, label = "标题", singleLine = true)
+                if (errorMessage != null) item(key = "save-error") {
+                    Text(errorMessage, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
+                item(key = "title") {
+                    KnowledgeDialogTextField(value = title, onValueChange = { title = it }, label = "标题", singleLine = true, enabled = !isSaving)
                 }
                 if (item.type == KnowledgeCardType.QA_FLASHCARD) {
-                    item { KnowledgeDialogTextField(value = front, onValueChange = { front = it }, label = "问题", minLines = 2) }
-                    item { KnowledgeDialogTextField(value = back, onValueChange = { back = it }, label = "答案", minLines = 3) }
-                    item { KnowledgeDialogTextField(value = hint, onValueChange = { hint = it }, label = "提示", singleLine = true) }
+                    item(key = "question") { KnowledgeDialogTextField(value = front, onValueChange = { front = it }, label = "问题", minLines = 2, enabled = !isSaving) }
+                    item(key = "answer") { KnowledgeDialogTextField(value = back, onValueChange = { back = it }, label = "答案", minLines = 3, enabled = !isSaving) }
+                    item(key = "hint") { KnowledgeDialogTextField(value = hint, onValueChange = { hint = it }, label = "提示", singleLine = true, enabled = !isSaving) }
                 } else {
-                    item { KnowledgeDialogTextField(value = explanation, onValueChange = { explanation = it }, label = "解释", minLines = 3) }
-                    item { KnowledgeDialogTextField(value = example, onValueChange = { example = it }, label = "例子", minLines = 2) }
-                    item { KnowledgeDialogTextField(value = pitfall, onValueChange = { pitfall = it }, label = "易错点", minLines = 2) }
-                    item { KnowledgeDialogTextField(value = formula, onValueChange = { formula = it }, label = "公式/术语") }
+                    item(key = "explanation") { KnowledgeDialogTextField(value = explanation, onValueChange = { explanation = it }, label = "解释", minLines = 3, enabled = !isSaving) }
+                    item(key = "example") { KnowledgeDialogTextField(value = example, onValueChange = { example = it }, label = "例子", minLines = 2, enabled = !isSaving) }
+                    item(key = "pitfall") { KnowledgeDialogTextField(value = pitfall, onValueChange = { pitfall = it }, label = "易错点", minLines = 2, enabled = !isSaving) }
+                    item(key = "formula") { KnowledgeDialogTextField(value = formula, onValueChange = { formula = it }, label = "公式/术语", enabled = !isSaving) }
                 }
-                item { KnowledgeDialogTextField(value = tags, onValueChange = { tags = it }, label = "标签，用逗号分隔", singleLine = true) }
+                item(key = "tags") { KnowledgeDialogTextField(value = tags, onValueChange = { tags = it }, label = "标签，用逗号分隔", singleLine = true, enabled = !isSaving) }
             }
         },
         confirmButton = {
@@ -1797,11 +1851,11 @@ private fun EditKnowledgeCardDialog(
                         )
                     )
                 },
-                enabled = canSave,
+                enabled = canSave && !isBusy && !isSaving,
                 shape = RoundedCornerShape(8.dp)
-            ) { Text("保存") }
+            ) { Text(if (isSaving) "保存中" else "保存") }
         },
-        dismissButton = { TextButton(onClick = onDismiss, shape = RoundedCornerShape(8.dp)) { Text("取消") } }
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !isSaving, shape = RoundedCornerShape(8.dp)) { Text("取消") } }
     )
 }
 
