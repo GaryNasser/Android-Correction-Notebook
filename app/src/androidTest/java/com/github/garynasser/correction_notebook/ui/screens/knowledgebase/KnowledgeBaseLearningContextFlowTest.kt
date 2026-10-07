@@ -10,6 +10,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -91,14 +93,17 @@ class KnowledgeBaseLearningContextFlowTest {
             "CREATE TRIGGER reject_learning_context BEFORE UPDATE ON kb_file BEGIN SELECT RAISE(ABORT, 'test-only save rejected'); END"
         )
         compose.onNodeWithText("保存").performClick()
-        f.await { !f.model.uiState.value.isLocalBusy && f.model.uiState.value.snackbarMessage?.contains("test-only save rejected") == true }
+        f.await { !f.model.uiState.value.isLocalBusy && f.model.uiState.value.learningContextSaveResult?.errorMessage?.contains("test-only save rejected") == true }
+        val message = requireNotNull(f.model.uiState.value.learningContextSaveResult?.errorMessage)
+        capture("immediate-error-dark")
+        compose.onNode(hasText(message) and hasAnyAncestor(isDialog())).assertIsDisplayed()
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite))
         field("课程名称").assertIsDisplayed().assertTextContains("矩阵分析")
         assertEquals(203, f.dao.getFileById(f.fileId)?.courseId)
         restoration.emulateSavedInstanceStateRestore()
         field("课程名称").assertTextContains("矩阵分析")
         compose.onNodeWithText("保存").assertIsEnabled()
-        val message = requireNotNull(f.model.uiState.value.learningContextSaveResult?.errorMessage)
-        compose.onAllNodesWithText(message).onLast().performScrollTo().assertIsDisplayed()
+        compose.onNode(hasText(message) and hasAnyAncestor(isDialog())).performScrollTo().assertIsDisplayed()
         capture("retry-dark")
         f.database.openHelper.writableDatabase.execSQL("DROP TRIGGER reject_learning_context")
         compose.onNodeWithText("保存").performClick()
@@ -122,6 +127,48 @@ class KnowledgeBaseLearningContextFlowTest {
         awaitSaved(f)
         assertSaved(f)
         compose.onNodeWithText("关联课程/标签").assertDoesNotExist()
+    }
+
+    @Test fun cancellingAFailedSaveDoesNotLeaveAnErrorCoveringTheFileMenu() = withFixture { f ->
+        show(f)
+        openEditor()
+        fillDraft()
+        f.database.openHelper.writableDatabase.execSQL(
+            "CREATE TRIGGER reject_learning_context BEFORE UPDATE ON kb_file BEGIN SELECT RAISE(ABORT, 'test-only save rejected'); END"
+        )
+        compose.onNodeWithText("保存").performClick()
+        f.await { !f.model.uiState.value.isLocalBusy && f.model.uiState.value.learningContextSaveResult?.errorMessage != null }
+        val message = requireNotNull(f.model.uiState.value.learningContextSaveResult?.errorMessage)
+        compose.onNodeWithText("取消").performClick()
+        compose.onNodeWithText(message).assertDoesNotExist()
+        openEditor()
+        field("课程名称").assertTextContains("原课程")
+        assertEquals(203, f.dao.getFileById(f.fileId)?.courseId)
+        assertNull(f.model.uiState.value.learningContextSaveResult)
+    }
+
+    @Test fun aLongFilenameDoesNotHideSaveErrorsAndTheDraftCanBeRetried() {
+        withFixture("矩阵分析课程笔记与复习资料".repeat(4) + ".txt") { f ->
+            show(f, dark = true)
+            openEditor()
+            field("课程 ID，可留空").performScrollTo().performTextReplacement("224")
+            field("课程名称").performScrollTo().performTextReplacement("矩阵分析")
+            field("标签，用逗号分隔").performScrollTo().performTextReplacement("期末，重点, 重点")
+            f.database.openHelper.writableDatabase.execSQL(
+                "CREATE TRIGGER reject_learning_context BEFORE UPDATE ON kb_file BEGIN SELECT RAISE(ABORT, 'test-only save rejected'); END"
+            )
+            compose.onNodeWithText("保存").performClick()
+            f.await { !f.model.uiState.value.isLocalBusy && f.model.uiState.value.learningContextSaveResult?.errorMessage != null }
+            val message = requireNotNull(f.model.uiState.value.learningContextSaveResult?.errorMessage)
+            capture("long-name-error-dark")
+            compose.onNode(hasText(message) and hasAnyAncestor(isDialog())).assertIsDisplayed()
+                .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite))
+            field("课程名称").performScrollTo().assertTextContains("矩阵分析")
+            f.database.openHelper.writableDatabase.execSQL("DROP TRIGGER reject_learning_context")
+            compose.onNodeWithText("保存").performClick()
+            awaitSaved(f)
+            assertSaved(f)
+        }
     }
 
     @Test fun cancellingTheRestoredDraftLeavesTheOriginalMetadataUntouched() = withFixture { f ->

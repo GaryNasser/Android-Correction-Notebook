@@ -660,7 +660,6 @@ class KnowledgeBaseViewModel @Inject constructor(
                 .onFailure {
                     val message = it.toUiMessage("更新失败")
                     learningContextSaveResult.value = LearningContextSaveResult(fileId, message)
-                    snackbarMessage.value = message
                 }
         }
     }
@@ -718,7 +717,6 @@ class KnowledgeBaseViewModel @Inject constructor(
                 .onFailure {
                     val message = it.toUiMessage("保存知识点失败")
                     knowledgeCardSaveResult.value = KnowledgeCardSaveResult(null, studySetId, errorMessage = message)
-                    snackbarMessage.value = message
                 }
         }
     }
@@ -735,7 +733,6 @@ class KnowledgeBaseViewModel @Inject constructor(
                 .onFailure {
                     val message = it.toUiMessage("更新知识卡片失败")
                     knowledgeCardSaveResult.value = KnowledgeCardSaveResult(card.flashcardId, card.studySetId, errorMessage = message)
-                    snackbarMessage.value = message
                 }
         }
     }
