@@ -2867,63 +2867,27 @@ private fun RemoteFolderDetailDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(detail.name) },
+        shape = RoundedCornerShape(8.dp),
+        title = { Text("目录详情", style = MaterialTheme.typography.titleMedium) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (!detail.description.isNullOrBlank()) {
-                    DetailLine("目录描述", detail.description)
-                }
-
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                    shape = MaterialTheme.shapes.small
-                ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text(
-                            text = "目录内容统计",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text("文件数量: ${detail.fileCount}")
-                        Text("下载次数: ${detail.downloadCount}")
-                        Text("总大小: ${formatFileSize(detail.totalSize)}")
-                    }
-                }
-
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                DetailLine("名称", detail.name)
+                DetailLine("文件数量", detail.fileCount.toString())
+                DetailLine("下载次数", detail.downloadCount.toString())
+                DetailLine("总大小", formatFileSize(detail.totalSize))
+                detail.description?.takeIf { it.isNotBlank() }?.let { DetailLine("目录描述", it) }
                 if (detail.breadcrumbs.isNotEmpty()) {
                     DetailLine("路径", detail.breadcrumbs.joinToString(" > ") { it.name })
                 }
-
-                // 提示用户无法浏览目录内文件
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f),
-                    shape = MaterialTheme.shapes.small
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Default.CloudDownload,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.error
-                        )
-                        Text(
-                            text = "无法浏览目录内文件，请通过搜索找到具体文件后下载",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    }
-                }
+                Text("仅提供目录信息", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         },
         confirmButton = {},
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss, shape = RoundedCornerShape(8.dp)) {
                 Text("关闭")
             }
         }
