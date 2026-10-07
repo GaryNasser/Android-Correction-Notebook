@@ -266,42 +266,74 @@ fun KnowledgeBaseScreen(
         }
     }
 
+    LaunchedEffect(uiState.nameSaveResult) {
+        val result = uiState.nameSaveResult ?: return@LaunchedEffect
+        if (result.isSaving || result.errorMessage != null) return@LaunchedEffect
+        val matches = when (result.action) {
+            KnowledgeNameAction.CREATE_FOLDER -> showCreateFolderDialog && result.targetId == uiState.currentFolderId
+            KnowledgeNameAction.RENAME_FOLDER -> result.targetId == folderToRenameId
+            KnowledgeNameAction.RENAME_FILE -> result.targetId == fileToRenameId
+            KnowledgeNameAction.RENAME_STUDY_SET -> result.targetId == studySetToRenameId
+        }
+        if (matches) {
+            when (result.action) {
+                KnowledgeNameAction.CREATE_FOLDER -> showCreateFolderDialog = false
+                KnowledgeNameAction.RENAME_FOLDER -> folderToRenameId = null
+                KnowledgeNameAction.RENAME_FILE -> fileToRenameId = null
+                KnowledgeNameAction.RENAME_STUDY_SET -> studySetToRenameId = null
+            }
+            viewModel.clearNameSaveResult()
+        }
+    }
+
     if (showCreateFolderDialog) {
+        val result = uiState.nameSaveResult?.takeIf { it.action == KnowledgeNameAction.CREATE_FOLDER && it.targetId == uiState.currentFolderId }
         NameInputDialog(
             title = "新建文件夹",
             initialValue = "",
             confirmText = "创建",
-            onDismiss = { showCreateFolderDialog = false },
-            onConfirm = {
-                viewModel.createFolder(it)
+            isBusy = uiState.isLocalBusy,
+            isSaving = result?.isSaving == true,
+            errorMessage = result?.errorMessage,
+            onDismiss = {
                 showCreateFolderDialog = false
-            }
+                viewModel.clearNameSaveResult()
+            },
+            onConfirm = viewModel::createFolder
         )
     }
 
     uiState.folderChoices.firstOrNull { it.id == folderToRenameId && folderToRenameId != null }?.let { folder ->
+        val result = uiState.nameSaveResult?.takeIf { it.action == KnowledgeNameAction.RENAME_FOLDER && it.targetId == folder.id }
         NameInputDialog(
             title = "重命名文件夹",
             initialValue = folder.name,
             confirmText = "保存",
-            onDismiss = { folderToRenameId = null },
-            onConfirm = {
-                viewModel.renameFolder(requireNotNull(folder.id), it)
+            isBusy = uiState.isLocalBusy,
+            isSaving = result?.isSaving == true,
+            errorMessage = result?.errorMessage,
+            onDismiss = {
                 folderToRenameId = null
-            }
+                viewModel.clearNameSaveResult()
+            },
+            onConfirm = { viewModel.renameFolder(requireNotNull(folder.id), it) }
         )
     }
 
     uiState.folderContent.files.firstOrNull { it.id == fileToRenameId }?.let { file ->
+        val result = uiState.nameSaveResult?.takeIf { it.action == KnowledgeNameAction.RENAME_FILE && it.targetId == file.id }
         NameInputDialog(
             title = "重命名文件",
             initialValue = file.displayName,
             confirmText = "保存",
-            onDismiss = { fileToRenameId = null },
-            onConfirm = {
-                viewModel.renameFile(file.id, it)
+            isBusy = uiState.isLocalBusy,
+            isSaving = result?.isSaving == true,
+            errorMessage = result?.errorMessage,
+            onDismiss = {
                 fileToRenameId = null
-            }
+                viewModel.clearNameSaveResult()
+            },
+            onConfirm = { viewModel.renameFile(file.id, it) }
         )
     }
 
@@ -494,15 +526,19 @@ fun KnowledgeBaseScreen(
     }
 
     uiState.studySets.firstOrNull { it.id == studySetToRenameId }?.let { studySet ->
+        val result = uiState.nameSaveResult?.takeIf { it.action == KnowledgeNameAction.RENAME_STUDY_SET && it.targetId == studySet.id }
         NameInputDialog(
             title = "重命名学习集",
             initialValue = studySet.title,
             confirmText = "保存",
-            onDismiss = { studySetToRenameId = null },
-            onConfirm = {
-                viewModel.renameStudySet(studySet.id, it)
+            isBusy = uiState.isLocalBusy,
+            isSaving = result?.isSaving == true,
+            errorMessage = result?.errorMessage,
+            onDismiss = {
                 studySetToRenameId = null
-            }
+                viewModel.clearNameSaveResult()
+            },
+            onConfirm = { viewModel.renameStudySet(studySet.id, it) }
         )
     }
 
@@ -617,7 +653,7 @@ fun KnowledgeBaseScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
             if (uiState.selectedTabIndex == 0 && !isImmersiveMode) {
-                FloatingActionButton(onClick = { showCreateFolderDialog = true }) {
+                FloatingActionButton(onClick = { viewModel.clearNameSaveResult(); showCreateFolderDialog = true }) {
                     Icon(Icons.Default.CreateNewFolder, contentDescription = "新建文件夹")
                 }
             }
@@ -681,7 +717,7 @@ fun KnowledgeBaseScreen(
                         onLocalSearchChanged = viewModel::updateLocalSearchQuery,
                         onBack = viewModel::navigateBack,
                         onFolderClick = viewModel::enterFolder,
-                        onFolderRename = { folderToRenameId = it.id },
+                        onFolderRename = { viewModel.clearNameSaveResult(); folderToRenameId = it.id },
                         onFolderDelete = { folderToDelete = it },
                         onFileOpen = { onOpenFile(it.id) },
                         onToggleSelectionMode = {
@@ -705,7 +741,7 @@ fun KnowledgeBaseScreen(
                             selectedFileIds = emptySet()
                             isSelectionMode = false
                         },
-                        onFileRename = { fileToRenameId = it.id },
+                        onFileRename = { viewModel.clearNameSaveResult(); fileToRenameId = it.id },
                         onFileDelete = { fileToDelete = it },
                         onFileMove = { fileToMove = it },
                         onFileContext = {
@@ -713,7 +749,7 @@ fun KnowledgeBaseScreen(
                             fileToContextId = it.id
                         },
                         onFileExport = launchExport,
-                        onCreateFolder = { showCreateFolderDialog = true },
+                        onCreateFolder = { viewModel.clearNameSaveResult(); showCreateFolderDialog = true },
                         onImportLocalFile = { importLauncher.launch(arrayOf("*/*")) },
                         onFileShare = {
                             shareFile(
@@ -738,7 +774,7 @@ fun KnowledgeBaseScreen(
                         },
                         onOpenStudySet = { selectedStudySetId = it.id },
                         onBackToStudySets = { selectedStudySetId = null },
-                        onRenameStudySet = { studySetToRenameId = it.id },
+                        onRenameStudySet = { viewModel.clearNameSaveResult(); studySetToRenameId = it.id },
                         onDeleteStudySet = { studySetToDelete = it },
                         onMergeStudySet = { studySetToMerge = it },
                         onStartStudySet = { learningStudySetId = it.id },
@@ -3001,35 +3037,45 @@ internal fun NameInputDialog(
     initialValue: String,
     confirmText: String,
     onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit
+    onConfirm: (String) -> Unit,
+    isBusy: Boolean = false,
+    isSaving: Boolean = false,
+    errorMessage: String? = null
 ) {
     var text by rememberSaveable(initialValue) { mutableStateOf(initialValue) }
-    val submit = { if (text.isNotBlank()) onConfirm(text.trim()) }
+    val submit = { if (text.isNotBlank() && !isBusy && !isSaving) onConfirm(text.trim()) }
+    val dismiss = { if (!isSaving) onDismiss() }
+    val scrollState = rememberScrollState()
+    LaunchedEffect(errorMessage) { if (errorMessage != null) scrollState.scrollTo(0) }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = dismiss,
         shape = RoundedCornerShape(8.dp),
         title = { Text(title, style = MaterialTheme.typography.titleMedium) },
         text = {
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("名称") },
-                textStyle = MaterialTheme.typography.bodyMedium,
-                shape = RoundedCornerShape(8.dp),
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { submit() })
-            )
+            Column(Modifier.fillMaxWidth().verticalScroll(scrollState), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                errorMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("名称") },
+                    textStyle = MaterialTheme.typography.bodyMedium,
+                    shape = RoundedCornerShape(8.dp),
+                    singleLine = true,
+                    enabled = !isSaving,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { submit() })
+                )
+            }
         },
         confirmButton = {
-            TextButton(onClick = submit, enabled = text.isNotBlank()) {
-                Text(confirmText)
+            TextButton(onClick = submit, enabled = text.isNotBlank() && !isBusy && !isSaving) {
+                Text(if (isSaving) "保存中" else confirmText)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = dismiss, enabled = !isSaving) {
                 Text("取消")
             }
         }

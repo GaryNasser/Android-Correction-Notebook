@@ -20,6 +20,7 @@ import com.github.garynasser.correction_notebook.data.model.studyset.StudySetSum
 import com.github.garynasser.correction_notebook.data.repository.BitShareRepository
 import com.github.garynasser.correction_notebook.data.repository.KnowledgeBaseRepository
 import com.github.garynasser.correction_notebook.data.repository.StudySetRepository
+import com.github.garynasser.correction_notebook.utils.runCatchingCancellable
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -41,6 +42,15 @@ data class LearningContextSaveResult(val fileId: String, val errorMessage: Strin
 data class KnowledgeCardSaveResult(
     val cardId: String?,
     val studySetId: String?,
+    val isSaving: Boolean = false,
+    val errorMessage: String? = null
+)
+
+enum class KnowledgeNameAction { CREATE_FOLDER, RENAME_FOLDER, RENAME_FILE, RENAME_STUDY_SET }
+
+data class KnowledgeNameSaveResult(
+    val action: KnowledgeNameAction,
+    val targetId: String?,
     val isSaving: Boolean = false,
     val errorMessage: String? = null
 )
@@ -78,7 +88,8 @@ data class KnowledgeBaseUiState(
     val activeDownloadId: String? = null,
     val snackbarMessage: String? = null,
     val learningContextSaveResult: LearningContextSaveResult? = null,
-    val knowledgeCardSaveResult: KnowledgeCardSaveResult? = null
+    val knowledgeCardSaveResult: KnowledgeCardSaveResult? = null,
+    val nameSaveResult: KnowledgeNameSaveResult? = null
 )
 
 private data class LocalUiSnapshot(
@@ -164,6 +175,7 @@ class KnowledgeBaseViewModel @Inject constructor(
     private val snackbarMessage = MutableStateFlow<String?>(null)
     private val learningContextSaveResult = MutableStateFlow<LearningContextSaveResult?>(null)
     private val knowledgeCardSaveResult = MutableStateFlow<KnowledgeCardSaveResult?>(null)
+    private val nameSaveResult = MutableStateFlow<KnowledgeNameSaveResult?>(null)
     private var remoteSearchJob: Job? = null
     private var remoteDetailJob: Job? = null
     private var latestRemoteDetailRequestId = 0L
@@ -303,9 +315,10 @@ class KnowledgeBaseViewModel @Inject constructor(
         combine(studySets, knowledgeCards, reviewedCards, quizQuestions) { sets, cards, reviewed, quizzes ->
             StudyContentSnapshot(sets, cards, reviewed, quizzes)
         },
-        learningContextSaveResult,
-        knowledgeCardSaveResult
-    ) { local, remote, study, contextResult, cardResult ->
+        combine(learningContextSaveResult, knowledgeCardSaveResult, nameSaveResult) { context, card, name ->
+            Triple(context, card, name)
+        }
+    ) { local, remote, study, saves ->
         KnowledgeBaseUiState(
             selectedTabIndex = local.selectedTabIndex,
             currentFolderId = local.currentFolderId,
@@ -334,8 +347,9 @@ class KnowledgeBaseViewModel @Inject constructor(
             isLocalBusy = remote.isLocalBusy,
             activeDownloadId = remote.activeDownloadId,
             snackbarMessage = remote.snackbarMessage,
-            learningContextSaveResult = contextResult,
-            knowledgeCardSaveResult = cardResult
+            learningContextSaveResult = saves.first,
+            knowledgeCardSaveResult = saves.second,
+            nameSaveResult = saves.third
         )
     }.stateIn(
         scope = viewModelScope,
@@ -554,18 +568,15 @@ class KnowledgeBaseViewModel @Inject constructor(
     }
 
     fun createFolder(name: String) {
-        runLocalBusyAction("创建文件夹失败") {
-            knowledgeBaseRepository.createFolder(currentFolderId.value, name)
-                .onSuccess { snackbarMessage.value = "已创建文件夹" }
-                .onFailure { snackbarMessage.value = it.toUiMessage("创建文件夹失败") }
+        val parentId = currentFolderId.value
+        runNameSaveAction(KnowledgeNameAction.CREATE_FOLDER, parentId, "已创建文件夹", "创建文件夹失败") {
+            knowledgeBaseRepository.createFolder(parentId, name)
         }
     }
 
     fun renameFolder(folderId: String, newName: String) {
-        runLocalBusyAction("重命名失败") {
+        runNameSaveAction(KnowledgeNameAction.RENAME_FOLDER, folderId, "已重命名文件夹", "重命名失败") {
             knowledgeBaseRepository.renameFolder(folderId, newName)
-                .onSuccess { snackbarMessage.value = "已重命名文件夹" }
-                .onFailure { snackbarMessage.value = it.toUiMessage("重命名失败") }
         }
     }
 
@@ -578,10 +589,8 @@ class KnowledgeBaseViewModel @Inject constructor(
     }
 
     fun renameFile(fileId: String, newName: String) {
-        runLocalBusyAction("重命名失败") {
+        runNameSaveAction(KnowledgeNameAction.RENAME_FILE, fileId, "已重命名文件", "重命名失败") {
             knowledgeBaseRepository.renameFile(fileId, newName)
-                .onSuccess { snackbarMessage.value = "已重命名文件" }
-                .onFailure { snackbarMessage.value = it.toUiMessage("重命名失败") }
         }
     }
 
@@ -744,10 +753,35 @@ class KnowledgeBaseViewModel @Inject constructor(
     }
 
     fun renameStudySet(studySetId: String, title: String) {
-        runLocalBusyAction("重命名学习集失败") {
+        runNameSaveAction(KnowledgeNameAction.RENAME_STUDY_SET, studySetId, "学习集已重命名", "重命名学习集失败") {
             studySetRepository.renameStudySet(studySetId, title)
-                .onSuccess { snackbarMessage.value = "学习集已重命名" }
-                .onFailure { snackbarMessage.value = it.toUiMessage("重命名学习集失败") }
+        }
+    }
+
+    fun clearNameSaveResult() {
+        nameSaveResult.value = null
+    }
+
+    private fun runNameSaveAction(
+        action: KnowledgeNameAction,
+        targetId: String?,
+        successMessage: String,
+        failureMessage: String,
+        save: suspend () -> Result<Unit>
+    ) {
+        if (isLocalBusy.value) return
+        val saving = KnowledgeNameSaveResult(action, targetId, isSaving = true)
+        nameSaveResult.value = saving
+        runLocalBusyAction(failureMessage) {
+            runCatchingCancellable { save().getOrThrow() }
+                .onSuccess {
+                    nameSaveResult.value = saving.copy(isSaving = false)
+                    snackbarMessage.value = successMessage
+                }
+                .onFailure {
+                    val message = it.toUiMessage(failureMessage)
+                    nameSaveResult.value = saving.copy(isSaving = false, errorMessage = message)
+                }
         }
     }
 

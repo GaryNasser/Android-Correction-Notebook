@@ -70,6 +70,20 @@ class KnowledgeBaseManagementDialogTest {
         compose.runOnIdle { assertEquals(listOf("新名称.txt"), submissions) }
     }
 
+    @Test fun anotherLocalActionBlocksSubmittingButKeepsTheDraftEditableAndCancellable() {
+        val submissions = mutableListOf<String>()
+        var dismissals = 0
+        compose.setContent {
+            Themed { NameInputDialog("新建文件夹", "", "创建", { dismissals++ }, { submissions += it }, isBusy = true) }
+        }
+        compose.onNode(hasSetTextAction()).performTextInput("矩阵分析复习")
+        compose.onNode(hasSetTextAction()).performImeAction()
+        compose.onNode(hasSetTextAction()).assertTextContains("矩阵分析复习").assertIsEnabled()
+        compose.onNodeWithText("创建").assertIsNotEnabled()
+        compose.onNodeWithText("取消").assertIsEnabled().performClick()
+        compose.runOnIdle { assertTrue(submissions.isEmpty()); assertEquals(1, dismissals) }
+    }
+
     @Test fun anUnsubmittedNameSurvivesSavedStateRestoration() {
         val restoration = StateRestorationTester(compose)
         restoration.setContent { Themed { NameInputDialog("新建文件夹", "", "创建", {}, {}) } }
