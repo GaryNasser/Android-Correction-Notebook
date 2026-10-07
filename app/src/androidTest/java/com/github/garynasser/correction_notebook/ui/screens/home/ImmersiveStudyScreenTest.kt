@@ -7,7 +7,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -62,7 +61,8 @@ class ImmersiveStudyScreenTest {
 
     @Test
     fun controlsHideDuringTickingAndShowWhenPaused() {
-        val timer = StudyTimerManager(timerScope)
+        var millis = 0L
+        val timer = StudyTimerManager(timerScope) { millis }
         compose.setContent {
             CorrectionNotebookTheme {
                 ImmersiveStudyScreen(timer, onExit = {}, soundEnabled = false, vibrationEnabled = false)
@@ -70,13 +70,22 @@ class ImmersiveStudyScreenTest {
         }
         compose.runOnIdle { timer.startStopwatch() }
         compose.onNodeWithContentDescription("暂停").assertExists()
-        compose.waitUntil(7_000) {
-            compose.onAllNodesWithContentDescription("暂停").fetchSemanticsNodes().isEmpty()
+        repeat(3) { second ->
+            compose.mainClock.advanceTimeBy(1_000)
+            compose.runOnIdle {
+                millis += 1_000
+                assertEquals(second + 1, timer.getElapsedSeconds())
+            }
+            compose.onNodeWithContentDescription("暂停").assertExists()
         }
+        compose.mainClock.advanceTimeBy(600)
+        compose.onNodeWithContentDescription("暂停").assertDoesNotExist()
         compose.runOnIdle { timer.pause() }
         compose.onNodeWithContentDescription("继续").assertExists()
         compose.onNodeWithContentDescription("继续").performClick()
         compose.onNodeWithContentDescription("暂停").assertExists()
+        compose.mainClock.advanceTimeBy(3_600)
+        compose.onNodeWithContentDescription("暂停").assertDoesNotExist()
     }
 
     @Test

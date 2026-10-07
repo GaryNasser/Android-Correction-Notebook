@@ -59,6 +59,15 @@ class KnowledgeBaseDraftFlowTest {
     @Test fun pendingCardCreationSurvivesRestorationWithoutDuplicatingTheCard() = checkDraft("manual", pendingSave = true)
     @Test fun pendingCardEditSurvivesRestorationWithoutChangingAnotherCard() = checkDraft("edit", pendingSave = true)
     @Test fun pendingNewStudySetCreationSurvivesRestorationWithoutDuplicatingTheSet() = checkDraft("new", pendingSave = true)
+    @Test fun failedFolderRenameKeepsTheDraftAndRetriesTheSelectedFolder() = checkDraft("folder", failSave = true)
+    @Test fun failedFileRenameKeepsTheDraftAndPreservesTheOriginalContents() = checkDraft("file", failSave = true)
+    @Test fun failedStudySetRenameKeepsTheDraftAndRetriesTheSelectedSet() = checkDraft("studySet", failSave = true)
+    @Test fun pendingFolderRenameRestoresWithoutRenamingAnotherFolder() = checkDraft("folder", pendingSave = true)
+    @Test fun pendingFileRenameRestoresWithoutChangingFileContents() = checkDraft("file", pendingSave = true)
+    @Test fun pendingStudySetRenameRestoresWithoutRenamingAnotherSet() = checkDraft("studySet", pendingSave = true)
+    @Test fun failedFolderCreationKeepsItsDraftAndRetriesInTheSelectedParent() = checkDraft("createFolder", failSave = true)
+    @Test fun pendingFolderCreationRestoresWithoutCreatingADuplicate() = checkDraft("createFolder", pendingSave = true)
+    @Test fun failedFileRenameCanBeCancelledAndReopenedWithoutStaleErrors() = checkDraft("file", failSave = true, cancelAfterFailure = true)
 
     private fun checkDraft(kind: String, failSave: Boolean = false, pendingSave: Boolean = false,
         knowledgePoint: Boolean = false, cancelAfterFailure: Boolean = false, light: Boolean = false) = runBlocking {
@@ -70,10 +79,17 @@ class KnowledgeBaseDraftFlowTest {
             val blockWrites = AtomicBoolean(false)
             val writeEntered = CountDownLatch(1)
             val writeRelease = CountDownLatch(1)
+            val nameOperation = kind in listOf("folder", "file", "studySet", "createFolder")
+            val writeTable = when (kind) {
+                "folder", "createFolder" -> "kb_folder"
+                "file" -> "kb_file"
+                "studySet" -> "study_set"
+                else -> "flashcard"
+            }
             val database = Room.inMemoryDatabaseBuilder(context, KnowledgeBaseDatabase::class.java)
                 .setQueryCallback(object : RoomDatabase.QueryCallback {
                     override fun onQuery(sqlQuery: String, bindArgs: List<Any?>) {
-                        if (sqlQuery.contains("flashcard", ignoreCase = true) &&
+                        if (sqlQuery.contains(writeTable, ignoreCase = true) &&
                             (sqlQuery.startsWith("INSERT", ignoreCase = true) || sqlQuery.startsWith("UPDATE", ignoreCase = true)) &&
                             blockWrites.compareAndSet(true, false)) {
                             writeEntered.countDown()
@@ -96,7 +112,7 @@ class KnowledgeBaseDraftFlowTest {
                 val original = "矩阵分析"
                 val payload = "课程资料原始内容".toByteArray()
                 when (kind) {
-                    "folder" -> repeat(2) { repository.createFolder(null, original).getOrThrow() }
+                    "folder", "createFolder" -> repeat(2) { repository.createFolder(null, original).getOrThrow() }
                     "file" -> {
                         val source = File(directory, "$original.txt").apply { writeBytes(payload) }
                         repository.importLocalFile(null, Uri.fromFile(source)).getOrThrow()
@@ -115,14 +131,14 @@ class KnowledgeBaseDraftFlowTest {
                 ).getOrThrow()
                 await {
                     when (kind) {
-                        "folder" -> model.uiState.value.folderContent.folders.size == 2
+                        "folder", "createFolder" -> model.uiState.value.folderContent.folders.size == 2
                         "file" -> model.uiState.value.folderContent.files.size == 1
                         "edit" -> model.uiState.value.studySets.size == 2 && model.uiState.value.knowledgeCards.size == if (pendingSave) 2 else 1
                         else -> model.uiState.value.studySets.size == 2
                     }
                 }
                 val selectedId = when (kind) {
-                    "folder" -> model.uiState.value.folderContent.folders[1].id
+                    "folder", "createFolder" -> model.uiState.value.folderContent.folders[1].id
                     "file" -> model.uiState.value.folderContent.files.single().id
                     "edit" -> "set-1"
                     else -> model.uiState.value.studySets[1].id
@@ -140,7 +156,7 @@ class KnowledgeBaseDraftFlowTest {
                     }
                 }
                 val draft = if (kind == "file") "矩阵分析课程讲义.txt" else "矩阵分析课程复习"
-                if (kind != "folder" && kind != "file") compose.onNodeWithText("知识空间").performClick()
+                if (kind != "folder" && kind != "file" && kind != "createFolder") compose.onNodeWithText("知识空间").performClick()
                 if (kind == "manual" || kind == "edit" || kind == "new") {
                     if (kind == "new") {
                         compose.onNodeWithContentDescription("新建学习集卡片").assertIsDisplayed().performClick()
@@ -165,6 +181,12 @@ class KnowledgeBaseDraftFlowTest {
                         cardField("答案").performTextReplacement("特征值与特征向量")
                     }
                     cardField("标签，用逗号分隔").performTextReplacement("期末，重点")
+                } else if (kind == "createFolder") {
+                    compose.onNode(hasScrollToIndexAction()).performScrollToKey(selectedId)
+                    compose.onAllNodesWithText(original).onLast().assertIsDisplayed().performClick()
+                    await { model.uiState.value.currentFolderId == selectedId && model.uiState.value.folderContent.folders.isEmpty() }
+                    compose.onNodeWithContentDescription("新建文件夹").performClick()
+                    compose.onNode(hasSetTextAction()).performTextReplacement(draft)
                 } else {
                     val action = if (kind == "studySet") "学习集操作" else "更多操作"
                     compose.onNode(hasScrollToIndexAction()).performScrollToKey(selectedId)
@@ -180,23 +202,67 @@ class KnowledgeBaseDraftFlowTest {
                     compose.onNode(hasSetTextAction()).assertIsDisplayed().assertTextContains(draft)
                 }
                 compose.onNodeWithText("取消").assertIsDisplayed()
-                compose.onNodeWithText("保存").assertIsDisplayed().assertIsEnabled()
+                val confirmText = if (kind == "createFolder") "创建" else "保存"
+                compose.onNodeWithText(confirmText).assertIsDisplayed().assertIsEnabled()
                 capture(kind)
                 if (failSave) database.openHelper.writableDatabase.execSQL(
-                    "CREATE TRIGGER reject_card_save BEFORE ${if (kind == "edit") "UPDATE" else "INSERT"} ON flashcard BEGIN SELECT RAISE(ABORT, 'test-only card save rejected'); END"
+                    "CREATE TRIGGER reject_card_save BEFORE ${if (kind == "edit" || nameOperation && kind != "createFolder") "UPDATE" else "INSERT"} ON $writeTable BEGIN SELECT RAISE(ABORT, 'test-only card save rejected'); END"
                 )
                 blockWrites.set(pendingSave)
-                compose.onNodeWithText("保存").performClick()
+                compose.onNodeWithText(confirmText).performClick()
                 if (pendingSave) {
                     assertTrue(writeEntered.await(5, TimeUnit.SECONDS))
                     compose.onNodeWithText("取消").assertIsNotEnabled()
                     restoration.emulateSavedInstanceStateRestore()
                     compose.onNodeWithText("保存中").assertIsDisplayed().assertIsNotEnabled()
                     compose.onNodeWithText("取消").assertIsNotEnabled()
-                    cardField("答案", editable = false).assertTextContains("特征值与特征向量").assertIsNotEnabled()
+                    if (nameOperation) {
+                        compose.onNode(hasText("名称") and hasAnyAncestor(isDialog())).assertTextContains(draft).assertIsNotEnabled()
+                    } else {
+                        cardField("答案", editable = false).assertTextContains("特征值与特征向量").assertIsNotEnabled()
+                    }
                     writeRelease.countDown()
                 }
-                if (failSave) {
+                if (failSave && nameOperation) {
+                    await { !model.uiState.value.isLocalBusy && model.uiState.value.nameSaveResult?.errorMessage?.contains("test-only card save rejected") == true }
+                    val message = requireNotNull(model.uiState.value.nameSaveResult?.errorMessage)
+                    compose.onNode(hasText(message) and hasAnyAncestor(isDialog())).assertIsDisplayed()
+                    compose.onNode(hasSetTextAction()).assertIsDisplayed().assertTextContains(draft)
+                    restoration.emulateSavedInstanceStateRestore()
+                    compose.onNode(hasSetTextAction()).assertIsDisplayed().assertTextContains(draft)
+                    when (kind) {
+                        "folder", "createFolder" -> {
+                            assertEquals(2, dao.getAllFolders().size)
+                            assertTrue(dao.getAllFolders().all { it.name == original })
+                            if (kind == "createFolder") {
+                                val parent = File(directory, "knowledge_base/$selectedId")
+                                assertTrue(parent.isDirectory)
+                                assertTrue(requireNotNull(parent.listFiles()).isEmpty())
+                            }
+                        }
+                        "file" -> {
+                            val file = requireNotNull(dao.getFileById(selectedId))
+                            assertEquals(original + ".txt", file.displayName)
+                            assertArrayEquals(payload, File(file.localPath).readBytes())
+                        }
+                        else -> assertTrue(StudySetRepository(dao).observeStudySets().first().all { it.title == original })
+                    }
+                    capture("name-failed-$kind")
+                    if (cancelAfterFailure) {
+                        compose.onNodeWithText("取消").performClick()
+                        compose.onNode(hasSetTextAction()).assertDoesNotExist()
+                        compose.onNodeWithText(message).assertDoesNotExist()
+                        compose.onNode(hasScrollToIndexAction()).performScrollToKey(selectedId)
+                        compose.onAllNodesWithContentDescription("更多操作").onLast().performScrollTo().performClick()
+                        compose.onNodeWithText("重命名").performClick()
+                        compose.onNode(hasSetTextAction()).assertTextContains(original + ".txt")
+                        compose.onNode(hasText(message) and hasAnyAncestor(isDialog())).assertDoesNotExist()
+                        assertNull(model.uiState.value.nameSaveResult)
+                        return@withTimeout
+                    }
+                    database.openHelper.writableDatabase.execSQL("DROP TRIGGER reject_card_save")
+                    compose.onNodeWithText(confirmText).assertIsEnabled().performClick()
+                } else if (failSave) {
                     await { !model.uiState.value.isLocalBusy && model.uiState.value.snackbarMessage?.contains("test-only card save rejected") == true }
                     val message = requireNotNull(model.uiState.value.knowledgeCardSaveResult?.errorMessage)
                     compose.onNode(hasText(message) and hasAnyAncestor(isDialog())).assertIsDisplayed()
@@ -227,6 +293,7 @@ class KnowledgeBaseDraftFlowTest {
                 await {
                     when (kind) {
                         "folder" -> model.uiState.value.folderContent.folders.any { it.id == selectedId && it.name == draft }
+                        "createFolder" -> model.uiState.value.folderContent.folders.singleOrNull()?.name == draft
                         "file" -> model.uiState.value.folderContent.files.any { it.id == selectedId && it.displayName == draft }
                         "manual", "edit" -> model.uiState.value.knowledgeCards.any { it.front == draft }
                         "new" -> model.uiState.value.studySets.size == 3 && model.uiState.value.knowledgeCards.any { it.front == draft }
@@ -240,6 +307,13 @@ class KnowledgeBaseDraftFlowTest {
                         val folders = dao.getAllFolders()
                         assertEquals(draft, folders.single { it.id == selectedId }.name)
                         assertEquals(original, folders.single { it.id != selectedId }.name)
+                    }
+                    "createFolder" -> {
+                        val folders = dao.getAllFolders()
+                        assertEquals(3, folders.size)
+                        val created = folders.single { it.name == draft }
+                        assertEquals(selectedId, created.parentId)
+                        assertTrue(File(directory, "knowledge_base/$selectedId/${created.id}").isDirectory)
                     }
                     "file" -> {
                         val file = requireNotNull(dao.getFileById(selectedId))
