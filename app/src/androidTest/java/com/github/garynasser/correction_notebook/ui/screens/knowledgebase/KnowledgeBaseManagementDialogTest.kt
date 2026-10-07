@@ -4,8 +4,11 @@ import android.content.ContextWrapper
 import android.graphics.Bitmap
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -91,6 +94,18 @@ class KnowledgeBaseManagementDialogTest {
         restoration.emulateSavedInstanceStateRestore()
         compose.onNode(hasSetTextAction()).assertTextContains("矩阵分析复习")
         compose.onNodeWithText("创建").assertIsEnabled()
+    }
+
+    @Test fun aNewSaveErrorKeepsTheDraftAndNotifiesAccessibilityServicesPolitely() {
+        val error = mutableStateOf<String?>(null)
+        compose.setContent {
+            Themed { NameInputDialog("新建文件夹", "", "创建", {}, {}, errorMessage = error.value) }
+        }
+        compose.onNode(hasSetTextAction()).performTextInput("矩阵分析复习")
+        compose.runOnIdle { error.value = "无法写入，请重试" }
+        compose.onNodeWithText("无法写入，请重试").assertIsDisplayed()
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite))
+        compose.onNode(hasSetTextAction()).assertTextContains("矩阵分析复习")
     }
 
     @Test fun lightLongDeleteConfirmationKeepsTheNameAndActionsReadable() = checkConfirmation(false)

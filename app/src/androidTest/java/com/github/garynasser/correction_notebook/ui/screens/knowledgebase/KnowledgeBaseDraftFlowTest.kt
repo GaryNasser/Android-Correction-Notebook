@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -227,6 +229,7 @@ class KnowledgeBaseDraftFlowTest {
                     await { !model.uiState.value.isLocalBusy && model.uiState.value.nameSaveResult?.errorMessage?.contains("test-only card save rejected") == true }
                     val message = requireNotNull(model.uiState.value.nameSaveResult?.errorMessage)
                     compose.onNode(hasText(message) and hasAnyAncestor(isDialog())).assertIsDisplayed()
+                        .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite))
                     compose.onNode(hasSetTextAction()).assertIsDisplayed().assertTextContains(draft)
                     restoration.emulateSavedInstanceStateRestore()
                     compose.onNode(hasSetTextAction()).assertIsDisplayed().assertTextContains(draft)
@@ -263,9 +266,10 @@ class KnowledgeBaseDraftFlowTest {
                     database.openHelper.writableDatabase.execSQL("DROP TRIGGER reject_card_save")
                     compose.onNodeWithText(confirmText).assertIsEnabled().performClick()
                 } else if (failSave) {
-                    await { !model.uiState.value.isLocalBusy && model.uiState.value.snackbarMessage?.contains("test-only card save rejected") == true }
+                    await { !model.uiState.value.isLocalBusy && model.uiState.value.knowledgeCardSaveResult?.errorMessage?.contains("test-only card save rejected") == true }
                     val message = requireNotNull(model.uiState.value.knowledgeCardSaveResult?.errorMessage)
                     compose.onNode(hasText(message) and hasAnyAncestor(isDialog())).assertIsDisplayed()
+                        .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite))
                     restoration.emulateSavedInstanceStateRestore()
                     cardField(if (knowledgePoint) "核心解释" else "答案").assertTextContains("特征值与特征向量")
                     cardField("标签，用逗号分隔").assertTextContains("期末，重点")
@@ -281,6 +285,7 @@ class KnowledgeBaseDraftFlowTest {
                     if (cancelAfterFailure) {
                         compose.onNodeWithText("取消").performClick()
                         compose.onNode(hasSetTextAction()).assertDoesNotExist()
+                        compose.onNodeWithText(message).assertDoesNotExist()
                         assertEquals(2, model.uiState.value.studySets.size)
                         assertTrue(model.uiState.value.knowledgeCards.isEmpty())
                         assertEquals(2, StudySetRepository(dao).observeStudySets().first().size)

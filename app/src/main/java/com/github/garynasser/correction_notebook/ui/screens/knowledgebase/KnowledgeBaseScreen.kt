@@ -108,8 +108,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -1705,7 +1709,7 @@ private fun ManualKnowledgeCardDialog(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 if (errorMessage != null) item(key = "save-error") {
-                    Text(errorMessage, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    KnowledgeSaveError(errorMessage)
                 }
                 item(key = "destination") {
                     Text(
@@ -1758,7 +1762,7 @@ private fun ManualKnowledgeCardDialog(
         },
         confirmButton = {
             TextButton(
-                onClick = {
+                onClick = knowledgeSaveClick(canSave && !isBusy && !isSaving) {
                     onConfirm(
                         title,
                         type,
@@ -1850,7 +1854,7 @@ private fun EditKnowledgeCardDialog(
                     .heightIn(max = 480.dp)
             ) {
                 if (errorMessage != null) item(key = "save-error") {
-                    Text(errorMessage, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    KnowledgeSaveError(errorMessage)
                 }
                 item(key = "title") {
                     KnowledgeDialogTextField(value = title, onValueChange = { title = it }, label = "标题", singleLine = true, enabled = !isSaving)
@@ -1870,7 +1874,7 @@ private fun EditKnowledgeCardDialog(
         },
         confirmButton = {
             TextButton(
-                onClick = {
+                onClick = knowledgeSaveClick(canSave && !isBusy && !isSaving) {
                     onSave(
                         item.copy(
                             title = title,
@@ -2828,6 +2832,8 @@ private fun LearningContextDialog(
     var courseName by rememberSaveable(file.id) { mutableStateOf(file.courseName.orEmpty()) }
     var tagsText by rememberSaveable(file.id) { mutableStateOf(file.tags.joinToString(", ")) }
     val courseIdValid = courseIdText.isBlank() || courseIdText.trim().toIntOrNull()?.let { it > 0 } == true
+    val scrollState = rememberScrollState()
+    LaunchedEffect(errorMessage) { if (errorMessage != null) scrollState.scrollTo(0) }
 
     AlertDialog(
         onDismissRequest = { if (!isSaving) onDismiss() },
@@ -2835,9 +2841,10 @@ private fun LearningContextDialog(
         title = { Text("关联课程/标签", style = MaterialTheme.typography.titleMedium) },
         text = {
             Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
+                modifier = Modifier.verticalScroll(scrollState),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                errorMessage?.let { KnowledgeSaveError(it) }
                 Text(
                     file.displayName,
                     style = MaterialTheme.typography.bodySmall
@@ -2871,12 +2878,11 @@ private fun LearningContextDialog(
                     singleLine = true,
                     enabled = !isSaving
                 )
-                errorMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
             }
         },
         confirmButton = {
             TextButton(
-                onClick = {
+                onClick = knowledgeSaveClick(courseIdValid && !isSaving) {
                     val courseId = courseIdText.trim().toIntOrNull()
                     if (courseIdText.isBlank() || (courseId != null && courseId > 0)) {
                         onConfirm(courseId, courseName.trim().takeIf { it.isNotBlank() }, parseKnowledgeTags(tagsText))
@@ -3032,6 +3038,30 @@ internal fun FolderPickerDialog(
 }
 
 @Composable
+private fun knowledgeSaveClick(enabled: Boolean, action: () -> Unit): () -> Unit {
+    // Read these inside the dialog's slots so they belong to its window.
+    val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    return {
+        if (enabled) {
+            focusManager.clearFocus()
+            keyboard?.hide()
+            action()
+        }
+    }
+}
+
+@Composable
+private fun KnowledgeSaveError(message: String) {
+    Text(
+        text = message,
+        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.error
+    )
+}
+
+@Composable
 internal fun NameInputDialog(
     title: String,
     initialValue: String,
@@ -3043,7 +3073,8 @@ internal fun NameInputDialog(
     errorMessage: String? = null
 ) {
     var text by rememberSaveable(initialValue) { mutableStateOf(initialValue) }
-    val submit = { if (text.isNotBlank() && !isBusy && !isSaving) onConfirm(text.trim()) }
+    val canSubmit = text.isNotBlank() && !isBusy && !isSaving
+    val submit = { if (canSubmit) onConfirm(text.trim()) }
     val dismiss = { if (!isSaving) onDismiss() }
     val scrollState = rememberScrollState()
     LaunchedEffect(errorMessage) { if (errorMessage != null) scrollState.scrollTo(0) }
@@ -3053,8 +3084,9 @@ internal fun NameInputDialog(
         shape = RoundedCornerShape(8.dp),
         title = { Text(title, style = MaterialTheme.typography.titleMedium) },
         text = {
+            val submitWithKeyboard = knowledgeSaveClick(canSubmit, submit)
             Column(Modifier.fillMaxWidth().verticalScroll(scrollState), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                errorMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+                errorMessage?.let { KnowledgeSaveError(it) }
                 OutlinedTextField(
                     value = text,
                     onValueChange = { text = it },
@@ -3065,12 +3097,12 @@ internal fun NameInputDialog(
                     singleLine = true,
                     enabled = !isSaving,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = { submit() })
+                    keyboardActions = KeyboardActions(onDone = { submitWithKeyboard() })
                 )
             }
         },
         confirmButton = {
-            TextButton(onClick = submit, enabled = text.isNotBlank() && !isBusy && !isSaving) {
+            TextButton(onClick = knowledgeSaveClick(canSubmit, submit), enabled = canSubmit) {
                 Text(if (isSaving) "保存中" else confirmText)
             }
         },
