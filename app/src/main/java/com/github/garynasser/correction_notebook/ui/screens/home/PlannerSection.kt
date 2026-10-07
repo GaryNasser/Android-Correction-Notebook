@@ -55,8 +55,6 @@ import androidx.compose.material3.TooltipAnchorPosition
 import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
@@ -67,7 +65,6 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -825,36 +822,16 @@ fun AddScheduleDialog(
     }
 
     if (showDatePicker) {
-        val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = selectedDate.toDatePickerUtcMillis()
-        )
-        DatePickerDialog(
-            onDismissRequest = {
-                if (!isSaving) showDatePicker = false
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        datePickerState.selectedDateMillis?.let { millis ->
-                            selectedDateText = datePickerMillisToLocalDate(millis).toString()
-                            validationMessage = null
-                        }
-                        showDatePicker = false
-                    },
-                    enabled = !isSaving && datePickerState.selectedDateMillis != null,
-                    shape = RoundedCornerShape(8.dp)
-                ) { Text("确定") }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { showDatePicker = false },
-                    enabled = !isSaving,
-                    shape = RoundedCornerShape(8.dp)
-                ) { Text("取消") }
+        PlannerDatePickerDialog(
+            initialDate = selectedDate,
+            enabled = !isSaving,
+            onDismiss = { showDatePicker = false },
+            onDateSelected = { date ->
+                selectedDateText = date.toString()
+                validationMessage = null
+                showDatePicker = false
             }
-        ) {
-            DatePicker(state = datePickerState)
-        }
+        )
     }
 }
 

@@ -489,7 +489,7 @@ private fun BitSchedulePage(
 ) {
     var selectedOccurrence by remember { mutableStateOf<ScheduleOccurrence?>(null) }
     var occurrenceToDelete by remember { mutableStateOf<ScheduleOccurrence?>(null) }
-    var showDatePicker by remember { mutableStateOf(false) }
+    var showDatePicker by rememberSaveable { mutableStateOf(false) }
     var showOtherSchedules by remember { mutableStateOf(false) }
     val sections = uiState.scheduleSections
     val otherOccurrences = remember(sections) { weeklyOffGridOccurrences(sections) }
@@ -573,27 +573,14 @@ private fun BitSchedulePage(
     }
 
     if (showDatePicker) {
-        val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = uiState.selectedDate.toDatePickerUtcMillis()
-        )
-        DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        datePickerState.selectedDateMillis?.let { millis ->
-                            onWeekChange(datePickerMillisToLocalDate(millis))
-                        }
-                        showDatePicker = false
-                    }
-                ) { Text("确定") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) { Text("取消") }
+        PlannerDatePickerDialog(
+            initialDate = uiState.selectedDate,
+            onDismiss = { showDatePicker = false },
+            onDateSelected = { date ->
+                onWeekChange(date)
+                showDatePicker = false
             }
-        ) {
-            DatePicker(state = datePickerState)
-        }
+        )
     }
 }
 
