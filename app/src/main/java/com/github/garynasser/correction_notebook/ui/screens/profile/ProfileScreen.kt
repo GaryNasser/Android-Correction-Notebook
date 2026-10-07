@@ -1,5 +1,6 @@
 package com.github.garynasser.correction_notebook.ui.screens.profile
 
+import android.content.ClipData
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -13,9 +14,12 @@ import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -28,6 +32,7 @@ import com.github.garynasser.correction_notebook.ui.screens.aitutor.AITutorUiSta
 import com.github.garynasser.correction_notebook.ui.screens.aitutor.ProviderDialog
 import com.github.garynasser.correction_notebook.ui.components.FreshCard
 import com.github.garynasser.correction_notebook.ui.components.FreshScreen
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -51,7 +56,7 @@ fun ProfileScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     var showLogoutDialog by remember { mutableStateOf(false) }
-    var showFeedbackDialog by remember { mutableStateOf(false) }
+    var showFeedbackDialog by rememberSaveable { mutableStateOf(false) }
     var showAiSettingsDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(profileMessage) {
@@ -228,6 +233,11 @@ fun ProfileScreen(
 
     // Feedback Dialog
     if (showFeedbackDialog) {
+        val email = "fangmierui@gmail.com"
+        val clipboard = LocalClipboard.current
+        val scope = rememberCoroutineScope()
+        var emailCopied by remember { mutableStateOf(false) }
+        val copyLabel = if (emailCopied) "已复制邮箱" else "复制邮箱"
         AlertDialog(
             onDismissRequest = { showFeedbackDialog = false },
             shape = RoundedCornerShape(8.dp),
@@ -245,13 +255,38 @@ fun ProfileScreen(
                         color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.42f),
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.14f))
                     ) {
-                        Text(
-                            text = "fangmierui@gmail.com",
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                        Row(
+                            modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = email,
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            TooltipBox(
+                                positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
+                                tooltip = { PlainTooltip { Text(copyLabel) } },
+                                state = rememberTooltipState()
+                            ) {
+                                IconButton(onClick = {
+                                    scope.launch {
+                                        clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("开发者邮箱", email)))
+                                        emailCopied = true
+                                    }
+                                }) {
+                                    Icon(
+                                        imageVector = if (emailCopied) Icons.Default.Check else Icons.Default.ContentCopy,
+                                        contentDescription = copyLabel,
+                                        modifier = Modifier.size(20.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             },
