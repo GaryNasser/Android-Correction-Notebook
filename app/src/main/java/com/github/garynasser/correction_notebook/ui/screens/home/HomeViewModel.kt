@@ -189,10 +189,29 @@ class HomeViewModel @Inject constructor(
     private var currentSessionId: String? = null
     private var sessionActionJob: Job? = null
 
-    private val _uiState = MutableStateFlow(HomeUiState())
+    private val _uiState = MutableStateFlow(HomeUiState().let { initial ->
+        val saved = savedStateHandle.get<Bundle>("homePlanner")
+        initial.copy(
+            selectedDate = saved?.getString("selectedDate")?.let {
+                runCatching { LocalDate.parse(it) }.getOrNull()
+            } ?: initial.selectedDate,
+            scheduleRange = ScheduleRange.entries.firstOrNull { it.name == saved?.getString("scheduleRange") }
+                ?: initial.scheduleRange,
+            plannerTab = PlannerTab.entries.firstOrNull { it.name == saved?.getString("plannerTab") }
+                ?: initial.plannerTab
+        )
+    })
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
     init {
+        savedStateHandle.setSavedStateProvider("homePlanner") {
+            val state = _uiState.value
+            Bundle().apply {
+                putString("selectedDate", state.selectedDate.toString())
+                putString("scheduleRange", state.scheduleRange.name)
+                putString("plannerTab", state.plannerTab.name)
+            }
+        }
         val savedBundle = savedStateHandle.get<Bundle>("studyTimer")
         val savedTimer = savedBundle?.toSavedStudyTimer()
         savedStateHandle.setSavedStateProvider("studyTimer") {

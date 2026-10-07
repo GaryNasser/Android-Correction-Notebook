@@ -1,6 +1,9 @@
 package com.github.garynasser.correction_notebook.ui.screens.home
 
 import android.graphics.Bitmap
+import android.annotation.SuppressLint
+import android.os.Bundle
+import android.os.Parcel
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -24,6 +27,8 @@ import com.github.garynasser.correction_notebook.data.local.knowledgebase.Knowle
 import com.github.garynasser.correction_notebook.data.local.knowledgebase.KnowledgeBaseFileStorage
 import com.github.garynasser.correction_notebook.data.model.common.ApiResponse
 import com.github.garynasser.correction_notebook.data.model.home.ScheduleEvent
+import com.github.garynasser.correction_notebook.data.model.home.ScheduleRange
+import com.github.garynasser.correction_notebook.data.model.home.PlannerTab
 import com.github.garynasser.correction_notebook.data.model.home.TodoItem
 import com.github.garynasser.correction_notebook.data.remote.ai.AnthropicCompatibleAdapter
 import com.github.garynasser.correction_notebook.data.remote.ai.OpenAiCompatibleAdapter
@@ -49,11 +54,84 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.io.File
 import java.io.IOException
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 
 class HomeFormSaveFailureTest {
     @get:Rule val compose = createComposeRule()
+
+    @Test fun scheduleCreationAfterViewModelRestorationUsesTheSelectedWeekAndDate() = withFixture { f ->
+        val date = LocalDate.of(2026, 12, 31)
+        val days = visibleBitWeekDays(date)
+        days.let { listOf(it.first(), it.last()) }.forEachIndexed { index, day ->
+            f.schedules.addEvent(ScheduleEvent(title = "跨年课程 $index", startAt = day.atTime(9, 0), endAt = day.atTime(10, 0)))
+        }
+        withContext(Dispatchers.Main) { f.home.setSelectedWeek(date) }
+        f.await { f.home.uiState.value.scheduleSections.flatMap { it.items }.size == 2 }
+        withContext(Dispatchers.Main) { f.create(recreatedHandle(f.homeSavedState)) }
+        assertEquals(date, f.home.uiState.value.selectedDate)
+        f.await { f.home.uiState.value.scheduleSections.flatMap { it.items }.size == 2 }
+        assertEquals(days, f.home.uiState.value.scheduleSections.map { it.date })
+        render(f)
+        days.forEach { day -> compose.onNodeWithText(day.format(DateTimeFormatter.ofPattern("MM/dd"))).assertIsDisplayed() }
+        compose.onNodeWithContentDescription("添加日程").performClick()
+        compose.onNodeWithText("2026/12/31").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("活动标题").performTextReplacement(TITLE)
+        compose.onNodeWithContentDescription("保存").performClick()
+        f.await { !f.home.uiState.value.showAddScheduleDialog }
+        val added = f.schedules.scheduleEvents.first().single { it.title == TITLE }
+        assertEquals(date.atTime(9, 0), added.startAt)
+        assertEquals(date.atTime(10, 0), added.endAt)
+        assertEquals(date, f.home.uiState.value.selectedDate)
+    }
+
+    @Test fun everyPlannerRangeAndTabRestoresBeforeItsEventsAreQueried() = withFixture { f ->
+        val date = LocalDate.of(2026, 12, 31)
+        ScheduleRange.entries.forEach { range ->
+            PlannerTab.entries.forEach { tab ->
+                withContext(Dispatchers.Main) {
+                    f.home.setSelectedDate(date)
+                    f.home.setScheduleRange(range)
+                    f.home.setPlannerTab(tab)
+                    f.create(recreatedHandle(f.homeSavedState))
+                }
+                val state = f.home.uiState.value
+                assertEquals(date, state.selectedDate)
+                assertEquals(range, state.scheduleRange)
+                assertEquals(tab, state.plannerTab)
+                val (start, end) = scheduleDateRange(range, date)
+                f.await {
+                    f.home.uiState.value.scheduleSections.let { it.firstOrNull()?.date == start && it.lastOrNull()?.date == end }
+                }
+            }
+        }
+    }
+
+    @Test fun invalidSavedPlannerValuesUseUsableDefaults() = withFixture { f ->
+        val saved = Bundle().apply {
+            putString("selectedDate", "not a date")
+            putString("scheduleRange", "removed-range")
+            putString("plannerTab", "removed-tab")
+        }
+        withContext(Dispatchers.Main) { f.create(SavedStateHandle(mapOf("homePlanner" to saved))) }
+        val state = f.home.uiState.value
+        assertEquals(LocalDate.now(), state.selectedDate)
+        assertEquals(ScheduleRange.WEEK, state.scheduleRange)
+        assertEquals(PlannerTab.SCHEDULE, state.plannerTab)
+        f.await { f.home.uiState.value.scheduleSections.size == 7 }
+    }
+
+    @SuppressLint("RestrictedApi")
+    private fun recreatedHandle(handle: SavedStateHandle): SavedStateHandle {
+        val parcel = Parcel.obtain()
+        try {
+            parcel.writeBundle(handle.savedStateProvider().saveState())
+            parcel.setDataPosition(0)
+            return SavedStateHandle.createHandle(parcel.readBundle(javaClass.classLoader), null)
+        } finally { parcel.recycle() }
+    }
 
     @Test fun todoFailureIsVisibleInsideTheFormAndRetrySavesTheOriginalDraft() = withFixture { f ->
         render(f)
@@ -253,7 +331,9 @@ class HomeFormSaveFailureTest {
         val store = ViewModelStore()
         lateinit var home: HomeViewModel
         lateinit var statistics: StatisticsViewModel
-        fun create() {
+        lateinit var homeSavedState: SavedStateHandle
+        fun create(savedStateHandle: SavedStateHandle = SavedStateHandle()) {
+            homeSavedState = savedStateHandle
             val retrofit = Retrofit.Builder().baseUrl("https://unused.invalid/").client(network)
                 .addConverterFactory(GsonConverterFactory.create()).build()
             val service = retrofit.create(AIApiService::class.java)
@@ -272,7 +352,7 @@ class HomeFormSaveFailureTest {
             home = HomeViewModel(todos, ArticleRepository(articles), StudyPreferencesManager(context), sessions, TodoHistoryRepository(context),
                 schedules, IcsImportRepository(context, schedules), SchoolScheduleRepository(CredentialManager(context),
                     SchoolScheduleRemoteDataSource(BitCasClient(network), network), schedules, SchoolScheduleMapper()),
-                learning, repository, StudySetRepository(dao), useCase, context, SavedStateHandle())
+                learning, repository, StudySetRepository(dao), useCase, context, savedStateHandle)
             statistics = StatisticsViewModel(sessions, useCase)
             store.put("home", home)
             store.put("statistics", statistics)
