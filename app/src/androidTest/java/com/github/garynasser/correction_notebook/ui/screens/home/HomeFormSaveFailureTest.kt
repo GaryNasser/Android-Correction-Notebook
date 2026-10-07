@@ -98,7 +98,7 @@ class HomeFormSaveFailureTest {
         compose.onNodeWithText("地点").performTextReplacement(LOCATION)
         compose.onNodeWithText("备注").performTextReplacement(NOTES)
         f.scheduleWrites.fail = true
-        compose.onNodeWithText("保存").performClick()
+        compose.onNodeWithContentDescription("保存").performClick()
         f.await { f.scheduleWrites.attempts.get() == 1 && !f.home.uiState.value.isEditingSchedule }
         withContext(Dispatchers.Main) { f.home.consumeScheduleActionMessage() }
         capture("schedule-failure")
@@ -109,11 +109,11 @@ class HomeFormSaveFailureTest {
         assertTrue(f.schedules.scheduleEvents.first().isEmpty())
         f.scheduleWrites.fail = false
         val release = CompletableDeferred<Unit>().also { f.scheduleWrites.gate = it }
-        compose.onNodeWithText("保存").performClick()
+        compose.onNodeWithContentDescription("保存").performClick()
         f.await { f.scheduleWrites.attempts.get() == 2 && f.home.uiState.value.isEditingSchedule }
         compose.onNodeWithText(SCHEDULE_ERROR).assertDoesNotExist()
         compose.onNodeWithText("活动标题").assertIsNotEnabled()
-        compose.onNodeWithText("取消").assertIsNotEnabled()
+        compose.onNodeWithContentDescription("取消").assertIsNotEnabled()
         withContext(Dispatchers.Main) {
             val start = f.home.uiState.value.selectedDate.atTime(9, 0)
             f.home.addSchedule(ScheduleEvent(title = "重复提交", startAt = start, endAt = start.plusHours(1)))
@@ -153,14 +153,14 @@ class HomeFormSaveFailureTest {
         compose.onNodeWithContentDescription("添加日程").performClick()
         compose.onNodeWithText("活动标题").performTextReplacement(TITLE)
         f.scheduleWrites.fail = true
-        compose.onNodeWithText("保存").performClick()
+        compose.onNodeWithContentDescription("保存").performClick()
         f.await { f.scheduleWrites.attempts.get() == 1 && !f.home.uiState.value.isEditingSchedule }
         compose.onNode(hasText(SCHEDULE_ERROR) and hasAnyAncestor(isDialog())).assertIsDisplayed()
-        compose.onNodeWithText("取消").performClick()
+        compose.onNodeWithContentDescription("取消").performClick()
         compose.onNodeWithContentDescription("添加日程").performClick()
         compose.onNodeWithText(SCHEDULE_ERROR).assertDoesNotExist()
         compose.onNodeWithText(TITLE).assertDoesNotExist()
-        compose.onNodeWithText("保存").assertIsNotEnabled()
+        compose.onNodeWithContentDescription("保存").assertIsNotEnabled()
     }
 
     private fun render(f: Fixture) {

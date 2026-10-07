@@ -42,7 +42,7 @@ class AddScheduleDialogTest {
         compose.onAllNodesWithText("时")[0].performTextInput("1")
         compose.waitForIdle()
         compose.onAllNodesWithText("时")[0].performTextInput("2")
-        compose.onNodeWithText("保存").performClick()
+        compose.onNodeWithContentDescription("保存").performClick()
         compose.runOnIdle { assertEquals(12, added?.startAt?.hour) }
     }
 
@@ -58,11 +58,11 @@ class AddScheduleDialogTest {
         compose.onNodeWithText("2026/11/13").assertExists()
         compose.onNodeWithText("活动标题").performTextInput("All day workshop")
         compose.onNodeWithContentDescription("开始小时").performScrollTo().performTextClearance()
-        compose.onNodeWithText("保存").performClick()
+        compose.onNodeWithContentDescription("保存").performClick()
         compose.onNodeWithText("请填写完整的开始和结束时间").assertExists()
         compose.runOnIdle { assertNull(added) }
         compose.onNodeWithContentDescription("全天安排").performScrollTo().performClick()
-        compose.onNodeWithText("保存").performClick()
+        compose.onNodeWithContentDescription("保存").performClick()
         compose.runOnIdle {
             assertEquals(date.atStartOfDay(), added?.startAt)
             assertEquals(date.plusDays(1).atStartOfDay(), added?.endAt)
@@ -89,7 +89,7 @@ class AddScheduleDialogTest {
         compose.onNodeWithContentDescription("开始分钟").performTextReplacement("35")
         compose.onNodeWithContentDescription("结束小时").performScrollTo().performTextReplacement("13")
         restoration.emulateSavedInstanceStateRestore()
-        compose.onNodeWithText("保存").performClick()
+        compose.onNodeWithContentDescription("保存").performClick()
         compose.runOnIdle {
             val event = checkNotNull(added)
             assertEquals("Review lecture", event.title)
@@ -108,12 +108,12 @@ class AddScheduleDialogTest {
         }
         compose.onNodeWithText("活动标题").performTextInput("Study group")
         compose.onNodeWithContentDescription("开始小时").performScrollTo().performTextReplacement("12")
-        compose.onNodeWithText("保存").performClick()
+        compose.onNodeWithContentDescription("保存").performClick()
         compose.onNodeWithText("结束时间需要晚于开始时间").assertExists()
         compose.runOnIdle { assertNull(added) }
         compose.onNodeWithContentDescription("结束小时").performScrollTo().performTextReplacement("13")
         compose.onNodeWithText("结束时间需要晚于开始时间").assertDoesNotExist()
-        compose.onNodeWithText("保存").performClick()
+        compose.onNodeWithContentDescription("保存").performClick()
         compose.runOnIdle {
             assertEquals(12, added?.startAt?.hour)
             assertEquals(13, added?.endAt?.hour)
@@ -127,9 +127,10 @@ class AddScheduleDialogTest {
                 AddScheduleDialog(isSaving = true, onDismiss = {}, onAdd = {})
             }
         }
-        listOf("活动标题", "地点", "备注", "取消", "保存中").forEach {
+        listOf("活动标题", "地点", "备注").forEach {
             compose.onNodeWithText(it).assertIsNotEnabled()
         }
+        listOf("取消", "保存中").forEach { compose.onNodeWithContentDescription(it).assertIsNotEnabled() }
         listOf("开始小时", "开始分钟", "结束小时", "结束分钟", "全天安排").forEach {
             compose.onNodeWithContentDescription(it).assertIsNotEnabled()
         }
