@@ -9,6 +9,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -252,6 +254,64 @@ class KnowledgeBaseRemoteFlowTest {
     @Test fun changingTheSearchQueryInvalidatesThePendingFileDetail() = checkLateDetail(folder = false, editQuery = true)
     @Test fun changingTheSearchQueryInvalidatesThePendingFolderDetail() = checkLateDetail(folder = true, editQuery = true)
 
+    @Test fun longFolderDetailsRemainReadableOnAShortLightScreen() = checkLongFolder(dark = false)
+    @Test fun longFolderDetailsRemainReadableOnAShortDarkScreen() = checkLongFolder(dark = true)
+
+    private fun checkLongFolder(dark: Boolean) = withFixture { f ->
+        val name = "矩阵分析与计算理论课程资料目录".repeat(4)
+        val description = "本目录收录矩阵分析课程的讲义、课堂笔记与复习资料。".repeat(6)
+        val breadcrumbs = listOf("北京理工大学", "数学与统计学院", "矩阵分析课程资料", name)
+            .mapIndexed { i, title -> BitShareBreadcrumbDto("parent-$i", title) }
+        val path = breadcrumbs.joinToString(" > ") { it.name }
+        f.folderDetail = BitShareFolderDetailDto("folder", name, description, "parent-2", breadcrumbs, 128, 325, 4096, "2026-10-07T08:00:00Z")
+        f.searchItems = listOf(BitShareSearchItemDto("folder", "folder", "课程目录", null, null, null, null, null))
+        val restoration = StateRestorationTester(compose)
+        restoration.setContent { TestScreen(f.model, dark) }
+        search(f, expectedCount = 1)
+        compose.onNodeWithText("课程目录").performClick()
+        f.await { f.model.uiState.value.selectedRemoteFolderDetail?.id == "folder" }
+        restoration.emulateSavedInstanceStateRestore()
+        listOf(name, description, "128", "325", "4.0 KB", path).forEach { text ->
+            val node = compose.onNodeWithText(text, useUnmergedTree = true)
+            node.performScrollTo().assertIsDisplayed()
+            val layouts = mutableListOf<TextLayoutResult>()
+            assertTrue(node.fetchSemanticsNode().config[SemanticsActions.GetTextLayoutResult].action!!.invoke(layouts))
+            val layout = layouts.single()
+            assertFalse(layout.didOverflowHeight)
+            assertEquals(text.length, layout.getLineEnd(layout.lineCount - 1))
+            repeat(layout.lineCount) { line ->
+                assertFalse(layout.isLineEllipsized(line))
+                // Paragraph widths are fractional; measured sizes use integer pixels.
+                assertTrue("Text must fit its measured width: $text", layout.getLineRight(line) <= layout.size.width + 1f)
+            }
+        }
+        capture("remote-folder-path-${if (dark) "dark" else "light"}")
+        compose.onNodeWithText(name, useUnmergedTree = true).performScrollTo().assertIsDisplayed()
+        capture("remote-folder-name-${if (dark) "dark" else "light"}")
+        compose.onNodeWithText("关闭").assertIsDisplayed().performClick()
+        compose.onNodeWithText("课程目录").assertIsDisplayed()
+        assertNull(f.model.uiState.value.selectedRemoteFolderDetail)
+        assertTrue(f.database.knowledgeBaseDao().getAllFiles().isEmpty())
+    }
+
+    @Test fun failedFolderDetailsKeepSearchResultsAndTheSameFolderCanBeRetried() = withFixture { f ->
+        f.searchItems = listOf(BitShareSearchItemDto("folder", "folder", "课程目录", null, null, null, null, null))
+        f.failFolderDetail = true
+        compose.setContent { TestScreen(f.model, dark = true) }
+        search(f, expectedCount = 1)
+        compose.onNodeWithText("课程目录").performClick()
+        f.await { f.model.uiState.value.remoteErrorMessage != null && !f.model.uiState.value.isRemoteFolderLoading }
+        assertNull(f.model.uiState.value.selectedRemoteFolderDetail)
+        assertEquals("folder", f.model.uiState.value.remoteResults.single().id)
+        f.failFolderDetail = false
+        compose.onNodeWithText("课程目录").performClick()
+        f.await { f.model.uiState.value.selectedRemoteFolderDetail?.id == "folder" }
+        assertNull(f.model.uiState.value.remoteErrorMessage)
+        assertEquals(listOf(1), f.searchCalls.map { it.second })
+        compose.onNodeWithText("关闭").assertIsDisplayed().performClick()
+        compose.onNodeWithText("课程目录").assertIsDisplayed()
+    }
+
     @Test fun aBackgroundDownloadDisablesOtherDownloadsAndCanStillBeCancelled() = withFixture { f ->
         compose.setContent { TestScreen(f.model, dark = true) }
         search(f)
@@ -382,6 +442,8 @@ class KnowledgeBaseRemoteFlowTest {
             BitShareSearchItemDto("file", "b", "算法设计讲义", "算法设计.txt", "txt", 9, 0, null)
         )
         @Volatile var failSearchPage: Int? = null
+        @Volatile var failFolderDetail = false
+        var folderDetail: BitShareFolderDetailDto? = null
         var searchResponses = emptyMap<Int, BitShareSearchResponse>()
         @Volatile var searchGate: Gate? = null
         @Volatile var activeSearchGate: Gate? = null
@@ -408,11 +470,12 @@ class KnowledgeBaseRemoteFlowTest {
                     searchGate?.also { searchGate = null; activeSearchGate = it }?.await()
                     gson.toJson(response)
                 }
-                path.contains("/folders/") -> gson.toJson(BitShareFolderDetailDto(id, "课程目录", "课程资料", null, emptyList(), 2, 0, 18, null))
+                path.contains("/folders/") -> gson.toJson(folderDetail ?: BitShareFolderDetailDto(id, "课程目录", "课程资料", null, emptyList(), 2, 0, 18, null))
                 else -> gson.toJson(BitShareFileDetailDto(id, if (id == "a") "矩阵分析讲义" else "算法设计讲义", "txt", null, null, null,
                     if (id == "a") "矩阵分析.txt" else "算法设计.txt", "text/plain", 9, null, 0))
             }
-            val failed = path == "/api/public/search" && chain.request().url.queryParameter("page")?.toInt() == failSearchPage
+            val failed = (path == "/api/public/search" && chain.request().url.queryParameter("page")?.toInt() == failSearchPage) ||
+                (path.contains("/folders/") && failFolderDetail)
             Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(if (failed) 500 else 200).message(if (failed) "Search unavailable" else "OK")
                 .body(body.toResponseBody(if (download) "text/plain".toMediaType() else "application/json".toMediaType())).build()
         }.build()
