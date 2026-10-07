@@ -13,6 +13,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performTextReplacement
 import com.github.garynasser.correction_notebook.MainActivity
 import com.github.garynasser.correction_notebook.data.model.home.Priority
 import com.github.garynasser.correction_notebook.data.model.home.TodoItem
@@ -28,6 +29,30 @@ import java.util.UUID
 
 class TodoCompletionHistoryTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
+
+    @Test fun addingATodoAfterActivityRecreationSavesTheOriginalDraft() {
+        val todos = TodoRepository(compose.activity.applicationContext)
+        val title = "待办草稿 QA ${UUID.randomUUID().toString().take(8)}"
+        val notes = "矩阵分析第三章\n复查证明步骤和课堂笔记。"
+        try {
+            compose.onNodeWithText("Study").performClick()
+            compose.onNode(hasScrollAction() and SemanticsMatcher.keyIsDefined(SemanticsProperties.VerticalScrollAxisRange))
+                .performScrollToNode(hasContentDescription("添加待办"))
+            compose.onNodeWithContentDescription("添加待办").performClick()
+            compose.onNodeWithText("标题").performTextReplacement(title)
+            compose.onNodeWithText("备注（可选）").performTextReplacement(notes)
+            compose.activityRule.scenario.recreate()
+            compose.onNodeWithText(title).assertExists()
+            compose.onNodeWithText(notes).assertExists()
+            compose.onNodeWithContentDescription("添加").performClick()
+            compose.waitUntil(5_000) { runBlocking { todos.todoItems.first().any { it.title == title } } }
+            val saved = runBlocking { todos.todoItems.first().single { it.title == title } }
+            assertEquals(notes, saved.description)
+            compose.onNodeWithText("备注（可选）").assertDoesNotExist()
+        } finally {
+            runBlocking { todos.todoItems.first().filter { it.title == title }.forEach { todos.deleteTodo(it.id) } }
+        }
+    }
 
     @Test fun completingATodoKeepsItsFullRecordAndHistoryReopensAfterRecreation() {
         val context = compose.activity.applicationContext
