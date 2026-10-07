@@ -77,6 +77,7 @@ data class HomeUiState(
     val todoActionMessage: String? = null,
     val todoActionError: String? = null,
     val isAddingTodo: Boolean = false,
+    val addTodoError: String? = null,
     val mutatingTodoIds: Set<String> = emptySet(),
     val todayStudyMinutes: Int = 0,
     val completedPomodoros: Int = 0,
@@ -90,6 +91,7 @@ data class HomeUiState(
     val selectedScheduleEvent: ScheduleOccurrence? = null,
     val isLoading: Boolean = false,
     val isEditingSchedule: Boolean = false,
+    val addScheduleError: String? = null,
     val scheduleActionMessage: String? = null,
     val scheduleActionError: String? = null,
     val isImportingSchedule: Boolean = false,
@@ -440,22 +442,28 @@ class HomeViewModel @Inject constructor(
     }
 
     fun showAddTodoDialog() {
-        _uiState.value = _uiState.value.copy(showAddTodoDialog = true)
+        _uiState.value = _uiState.value.copy(showAddTodoDialog = true, addTodoError = null)
     }
 
     fun hideAddTodoDialog() {
         if (_uiState.value.isAddingTodo) return
-        _uiState.value = _uiState.value.copy(showAddTodoDialog = false)
+        _uiState.value = _uiState.value.copy(showAddTodoDialog = false, addTodoError = null)
     }
 
     fun addTodo(todo: TodoItem) {
         if (_uiState.value.isAddingTodo) return
-        _uiState.value = _uiState.value.copy(isAddingTodo = true)
+        _uiState.value = _uiState.value.copy(
+            isAddingTodo = true,
+            addTodoError = null,
+            todoActionMessage = null,
+            todoActionError = null
+        )
         viewModelScope.launch {
             try {
                 todoRepository.addTodo(todo)
                 _uiState.value = _uiState.value.copy(
                     showAddTodoDialog = false,
+                    addTodoError = null,
                     todoActionMessage = "已添加待办",
                     todoActionError = null
                 )
@@ -464,7 +472,7 @@ class HomeViewModel @Inject constructor(
             } catch (_: Exception) {
                 _uiState.value = _uiState.value.copy(
                     todoActionMessage = null,
-                    todoActionError = "待办添加失败，请稍后再试"
+                    addTodoError = "待办添加失败，请稍后再试"
                 )
             } finally {
                 _uiState.value = _uiState.value.copy(isAddingTodo = false)
@@ -786,12 +794,12 @@ class HomeViewModel @Inject constructor(
     }
 
     fun showAddScheduleDialog() {
-        _uiState.value = _uiState.value.copy(showAddScheduleDialog = true)
+        _uiState.value = _uiState.value.copy(showAddScheduleDialog = true, addScheduleError = null)
     }
 
     fun hideAddScheduleDialog() {
         if (_uiState.value.isEditingSchedule) return
-        _uiState.value = _uiState.value.copy(showAddScheduleDialog = false)
+        _uiState.value = _uiState.value.copy(showAddScheduleDialog = false, addScheduleError = null)
     }
 
     fun addSchedule(event: ScheduleEvent) {
@@ -948,6 +956,7 @@ class HomeViewModel @Inject constructor(
         if (_uiState.value.isAnyScheduleMutationBusy()) return
         _uiState.value = _uiState.value.copy(
             isEditingSchedule = true,
+            addScheduleError = if (closeAddDialogOnSuccess) null else _uiState.value.addScheduleError,
             scheduleActionMessage = null,
             scheduleActionError = null
         )
@@ -958,16 +967,19 @@ class HomeViewModel @Inject constructor(
                 _uiState.value = _uiState.value.copy(isEditingSchedule = false)
                 throw throwable
             } catch (throwable: Exception) {
+                val message = throwable.message?.takeIf { it.isNotBlank() } ?: failureMessage
                 _uiState.value = _uiState.value.copy(
                     isEditingSchedule = false,
                     scheduleActionMessage = null,
-                    scheduleActionError = throwable.message?.takeIf { it.isNotBlank() } ?: failureMessage
+                    scheduleActionError = if (closeAddDialogOnSuccess) null else message,
+                    addScheduleError = if (closeAddDialogOnSuccess) message else _uiState.value.addScheduleError
                 )
                 return@launch
             }
             _uiState.value = _uiState.value.copy(
                 isEditingSchedule = false,
                 showAddScheduleDialog = if (closeAddDialogOnSuccess) false else _uiState.value.showAddScheduleDialog,
+                addScheduleError = if (closeAddDialogOnSuccess) null else _uiState.value.addScheduleError,
                 scheduleActionMessage = successMessage,
                 scheduleActionError = null
             )

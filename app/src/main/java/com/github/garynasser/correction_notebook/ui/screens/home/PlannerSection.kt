@@ -62,7 +62,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -585,6 +589,7 @@ private fun formatScheduleTimeCompact(item: ScheduleOccurrence): String {
 fun AddScheduleDialog(
     initialDate: LocalDate = LocalDate.now(),
     isSaving: Boolean = false,
+    saveError: String? = null,
     onDismiss: () -> Unit,
     onAdd: (ScheduleEvent) -> Unit
 ) {
@@ -608,7 +613,19 @@ fun AddScheduleDialog(
         },
         shape = RoundedCornerShape(8.dp),
         containerColor = MaterialTheme.colorScheme.surface,
-        title = { Text("添加日程", style = MaterialTheme.typography.titleMedium) },
+        title = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("添加日程", style = MaterialTheme.typography.titleMedium)
+                saveError?.let { message ->
+                    Text(
+                        text = message,
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        },
         text = {
             Column(
                 modifier = Modifier
@@ -725,6 +742,8 @@ fun AddScheduleDialog(
             }
         },
         confirmButton = {
+            val focusManager = LocalFocusManager.current
+            val keyboard = LocalSoftwareKeyboardController.current
             Button(
                 onClick = {
                     val start = if (allDay) selectedDate.atStartOfDay() else {
@@ -740,6 +759,8 @@ fun AddScheduleDialog(
                         start == null || end == null -> validationMessage = "请填写完整的开始和结束时间"
                         !end.isAfter(start) -> validationMessage = "结束时间需要晚于开始时间"
                         else -> {
+                            focusManager.clearFocus()
+                            keyboard?.hide()
                             onAdd(
                                 ScheduleEvent(
                                     title = title.trim(),

@@ -30,25 +30,26 @@ import java.time.temporal.TemporalAdjusters
 
 private val Context.scheduleDataStore: DataStore<Preferences> by preferencesDataStore("schedule_prefs")
 
-class ScheduleRepository(private val context: Context) {
+class ScheduleRepository internal constructor(private val dataStore: DataStore<Preferences>) {
+    constructor(context: Context) : this(context.scheduleDataStore)
 
     private val scheduleEventsKey = stringPreferencesKey("schedule_events")
 
-    val scheduleEvents: Flow<List<ScheduleEvent>> = context.scheduleDataStore.data
+    val scheduleEvents: Flow<List<ScheduleEvent>> = dataStore.data
         .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
         .map { prefs ->
             prefs[scheduleEventsKey]?.let(SchedulePreferenceCodec::parseEvents) ?: emptyList()
         }
 
     suspend fun addEvent(event: ScheduleEvent) {
-        context.scheduleDataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             val current = prefs[scheduleEventsKey]?.let(SchedulePreferenceCodec::parseEvents) ?: emptyList()
             prefs[scheduleEventsKey] = SchedulePreferenceCodec.serializeEvents(current + event)
         }
     }
 
     suspend fun updateEvent(event: ScheduleEvent) {
-        context.scheduleDataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             val current = prefs[scheduleEventsKey]?.let(SchedulePreferenceCodec::parseEvents) ?: emptyList()
             prefs[scheduleEventsKey] = SchedulePreferenceCodec.serializeEvents(
                 current.map { if (it.id == event.id) event.copy(updatedAt = System.currentTimeMillis()) else it }
@@ -57,7 +58,7 @@ class ScheduleRepository(private val context: Context) {
     }
 
     suspend fun deleteEvent(eventId: String) {
-        context.scheduleDataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             val current = prefs[scheduleEventsKey]?.let(SchedulePreferenceCodec::parseEvents) ?: emptyList()
             prefs[scheduleEventsKey] = SchedulePreferenceCodec.serializeEvents(current.filterNot { it.id == eventId })
         }
@@ -91,7 +92,7 @@ class ScheduleRepository(private val context: Context) {
         preview: IcsImportPreview,
         decision: ImportDecision
     ) {
-        context.scheduleDataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             val current = prefs[scheduleEventsKey]?.let(SchedulePreferenceCodec::parseEvents) ?: emptyList()
             prefs[scheduleEventsKey] = SchedulePreferenceCodec.serializeEvents(
                 applyIcsImport(current, preview, decision)
@@ -102,7 +103,7 @@ class ScheduleRepository(private val context: Context) {
     suspend fun applySchoolSchedule(termId: String, events: List<ScheduleEvent>) {
         val calendarId = schoolCalendarId(termId)
         val importedAt = System.currentTimeMillis()
-        context.scheduleDataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             val current = prefs[scheduleEventsKey]?.let(SchedulePreferenceCodec::parseEvents) ?: emptyList()
             val retained = current.filterNot {
                 it.sourceType == ScheduleSourceType.SCHOOL_IMPORT &&

@@ -125,7 +125,7 @@ class ScheduleTextPersistenceTest {
 
     @Test
     fun importedTextRemainsUnchangedAfterReadsAndUnrelatedScheduleWrites() = runBlocking {
-        val repository = ScheduleRepository(ApplicationProvider.getApplicationContext())
+        val repository = ScheduleRepository(context = ApplicationProvider.getApplicationContext())
         val calendarId = "qa_${UUID.randomUUID()}"
         val event = parseIcsEvents(
             listOf(

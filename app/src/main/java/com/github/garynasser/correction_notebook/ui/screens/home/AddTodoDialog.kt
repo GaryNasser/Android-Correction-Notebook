@@ -25,6 +25,8 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -40,6 +42,7 @@ private const val MaxTodoDescriptionLength = 180
 @Composable
 fun AddTodoDialog(
     isSaving: Boolean = false,
+    saveError: String? = null,
     onDismiss: () -> Unit,
     onAdd: (TodoItem) -> Unit
 ) {
@@ -117,6 +120,14 @@ fun AddTodoDialog(
                                 }
                             }
                         }
+                    }
+                    saveError?.let { message ->
+                        Text(
+                            text = message,
+                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
                     }
                     Column(
                         modifier = Modifier.fillMaxWidth().weight(1f, fill = false)
