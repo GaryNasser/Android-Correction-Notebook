@@ -6,9 +6,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.github.garynasser.correction_notebook.data.model.home.PomodoroSettings
 import kotlin.math.roundToInt
@@ -19,10 +24,10 @@ fun PomodoroSettingsDialog(
     onDismiss: () -> Unit,
     onSave: (PomodoroSettings) -> Unit
 ) {
-    var focusMinutes by remember { mutableFloatStateOf(currentSettings.focusMinutes.toFloat()) }
-    var shortBreakMinutes by remember { mutableFloatStateOf(currentSettings.shortBreakMinutes.toFloat()) }
-    var longBreakMinutes by remember { mutableFloatStateOf(currentSettings.longBreakMinutes.toFloat()) }
-    var pomodorosBeforeLongBreak by remember { mutableFloatStateOf(currentSettings.pomodorosBeforeLongBreak.toFloat()) }
+    var focusMinutes by rememberSaveable { mutableFloatStateOf(currentSettings.focusMinutes.toFloat()) }
+    var shortBreakMinutes by rememberSaveable { mutableFloatStateOf(currentSettings.shortBreakMinutes.toFloat()) }
+    var longBreakMinutes by rememberSaveable { mutableFloatStateOf(currentSettings.longBreakMinutes.toFloat()) }
+    var pomodorosBeforeLongBreak by rememberSaveable { mutableFloatStateOf(currentSettings.pomodorosBeforeLongBreak.toFloat()) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -110,16 +115,19 @@ private fun SettingSlider(
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = label,
+                modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium
             )
             Text(
                 text = valueDisplay,
+                modifier = Modifier.weight(1f),
+                textAlign = TextAlign.End,
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.Bold
@@ -129,7 +137,10 @@ private fun SettingSlider(
             value = value,
             onValueChange = onValueChange,
             valueRange = valueRange,
-            modifier = Modifier.height(36.dp),
+            modifier = Modifier.heightIn(min = 48.dp).semantics {
+                contentDescription = label
+                stateDescription = valueDisplay
+            },
             steps = (valueRange.endInclusive - valueRange.start).toInt() - 1
         )
     }
