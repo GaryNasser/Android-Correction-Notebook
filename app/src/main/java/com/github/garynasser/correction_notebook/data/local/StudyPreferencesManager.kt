@@ -15,7 +15,8 @@ import java.time.LocalDate
 
 private val Context.studyDataStore: DataStore<Preferences> by preferencesDataStore("study_prefs")
 
-class StudyPreferencesManager(private val context: Context) {
+class StudyPreferencesManager internal constructor(private val dataStore: DataStore<Preferences>) {
+    constructor(context: Context) : this(context.studyDataStore)
 
     companion object {
         private val TODO_ITEMS_KEY = stringPreferencesKey("todo_items")
@@ -34,7 +35,7 @@ class StudyPreferencesManager(private val context: Context) {
         private val VIBRATION_ENABLED_KEY = booleanPreferencesKey("vibration_enabled")
     }
 
-    val pomodoroSettings: Flow<PomodoroSettings> = context.studyDataStore.data
+    val pomodoroSettings: Flow<PomodoroSettings> = dataStore.data
         .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
         .map { prefs ->
             PomodoroSettings(
@@ -45,16 +46,16 @@ class StudyPreferencesManager(private val context: Context) {
             )
         }
 
-    val soundEnabled: Flow<Boolean> = context.studyDataStore.data
+    val soundEnabled: Flow<Boolean> = dataStore.data
         .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
         .map { it[SOUND_ENABLED_KEY] ?: true }
 
-    val vibrationEnabled: Flow<Boolean> = context.studyDataStore.data
+    val vibrationEnabled: Flow<Boolean> = dataStore.data
         .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
         .map { it[VIBRATION_ENABLED_KEY] ?: true }
 
     suspend fun updatePomodoroSettings(settings: PomodoroSettings) {
-        context.studyDataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             prefs[FOCUS_MINUTES_KEY] = settings.focusMinutes
             prefs[SHORT_BREAK_MINUTES_KEY] = settings.shortBreakMinutes
             prefs[LONG_BREAK_MINUTES_KEY] = settings.longBreakMinutes
@@ -63,30 +64,30 @@ class StudyPreferencesManager(private val context: Context) {
     }
 
     suspend fun setSoundEnabled(enabled: Boolean) {
-        context.studyDataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             prefs[SOUND_ENABLED_KEY] = enabled
         }
     }
 
     suspend fun setVibrationEnabled(enabled: Boolean) {
-        context.studyDataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             prefs[VIBRATION_ENABLED_KEY] = enabled
         }
     }
 
-    val totalStudyMinutes: Flow<Int> = context.studyDataStore.data
+    val totalStudyMinutes: Flow<Int> = dataStore.data
         .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
         .map { it[TOTAL_STUDY_MINUTES_KEY] ?: 0 }
 
-    val pomodorosCompleted: Flow<Int> = context.studyDataStore.data
+    val pomodorosCompleted: Flow<Int> = dataStore.data
         .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
         .map { it[POMODOROS_COMPLETED_KEY] ?: 0 }
 
-    val backgroundImageUri: Flow<String?> = context.studyDataStore.data
+    val backgroundImageUri: Flow<String?> = dataStore.data
         .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
         .map { it[BACKGROUND_IMAGE_URI_KEY] }
 
-    val isLandscapeOrientation: Flow<Boolean> = context.studyDataStore.data
+    val isLandscapeOrientation: Flow<Boolean> = dataStore.data
         .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
         .map { it[ORIENTATION_LANDSCAPE_KEY] ?: false }
 
@@ -95,7 +96,7 @@ class StudyPreferencesManager(private val context: Context) {
     }
 
     suspend fun addStudyMinutes(minutes: Int) {
-        context.studyDataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             val current = prefs[TOTAL_STUDY_MINUTES_KEY] ?: 0
             prefs[TOTAL_STUDY_MINUTES_KEY] = current + minutes
             prefs[LAST_STUDY_DATE_KEY] = LocalDate.now().toString()
@@ -103,14 +104,14 @@ class StudyPreferencesManager(private val context: Context) {
     }
 
     suspend fun incrementPomodoros() {
-        context.studyDataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             val current = prefs[POMODOROS_COMPLETED_KEY] ?: 0
             prefs[POMODOROS_COMPLETED_KEY] = current + 1
         }
     }
 
     suspend fun getTodayStudyMinutes(): Int {
-        val lastDate = context.studyDataStore.data
+        val lastDate = dataStore.data
             .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
             .map { it[LAST_STUDY_DATE_KEY] }
             .first()
@@ -122,7 +123,7 @@ class StudyPreferencesManager(private val context: Context) {
     }
 
     suspend fun setBackgroundImage(uri: String?) {
-        context.studyDataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             if (uri != null) {
                 prefs[BACKGROUND_IMAGE_URI_KEY] = uri
             } else {
@@ -132,7 +133,7 @@ class StudyPreferencesManager(private val context: Context) {
     }
 
     suspend fun setLandscapeOrientation(isLandscape: Boolean) {
-        context.studyDataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             prefs[ORIENTATION_LANDSCAPE_KEY] = isLandscape
         }
     }

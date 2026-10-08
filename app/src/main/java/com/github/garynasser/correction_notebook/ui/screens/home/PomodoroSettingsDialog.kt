@@ -10,6 +10,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
@@ -22,15 +24,19 @@ import kotlin.math.roundToInt
 fun PomodoroSettingsDialog(
     currentSettings: PomodoroSettings,
     onDismiss: () -> Unit,
-    onSave: (PomodoroSettings) -> Unit
+    onSave: (PomodoroSettings) -> Unit,
+    isSaving: Boolean = false,
+    errorMessage: String? = null
 ) {
     var focusMinutes by rememberSaveable { mutableFloatStateOf(currentSettings.focusMinutes.toFloat()) }
     var shortBreakMinutes by rememberSaveable { mutableFloatStateOf(currentSettings.shortBreakMinutes.toFloat()) }
     var longBreakMinutes by rememberSaveable { mutableFloatStateOf(currentSettings.longBreakMinutes.toFloat()) }
     var pomodorosBeforeLongBreak by rememberSaveable { mutableFloatStateOf(currentSettings.pomodorosBeforeLongBreak.toFloat()) }
+    val scrollState = rememberScrollState()
+    LaunchedEffect(errorMessage) { if (errorMessage != null) scrollState.scrollTo(0) }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!isSaving) onDismiss() },
         shape = RoundedCornerShape(8.dp),
         title = {
             Text(
@@ -43,15 +49,21 @@ fun PomodoroSettingsDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(max = 380.dp)
-                    .verticalScroll(rememberScrollState()),
+                    .verticalScroll(scrollState),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                if (errorMessage != null) {
+                    Text(errorMessage, color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+                }
                 SettingSlider(
                     label = "学习时长",
                     value = focusMinutes,
                     onValueChange = { focusMinutes = it.roundToInt().toFloat() },
                     valueRange = 5f..60f,
-                    valueDisplay = "${focusMinutes.toInt()} 分钟"
+                    valueDisplay = "${focusMinutes.toInt()} 分钟",
+                    enabled = !isSaving
                 )
 
                 SettingSlider(
@@ -59,7 +71,8 @@ fun PomodoroSettingsDialog(
                     value = shortBreakMinutes,
                     onValueChange = { shortBreakMinutes = it.roundToInt().toFloat() },
                     valueRange = 1f..15f,
-                    valueDisplay = "${shortBreakMinutes.toInt()} 分钟"
+                    valueDisplay = "${shortBreakMinutes.toInt()} 分钟",
+                    enabled = !isSaving
                 )
 
                 SettingSlider(
@@ -67,7 +80,8 @@ fun PomodoroSettingsDialog(
                     value = longBreakMinutes,
                     onValueChange = { longBreakMinutes = it.roundToInt().toFloat() },
                     valueRange = 5f..30f,
-                    valueDisplay = "${longBreakMinutes.toInt()} 分钟"
+                    valueDisplay = "${longBreakMinutes.toInt()} 分钟",
+                    enabled = !isSaving
                 )
 
                 SettingSlider(
@@ -75,7 +89,8 @@ fun PomodoroSettingsDialog(
                     value = pomodorosBeforeLongBreak,
                     onValueChange = { pomodorosBeforeLongBreak = it.roundToInt().toFloat() },
                     valueRange = 2f..8f,
-                    valueDisplay = "${pomodorosBeforeLongBreak.toInt()} 轮"
+                    valueDisplay = "${pomodorosBeforeLongBreak.toInt()} 轮",
+                    enabled = !isSaving
                 )
             }
         },
@@ -91,13 +106,18 @@ fun PomodoroSettingsDialog(
                         )
                     )
                 },
+                enabled = !isSaving,
                 shape = RoundedCornerShape(8.dp)
             ) {
-                Text("保存")
+                if (isSaving) {
+                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(6.dp))
+                }
+                Text(if (isSaving) "保存中" else "保存")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss, enabled = !isSaving) {
                 Text("取消")
             }
         }
@@ -110,7 +130,8 @@ private fun SettingSlider(
     value: Float,
     onValueChange: (Float) -> Unit,
     valueRange: ClosedFloatingPointRange<Float>,
-    valueDisplay: String
+    valueDisplay: String,
+    enabled: Boolean
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Row(
@@ -134,6 +155,7 @@ private fun SettingSlider(
             )
         }
         Slider(
+            enabled = enabled,
             value = value,
             onValueChange = onValueChange,
             valueRange = valueRange,

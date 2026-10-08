@@ -115,6 +115,9 @@ data class HomeUiState(
     val isLandscapeOrientation: Boolean = false,
     val pomodoroSettings: PomodoroSettings = PomodoroSettings(),
     val showPomodoroSettingsDialog: Boolean = false,
+    val startPomodoroAfterSettings: Boolean = false,
+    val isSavingPomodoroSettings: Boolean = false,
+    val pomodoroSettingsError: String? = null,
     val showTodoHistory: Boolean = false,
     val pendingIcsPreview: IcsImportPreview? = null,
     val soundEnabled: Boolean = true,
@@ -200,7 +203,9 @@ class HomeViewModel @Inject constructor(
             plannerTab = PlannerTab.entries.firstOrNull { it.name == saved?.getString("plannerTab") }
                 ?: initial.plannerTab,
             showAddScheduleDialog = saved?.getBoolean("showAddScheduleDialog") ?: false,
-            showAddTodoDialog = saved?.getBoolean("showAddTodoDialog") ?: false
+            showAddTodoDialog = saved?.getBoolean("showAddTodoDialog") ?: false,
+            showPomodoroSettingsDialog = saved?.getBoolean("showPomodoroSettingsDialog") ?: false,
+            startPomodoroAfterSettings = saved?.getBoolean("startPomodoroAfterSettings") ?: false
         )
     })
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
@@ -214,6 +219,8 @@ class HomeViewModel @Inject constructor(
                 putString("plannerTab", state.plannerTab.name)
                 putBoolean("showAddScheduleDialog", state.showAddScheduleDialog)
                 putBoolean("showAddTodoDialog", state.showAddTodoDialog)
+                putBoolean("showPomodoroSettingsDialog", state.showPomodoroSettingsDialog)
+                putBoolean("startPomodoroAfterSettings", state.startPomodoroAfterSettings)
             }
         }
         val savedBundle = savedStateHandle.get<Bundle>("studyTimer")
@@ -1150,21 +1157,41 @@ class HomeViewModel @Inject constructor(
     }
 
     fun updatePomodoroSettings(settings: PomodoroSettings) {
+        if (_uiState.value.isSavingPomodoroSettings || _uiState.value.isRestoringStudySession) return
+        val startAfterSave = _uiState.value.startPomodoroAfterSettings
+        _uiState.value = _uiState.value.copy(isSavingPomodoroSettings = true, pomodoroSettingsError = null)
         viewModelScope.launch {
-            studyPreferencesManager.updatePomodoroSettings(settings)
-            _uiState.value = _uiState.value.copy(
-                pomodoroSettings = settings,
-                showPomodoroSettingsDialog = false
-            )
+            try {
+                studyPreferencesManager.updatePomodoroSettings(settings)
+                _uiState.value = _uiState.value.copy(
+                    pomodoroSettings = settings,
+                    showPomodoroSettingsDialog = false,
+                    startPomodoroAfterSettings = false
+                )
+                if (startAfterSave) {
+                    startPomodoro(settings)
+                    selectMode(StudyMode.IMMERSIVE)
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                _uiState.value = _uiState.value.copy(pomodoroSettingsError = "番茄钟设置保存失败，请重试")
+            } finally {
+                _uiState.value = _uiState.value.copy(isSavingPomodoroSettings = false)
+            }
         }
     }
 
-    fun showPomodoroSettingsDialog() {
-        _uiState.value = _uiState.value.copy(showPomodoroSettingsDialog = true)
+    fun showPomodoroSettingsDialog(startAfterSave: Boolean = false) {
+        if (_uiState.value.isSavingPomodoroSettings) return
+        _uiState.value = _uiState.value.copy(showPomodoroSettingsDialog = true,
+            startPomodoroAfterSettings = startAfterSave, pomodoroSettingsError = null)
     }
 
     fun hidePomodoroSettingsDialog() {
-        _uiState.value = _uiState.value.copy(showPomodoroSettingsDialog = false)
+        if (_uiState.value.isSavingPomodoroSettings) return
+        _uiState.value = _uiState.value.copy(showPomodoroSettingsDialog = false,
+            startPomodoroAfterSettings = false, pomodoroSettingsError = null)
     }
 
     fun showTodoHistory() {
