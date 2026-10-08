@@ -101,6 +101,7 @@ fun HomeScreen(
     onOpenArticle: (Article) -> Unit = {}
 ) {
     val uiState by homeViewModel.uiState.collectAsStateWithLifecycle()
+    val noiseState by homeViewModel.whiteNoisePlayback.state.collectAsStateWithLifecycle()
     val timerState by homeViewModel.timerManager.timerState.collectAsStateWithLifecycle()
     var showCustomTimer by rememberSaveable { mutableStateOf(false) }
     var activeMainTab by rememberSaveable { mutableStateOf(HomeMainTab.BIT) }
@@ -190,6 +191,10 @@ fun HomeScreen(
     // Handle immersive mode
     if (uiState.selectedMode == StudyMode.IMMERSIVE) {
         ImmersiveStudyScreen(
+            noiseState = noiseState,
+            onNoiseSelect = homeViewModel.whiteNoisePlayback::select,
+            onNoiseNone = homeViewModel.whiteNoisePlayback::stop,
+            onNoiseRetry = homeViewModel.whiteNoisePlayback::retry,
             timerManager = homeViewModel.timerManager,
             onExit = { homeViewModel.finishCurrentSessionAndExit() },
             onStop = { homeViewModel.finishCurrentSessionAndExit() },
