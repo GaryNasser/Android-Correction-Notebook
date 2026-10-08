@@ -7,6 +7,8 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -51,7 +53,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.rememberAsyncImagePainter
 import com.github.garynasser.correction_notebook.R
 import com.github.garynasser.correction_notebook.data.model.home.PomodoroPhase
-import com.github.garynasser.correction_notebook.data.model.home.PomodoroSettings
 import com.github.garynasser.correction_notebook.data.model.home.TimerState
 import com.github.garynasser.correction_notebook.domain.usecase.AlertManager
 import com.github.garynasser.correction_notebook.domain.usecase.StudyTimerManager
@@ -78,8 +79,7 @@ fun ImmersiveStudyScreen(
     vibrationEnabled: Boolean = true,
     onSoundEnabledChange: (Boolean) -> Unit = {},
     onVibrationEnabledChange: (Boolean) -> Unit = {},
-    pomodoroSettings: PomodoroSettings = PomodoroSettings(),
-    onPomodoroSettingsSave: (PomodoroSettings) -> Unit = {},
+    onOpenPomodoroSettings: () -> Unit = {},
     isPomodoroMode: Boolean = true
 ) {
     val context = LocalContext.current
@@ -91,7 +91,6 @@ fun ImmersiveStudyScreen(
     var selectedNoise by remember { mutableStateOf<WhiteNoise?>(null) }
     var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
     var alertManager by remember { mutableStateOf<AlertManager?>(null) }
-    var showPomodoroSettingsDialog by remember { mutableStateOf(false) }
     var showControls by remember { mutableStateOf(true) }
     var showMoreSheet by remember { mutableStateOf(false) }
     var isAlerting by remember { mutableStateOf(false) }
@@ -330,22 +329,12 @@ fun ImmersiveStudyScreen(
             onOpenPomodoroSettings = {
                 showMoreSheet = false
                 if (isPomodoroMode) {
-                    showPomodoroSettingsDialog = true
+                    onOpenPomodoroSettings()
                 }
             }
         )
     }
 
-    if (showPomodoroSettingsDialog) {
-        PomodoroSettingsDialog(
-            currentSettings = pomodoroSettings,
-            onDismiss = { showPomodoroSettingsDialog = false },
-            onSave = { settings ->
-                onPomodoroSettingsSave(settings)
-                showPomodoroSettingsDialog = false
-            }
-        )
-    }
 }
 
 @Composable
@@ -415,6 +404,7 @@ private fun ImmersiveMoreSheet(
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = MaterialTheme.colorScheme.surface,
         dragHandle = { BottomSheetDefaults.DragHandle() },
         sheetMaxWidth = 640.dp
@@ -422,8 +412,9 @@ private fun ImmersiveMoreSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Text("沉浸模式选项", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
 

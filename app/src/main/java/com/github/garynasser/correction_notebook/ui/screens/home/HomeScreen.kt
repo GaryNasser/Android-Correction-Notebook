@@ -91,7 +91,6 @@ fun HomeScreen(
     val uiState by homeViewModel.uiState.collectAsStateWithLifecycle()
     val timerState by homeViewModel.timerManager.timerState.collectAsStateWithLifecycle()
     var showCustomTimer by remember { mutableStateOf(false) }
-    var startPomodoroAfterSettings by remember { mutableStateOf(false) }
     var activeMainTab by rememberSaveable { mutableStateOf(HomeMainTab.BIT) }
     val listState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -166,6 +165,16 @@ fun HomeScreen(
         return
     }
 
+    if (uiState.showPomodoroSettingsDialog) {
+        PomodoroSettingsDialog(
+            currentSettings = uiState.pomodoroSettings,
+            onDismiss = homeViewModel::hidePomodoroSettingsDialog,
+            onSave = homeViewModel::updatePomodoroSettings,
+            isSaving = uiState.isSavingPomodoroSettings,
+            errorMessage = uiState.pomodoroSettingsError
+        )
+    }
+
     // Handle immersive mode
     if (uiState.selectedMode == StudyMode.IMMERSIVE) {
         ImmersiveStudyScreen(
@@ -181,8 +190,7 @@ fun HomeScreen(
             vibrationEnabled = uiState.vibrationEnabled,
             onSoundEnabledChange = { homeViewModel.setSoundEnabled(it) },
             onVibrationEnabledChange = { homeViewModel.setVibrationEnabled(it) },
-            pomodoroSettings = uiState.pomodoroSettings,
-            onPomodoroSettingsSave = { settings -> homeViewModel.updatePomodoroSettings(settings) },
+            onOpenPomodoroSettings = { homeViewModel.showPomodoroSettingsDialog() },
             isPomodoroMode = uiState.activeTimerMode == ActiveTimerMode.POMODORO
         )
         return
@@ -370,8 +378,7 @@ fun HomeScreen(
                 homeViewModel.hideModeSelector()
                 when (mode) {
                     "pomodoro" -> {
-                        startPomodoroAfterSettings = true
-                        homeViewModel.showPomodoroSettingsDialog()
+                        homeViewModel.showPomodoroSettingsDialog(startAfterSave = true)
                     }
                     "countdown" -> {
                         showCustomTimer = true
@@ -403,24 +410,6 @@ fun HomeScreen(
         )
     }
 
-    // Pomodoro Settings Dialog
-    if (uiState.showPomodoroSettingsDialog) {
-        PomodoroSettingsDialog(
-            currentSettings = uiState.pomodoroSettings,
-            onDismiss = {
-                startPomodoroAfterSettings = false
-                homeViewModel.hidePomodoroSettingsDialog()
-            },
-            onSave = { settings ->
-                homeViewModel.updatePomodoroSettings(settings)
-                if (startPomodoroAfterSettings) {
-                    homeViewModel.startPomodoro(settings)
-                    homeViewModel.selectMode(StudyMode.IMMERSIVE)
-                    startPomodoroAfterSettings = false
-                }
-            }
-        )
-    }
 }
 
 @Composable

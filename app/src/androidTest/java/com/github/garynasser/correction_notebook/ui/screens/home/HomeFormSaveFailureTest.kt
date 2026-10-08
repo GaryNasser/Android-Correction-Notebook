@@ -465,9 +465,11 @@ class HomeFormSaveFailureTest {
     internal class Fixture(private val articleApi: ArticleApiService? = null) {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-        val files = listOf("todo", "schedule").map { File(context.cacheDir, "home-form-$it-${UUID.randomUUID()}.preferences_pb") }
+        val files = listOf("todo", "schedule", "study").map { File(context.cacheDir, "home-form-$it-${UUID.randomUUID()}.preferences_pb") }
         val todoWrites = ControlledWrites(PreferenceDataStoreFactory.create(scope = scope) { files[0] })
         val scheduleWrites = ControlledWrites(PreferenceDataStoreFactory.create(scope = scope) { files[1] })
+        val studyWrites = ControlledWrites(PreferenceDataStoreFactory.create(scope = scope) { files[2] })
+        val studyPreferences = StudyPreferencesManager(studyWrites)
         val todos = TodoRepository(todoWrites)
         val schedules = ScheduleRepository(scheduleWrites)
         val database = Room.inMemoryDatabaseBuilder(context, AiDatabase::class.java).build()
@@ -494,7 +496,7 @@ class HomeFormSaveFailureTest {
             val articles = articleApi ?: object : ArticleApiService by retrofit.create(ArticleApiService::class.java) {
                 override suspend fun getRecommendedArticles() = ApiResponse<List<ArticleDto>>(200, data = emptyList())
             }
-            home = HomeViewModel(todos, ArticleRepository(articles), StudyPreferencesManager(context), sessions, TodoHistoryRepository(context),
+            home = HomeViewModel(todos, ArticleRepository(articles), studyPreferences, sessions, TodoHistoryRepository(context),
                 schedules, IcsImportRepository(context, schedules), SchoolScheduleRepository(CredentialManager(context),
                     SchoolScheduleRemoteDataSource(BitCasClient(network), network), schedules, SchoolScheduleMapper()),
                 learning, repository, StudySetRepository(dao), useCase, context, savedStateHandle)
