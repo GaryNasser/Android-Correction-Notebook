@@ -62,6 +62,7 @@ import com.github.garynasser.correction_notebook.data.model.ai.AiActionType
 import com.github.garynasser.correction_notebook.data.model.ai.AiPlanBlock
 import com.github.garynasser.correction_notebook.data.model.home.ImportDecision
 import com.github.garynasser.correction_notebook.data.model.home.PlannerTab
+import com.github.garynasser.correction_notebook.data.model.home.PomodoroSettings
 import com.github.garynasser.correction_notebook.data.model.home.ScheduleOccurrence
 import com.github.garynasser.correction_notebook.data.model.home.ScheduleSection
 import com.github.garynasser.correction_notebook.data.model.home.ScheduleSourceType
@@ -199,6 +200,10 @@ fun HomeScreen(
             backgroundImageUri = uiState.backgroundImageUri,
             soundEnabled = uiState.soundEnabled,
             vibrationEnabled = uiState.vibrationEnabled,
+            isSavingSoundSetting = uiState.isSavingSoundSetting,
+            isSavingVibrationSetting = uiState.isSavingVibrationSetting,
+            soundSettingError = uiState.soundSettingError,
+            vibrationSettingError = uiState.vibrationSettingError,
             onSoundEnabledChange = { homeViewModel.setSoundEnabled(it) },
             onVibrationEnabledChange = { homeViewModel.setVibrationEnabled(it) },
             onOpenPomodoroSettings = { homeViewModel.showPomodoroSettingsDialog() },
@@ -382,6 +387,7 @@ fun HomeScreen(
     // Mode Selector Dialog
     if (uiState.showModeSelector) {
         ModeSelectorDialog(
+            pomodoroSettings = uiState.pomodoroSettings,
             currentBackgroundUri = uiState.backgroundImageUri,
             isBackgroundBusy = uiState.isSavingBackgroundImage,
             onDismiss = { homeViewModel.hideModeSelector() },
@@ -2377,7 +2383,8 @@ fun ModeSelectorDialog(
     onDismiss: () -> Unit,
     onModeSelected: (String) -> Unit,
     onSelectBackground: () -> Unit,
-    onClearBackground: () -> Unit
+    onClearBackground: () -> Unit,
+    pomodoroSettings: PomodoroSettings = PomodoroSettings()
 ) {
     AlertDialog(
         onDismissRequest = { if (!isBackgroundBusy) onDismiss() },
@@ -2399,7 +2406,7 @@ fun ModeSelectorDialog(
                 ModeOption(
                     icon = Icons.Default.Timer,
                     title = "番茄钟",
-                    description = "25分钟专注，5分钟休息",
+                    description = "${pomodoroSettings.focusMinutes} 分钟专注，${pomodoroSettings.shortBreakMinutes} 分钟休息",
                     onClick = { onModeSelected("pomodoro") }
                 )
                 ModeOption(
@@ -2526,10 +2533,9 @@ fun ModeOption(
                 Text(text = title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                 Text(
                     text = description,
+                    modifier = Modifier.fillMaxWidth(),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
