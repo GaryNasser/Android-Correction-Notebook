@@ -1,22 +1,42 @@
 package com.github.garynasser.correction_notebook.data.local
 
-import android.content.Context
-import android.net.Uri
+import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.IOException
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.*
-import androidx.datastore.preferences.preferencesDataStore
 import com.github.garynasser.correction_notebook.data.model.home.PomodoroSettings
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import java.io.File
 import java.time.LocalDate
 
-private val Context.studyDataStore: DataStore<Preferences> by preferencesDataStore("study_prefs")
+internal fun createStudyPreferencesDataStore(
+    file: File,
+    scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+): DataStore<Preferences> = PreferenceDataStoreFactory.create(
+    scope = scope,
+    corruptionHandler = ReplaceFileCorruptionHandler {
+        // Do not replace unreadable settings unless their original bytes can be preserved.
+        val backup = File.createTempFile("study-prefs-corrupt-", ".pb", file.parentFile)
+        try {
+            file.copyTo(backup, overwrite = true)
+        } catch (error: Exception) {
+            backup.delete()
+            throw error
+        }
+        Log.w("StudyPreferences", "Corrupt study settings backed up; restoring defaults")
+        emptyPreferences()
+    },
+    produceFile = { file }
+)
 
 class StudyPreferencesManager internal constructor(private val dataStore: DataStore<Preferences>) {
-    constructor(context: Context) : this(context.studyDataStore)
 
     companion object {
         private val TODO_ITEMS_KEY = stringPreferencesKey("todo_items")

@@ -1,7 +1,9 @@
 package com.github.garynasser.correction_notebook.di
 
 import android.content.Context
+import androidx.datastore.preferences.preferencesDataStoreFile
 import com.github.garynasser.correction_notebook.data.local.StudyPreferencesManager
+import com.github.garynasser.correction_notebook.data.local.createStudyPreferencesDataStore
 import com.github.garynasser.correction_notebook.data.remote.api.ArticleApiService
 import com.github.garynasser.correction_notebook.data.repository.ArticleRepository
 import com.github.garynasser.correction_notebook.data.repository.CourseLearningRepository
@@ -26,7 +28,7 @@ object HomeModule {
     fun provideStudyPreferencesManager(
         @ApplicationContext context: Context
     ): StudyPreferencesManager {
-        return StudyPreferencesManager(context)
+        return StudyPreferencesManager(createStudyPreferencesDataStore(context.preferencesDataStoreFile("study_prefs")))
     }
 
     @Provides
