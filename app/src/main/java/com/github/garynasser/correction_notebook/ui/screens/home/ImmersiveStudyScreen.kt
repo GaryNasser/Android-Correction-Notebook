@@ -9,6 +9,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -41,6 +42,12 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -80,7 +87,11 @@ fun ImmersiveStudyScreen(
     onSoundEnabledChange: (Boolean) -> Unit = {},
     onVibrationEnabledChange: (Boolean) -> Unit = {},
     onOpenPomodoroSettings: () -> Unit = {},
-    isPomodoroMode: Boolean = true
+    isPomodoroMode: Boolean = true,
+    isSavingSoundSetting: Boolean = false,
+    isSavingVibrationSetting: Boolean = false,
+    soundSettingError: String? = null,
+    vibrationSettingError: String? = null
 ) {
     val context = LocalContext.current
     val timerState by timerManager.timerState.collectAsStateWithLifecycle()
@@ -305,6 +316,10 @@ fun ImmersiveStudyScreen(
             selectedNoise = selectedNoise,
             soundEnabled = soundEnabled,
             vibrationEnabled = vibrationEnabled,
+            isSavingSoundSetting = isSavingSoundSetting,
+            isSavingVibrationSetting = isSavingVibrationSetting,
+            soundSettingError = soundSettingError,
+            vibrationSettingError = vibrationSettingError,
             isPomodoroMode = isPomodoroMode,
             onDismiss = { showMoreSheet = false },
             onNoiseSelect = { noise ->
@@ -324,8 +339,8 @@ fun ImmersiveStudyScreen(
                 mediaPlayer = null
                 selectedNoise = null
             },
-            onSoundToggle = { onSoundEnabledChange(!soundEnabled) },
-            onVibrationToggle = { onVibrationEnabledChange(!vibrationEnabled) },
+            onSoundChange = onSoundEnabledChange,
+            onVibrationChange = onVibrationEnabledChange,
             onOpenPomodoroSettings = {
                 showMoreSheet = false
                 if (isPomodoroMode) {
@@ -396,8 +411,12 @@ private fun ImmersiveMoreSheet(
     onNoiseNone: () -> Unit,
     soundEnabled: Boolean,
     vibrationEnabled: Boolean,
-    onSoundToggle: () -> Unit,
-    onVibrationToggle: () -> Unit,
+    isSavingSoundSetting: Boolean,
+    isSavingVibrationSetting: Boolean,
+    soundSettingError: String?,
+    vibrationSettingError: String?,
+    onSoundChange: (Boolean) -> Unit,
+    onVibrationChange: (Boolean) -> Unit,
     isPomodoroMode: Boolean = true,
     onDismiss: () -> Unit,
     onOpenPomodoroSettings: () -> Unit
@@ -418,22 +437,8 @@ private fun ImmersiveMoreSheet(
         ) {
             Text("沉浸模式选项", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("提醒声音", style = MaterialTheme.typography.bodyMedium)
-                Switch(checked = soundEnabled, onCheckedChange = { onSoundToggle() })
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("震动提醒", style = MaterialTheme.typography.bodyMedium)
-                Switch(checked = vibrationEnabled, onCheckedChange = { onVibrationToggle() })
-            }
+            AlertSettingRow("提醒声音", soundEnabled, isSavingSoundSetting, soundSettingError, onSoundChange)
+            AlertSettingRow("振动提醒", vibrationEnabled, isSavingVibrationSetting, vibrationSettingError, onVibrationChange)
 
             if (isPomodoroMode) {
                 OutlinedButton(
@@ -441,7 +446,7 @@ private fun ImmersiveMoreSheet(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(44.dp),
-                    shape = CircleShape
+                    shape = RoundedCornerShape(8.dp)
                 ) {
                     Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
@@ -463,6 +468,37 @@ private fun ImmersiveMoreSheet(
             }
 
             Spacer(modifier = Modifier.height(4.dp))
+        }
+    }
+}
+
+@Composable
+private fun AlertSettingRow(
+    label: String,
+    checked: Boolean,
+    isSaving: Boolean,
+    error: String?,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                .toggleable(checked, enabled = !isSaving, role = Role.Switch, onValueChange = onCheckedChange)
+                .semantics {
+                    if (isSaving) stateDescription = if (checked) "保存中，当前已开启" else "保存中，当前已关闭"
+                },
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+            if (isSaving) {
+                CircularProgressIndicator(Modifier.size(16.dp).clearAndSetSemantics {}, strokeWidth = 2.dp)
+                Spacer(Modifier.width(8.dp))
+            }
+            Switch(checked = checked, onCheckedChange = null, enabled = !isSaving)
+        }
+        if (error != null) {
+            Text(error, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
         }
     }
 }

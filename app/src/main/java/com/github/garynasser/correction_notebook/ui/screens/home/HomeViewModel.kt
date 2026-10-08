@@ -122,6 +122,10 @@ data class HomeUiState(
     val pendingIcsPreview: IcsImportPreview? = null,
     val soundEnabled: Boolean = true,
     val vibrationEnabled: Boolean = true,
+    val isSavingSoundSetting: Boolean = false,
+    val isSavingVibrationSetting: Boolean = false,
+    val soundSettingError: String? = null,
+    val vibrationSettingError: String? = null,
     val aiAdvice: String? = null,
     val aiPlanBlocks: List<AiPlanBlock> = emptyList(),
     val aiActions: List<AiAction> = emptyList(),
@@ -317,16 +321,36 @@ class HomeViewModel @Inject constructor(
     }
 
     fun setSoundEnabled(enabled: Boolean) {
+        if (_uiState.value.isSavingSoundSetting) return
+        _uiState.value = _uiState.value.copy(isSavingSoundSetting = true, soundSettingError = null)
         viewModelScope.launch {
-            studyPreferencesManager.setSoundEnabled(enabled)
-            _uiState.value = _uiState.value.copy(soundEnabled = enabled)
+            try {
+                studyPreferencesManager.setSoundEnabled(enabled)
+                _uiState.value = _uiState.value.copy(soundEnabled = enabled)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                _uiState.value = _uiState.value.copy(soundSettingError = "提醒声音保存失败，请重试")
+            } finally {
+                _uiState.value = _uiState.value.copy(isSavingSoundSetting = false)
+            }
         }
     }
 
     fun setVibrationEnabled(enabled: Boolean) {
+        if (_uiState.value.isSavingVibrationSetting) return
+        _uiState.value = _uiState.value.copy(isSavingVibrationSetting = true, vibrationSettingError = null)
         viewModelScope.launch {
-            studyPreferencesManager.setVibrationEnabled(enabled)
-            _uiState.value = _uiState.value.copy(vibrationEnabled = enabled)
+            try {
+                studyPreferencesManager.setVibrationEnabled(enabled)
+                _uiState.value = _uiState.value.copy(vibrationEnabled = enabled)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                _uiState.value = _uiState.value.copy(vibrationSettingError = "振动提醒保存失败，请重试")
+            } finally {
+                _uiState.value = _uiState.value.copy(isSavingVibrationSetting = false)
+            }
         }
     }
 
