@@ -73,7 +73,7 @@ class ArticleDetailViewModel @Inject constructor(
                     isLoading = false,
                     isRefreshing = false,
                     articleDetail = currentDetail,
-                    errorMessage = throwable.message?.takeIf { it.isNotBlank() } ?: "文章加载失败",
+                    errorMessage = articleErrorMessage(throwable, "文章加载失败，请稍后重试"),
                     fallbackUrl = currentDetail?.url ?: args.fallbackUrl
                 )
             }

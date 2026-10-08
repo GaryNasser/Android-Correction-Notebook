@@ -1,6 +1,5 @@
 package com.github.garynasser.correction_notebook.ui.screens.home
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -10,12 +9,18 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -24,6 +29,7 @@ import com.github.garynasser.correction_notebook.data.model.home.Article
 import java.text.SimpleDateFormat
 import java.util.*
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ArticlesSection(
     articles: List<Article>,
@@ -50,18 +56,20 @@ fun ArticlesSection(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            TextButton(
-                onClick = onRefresh,
-                enabled = !isLoading,
-                modifier = Modifier.widthIn(min = 76.dp)
+            TooltipBox(
+                positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
+                tooltip = { PlainTooltip { Text("刷新推荐") } },
+                state = rememberTooltipState()
             ) {
-                if (isLoading) {
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                } else {
-                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                IconButton(onClick = onRefresh, enabled = !isLoading, modifier = Modifier.semantics {
+                    contentDescription = if (isLoading) "正在刷新推荐" else "刷新推荐"
+                }) {
+                    if (isLoading) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(20.dp))
+                    }
                 }
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("刷新")
             }
         }
         when {
@@ -69,31 +77,27 @@ fun ArticlesSection(
                 ArticleLoadingRow()
             }
             errorMessage != null && articles.isEmpty() -> {
-                ArticleMessageCard(
+                ArticleMessageRow(
                     title = "推荐内容加载失败",
                     description = errorMessage,
-                    actionLabel = "重试",
                     onAction = onRefresh,
                     isError = true
                 )
             }
             articles.isEmpty() -> {
-                ArticleMessageCard(
+                ArticleMessageRow(
                     title = "暂时还没有推荐内容",
-                    description = "稍后刷新看看，或等待后端推送新的学习文章。"
+                    description = "暂时没有可展示的文章。"
                 )
             }
             else -> {
                 if (errorMessage != null) {
-                    ArticleMessageCard(
+                    ArticleMessageRow(
                         title = "推荐内容刷新失败",
                         description = errorMessage,
-                        actionLabel = "重试",
                         onAction = onRefresh,
-                        compact = true,
                         isError = true
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
                 }
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -153,52 +157,48 @@ private fun ArticleLoadingRow() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ArticleMessageCard(
+private fun ArticleMessageRow(
     title: String,
     description: String,
-    actionLabel: String? = null,
     onAction: (() -> Unit)? = null,
-    compact: Boolean = false,
     isError: Boolean = false
 ) {
-    Card(
-        shape = RoundedCornerShape(8.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isError) {
-                MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.68f)
-            } else {
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-            }
-        ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
+        Icon(
+            imageVector = if (isError) Icons.Default.Warning else Icons.Default.Info,
+            contentDescription = null,
+            modifier = Modifier.size(20.dp),
+            tint = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+        )
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(if (compact) 12.dp else 16.dp),
-            verticalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 8.dp)
+            modifier = Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite },
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleSmall,
+                style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.SemiBold
             )
             Text(
                 text = description,
                 style = MaterialTheme.typography.bodySmall,
-                color = if (isError) {
-                    MaterialTheme.colorScheme.onErrorContainer
-                } else {
-                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
-                }
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            if (actionLabel != null && onAction != null) {
-                TextButton(
-                    onClick = onAction,
-                    contentPadding = PaddingValues(0.dp)
-                ) {
-                    Text(actionLabel)
+        }
+        if (onAction != null) {
+            TooltipBox(
+                positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
+                tooltip = { PlainTooltip { Text("重试推荐") } },
+                state = rememberTooltipState()
+            ) {
+                IconButton(onClick = onAction) {
+                    Icon(Icons.Default.Refresh, contentDescription = "重试推荐", modifier = Modifier.size(20.dp))
                 }
             }
         }
