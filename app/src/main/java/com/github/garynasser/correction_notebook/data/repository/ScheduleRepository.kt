@@ -44,7 +44,7 @@ class ScheduleRepository internal constructor(private val dataStore: DataStore<P
     suspend fun addEvent(event: ScheduleEvent) {
         dataStore.edit { prefs ->
             val current = prefs[scheduleEventsKey]?.let(SchedulePreferenceCodec::parseEvents) ?: emptyList()
-            prefs[scheduleEventsKey] = SchedulePreferenceCodec.serializeEvents(current + event)
+            prefs[scheduleEventsKey] = SchedulePreferenceCodec.serializeEvents(current.filterNot { it.id == event.id } + event)
         }
     }
 

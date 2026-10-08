@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.github.garynasser.correction_notebook.data.model.home.TodoItem
+import java.util.UUID
 
 private const val MaxTodoTitleLength = 60
 private const val MaxTodoDescriptionLength = 180
@@ -46,6 +47,7 @@ fun AddTodoDialog(
     onDismiss: () -> Unit,
     onAdd: (TodoItem) -> Unit
 ) {
+    val draftId = rememberSaveable { UUID.randomUUID().toString() }
     var title by rememberSaveable { mutableStateOf("") }
     var description by rememberSaveable { mutableStateOf("") }
     val canAdd = title.isNotBlank() && !isSaving
@@ -64,7 +66,7 @@ fun AddTodoDialog(
             if (canAdd) {
                 focusManager.clearFocus()
                 keyboard?.hide()
-                onAdd(TodoItem(title = title.trim(), description = description.trim()))
+                onAdd(TodoItem(id = draftId, title = title.trim(), description = description.trim()))
             }
         }
         BoxWithConstraints(

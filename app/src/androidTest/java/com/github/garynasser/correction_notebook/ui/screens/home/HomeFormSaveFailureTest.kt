@@ -5,12 +5,14 @@ import android.annotation.SuppressLint
 import android.os.Bundle
 import android.os.Parcel
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import androidx.datastore.core.DataStore
@@ -62,6 +64,148 @@ import java.util.concurrent.atomic.AtomicInteger
 class HomeFormSaveFailureTest {
     @get:Rule val compose = createComposeRule()
 
+    @Test fun scheduleDraftRestoresWithItsOwnerAndSavesAllFieldsOnce() = withFixture { f ->
+        val restoration = StateRestorationTester(compose)
+        val date = LocalDate.of(2026, 12, 31)
+        withContext(Dispatchers.Main) { f.home.setSelectedWeek(date) }
+        render(f, restoration)
+        compose.onNodeWithContentDescription("添加日程").performClick()
+        compose.onNodeWithText("活动标题").performTextReplacement(TITLE)
+        compose.onNodeWithText("地点").performTextReplacement(LOCATION)
+        compose.onNodeWithText("备注").performTextReplacement(NOTES)
+        compose.onNodeWithContentDescription("开始小时").performScrollTo().performTextReplacement("12")
+        compose.onNodeWithContentDescription("开始分钟").performTextReplacement("35")
+        compose.onNodeWithContentDescription("结束小时").performScrollTo().performTextReplacement("13")
+        withContext(Dispatchers.Main) { f.create(recreatedHandle(f.homeSavedState)) }
+        restoration.emulateSavedInstanceStateRestore()
+        compose.onNodeWithText(TITLE).assertExists()
+        compose.onNodeWithText(LOCATION).assertExists()
+        compose.onNodeWithText(NOTES).assertExists()
+        assertTrue(f.home.uiState.value.showAddScheduleDialog)
+        assertFalse(f.home.uiState.value.isEditingSchedule)
+        assertEquals(0, f.scheduleWrites.attempts.get())
+        capture("schedule-draft-restored")
+        compose.onNodeWithContentDescription("保存").performClick()
+        f.await { !f.home.uiState.value.showAddScheduleDialog }
+        val saved = f.schedules.scheduleEvents.first().single()
+        assertEquals(TITLE, saved.title)
+        assertEquals(LOCATION, saved.location)
+        assertEquals(NOTES, saved.description)
+        assertEquals(date.atTime(12, 35), saved.startAt)
+        assertEquals(date.atTime(13, 0), saved.endAt)
+        withContext(Dispatchers.Main) { f.create(recreatedHandle(f.homeSavedState)) }
+        restoration.emulateSavedInstanceStateRestore()
+        compose.onNodeWithContentDescription("保存").assertDoesNotExist()
+        assertFalse(f.home.uiState.value.showAddScheduleDialog)
+        assertEquals(1, f.scheduleWrites.attempts.get())
+    }
+
+    @Test fun todoDraftRestoresWithItsOwnerAndCancellationDoesNotReopenIt() = withFixture { f ->
+        val restoration = StateRestorationTester(compose)
+        render(f, restoration)
+        openTodo()
+        compose.onNodeWithText("标题").performTextReplacement(TITLE)
+        compose.onNodeWithText("备注（可选）").performTextReplacement(NOTES)
+        withContext(Dispatchers.Main) { f.create(recreatedHandle(f.homeSavedState)) }
+        restoration.emulateSavedInstanceStateRestore()
+        compose.onNodeWithText(TITLE).assertExists()
+        compose.onNodeWithText(NOTES).assertExists()
+        assertTrue(f.home.uiState.value.showAddTodoDialog)
+        assertFalse(f.home.uiState.value.isAddingTodo)
+        assertEquals(0, f.todoWrites.attempts.get())
+        capture("todo-draft-restored")
+        compose.onNodeWithContentDescription("取消").performClick()
+        withContext(Dispatchers.Main) { f.create(recreatedHandle(f.homeSavedState)) }
+        restoration.emulateSavedInstanceStateRestore()
+        compose.onNodeWithContentDescription("添加").assertDoesNotExist()
+        assertFalse(f.home.uiState.value.showAddTodoDialog)
+        assertTrue(f.todos.todoItems.first().isEmpty())
+        compose.onNodeWithContentDescription("添加待办").performClick()
+        compose.onNodeWithText(TITLE).assertDoesNotExist()
+        compose.onNodeWithContentDescription("添加").assertIsNotEnabled()
+    }
+
+    @Test fun replayingAScheduleSaveUpdatesItsRecordWithoutDuplicatingIt() = withFixture { f ->
+        val start = LocalDate.of(2026, 12, 31).atTime(9, 0)
+        val first = ScheduleEvent(id = "restored-draft", title = TITLE, startAt = start, endAt = start.plusHours(1))
+        val unrelated = first.copy(id = "other-draft", title = "另一条日程")
+        f.schedules.addEvent(first)
+        f.schedules.addEvent(unrelated)
+        val retry = first.copy(title = "修改后的日程", location = LOCATION, description = NOTES, startAt = start.plusMinutes(15))
+        f.schedules.addEvent(retry)
+        val records = f.schedules.scheduleEvents.first()
+        assertEquals(2, records.size)
+        assertEquals(retry, records.single { it.id == first.id })
+        assertEquals(unrelated, records.single { it.id == unrelated.id })
+    }
+
+    @Test fun replayingATodoSaveKeepsItsCreationAndCompletionMetadata() = withFixture { f ->
+        val first = TodoItem(id = "restored-draft", title = TITLE, createdAt = 100, isCompleted = true, completedAt = 200)
+        val unrelated = TodoItem(id = "other-draft", title = "另一条待办", createdAt = 300)
+        f.todos.addTodo(first)
+        f.todos.addTodo(unrelated)
+        val retry = first.copy(title = "修改后的待办", description = NOTES, createdAt = 400, isCompleted = false, completedAt = null)
+        f.todos.addTodo(retry)
+        val records = f.todos.todoItems.first()
+        assertEquals(2, records.size)
+        assertEquals(retry.copy(createdAt = 100, isCompleted = true, completedAt = 200), records.single { it.id == first.id })
+        assertEquals(unrelated, records.single { it.id == unrelated.id })
+    }
+
+    @Test fun restoringAnInterruptedScheduleSaveLeavesAReadyDraftWithoutAutomaticallyWriting() = withFixture { f ->
+        val restoration = StateRestorationTester(compose)
+        render(f, restoration)
+        compose.onNodeWithContentDescription("添加日程").performClick()
+        compose.onNodeWithText("活动标题").performTextReplacement(TITLE)
+        compose.onNodeWithText("地点").performTextReplacement(LOCATION)
+        f.scheduleWrites.gate = CompletableDeferred()
+        compose.onNodeWithContentDescription("保存").performClick()
+        f.await { f.scheduleWrites.attempts.get() == 1 }
+        compose.onNodeWithContentDescription("保存中").assertIsNotEnabled()
+        withContext(Dispatchers.Main) { f.create(recreatedHandle(f.homeSavedState)) }
+        restoration.emulateSavedInstanceStateRestore()
+        compose.onNodeWithText(TITLE).assertExists()
+        compose.onNodeWithContentDescription("保存").assertIsEnabled()
+        compose.onNodeWithContentDescription("取消").assertIsEnabled()
+        assertFalse(f.home.uiState.value.isEditingSchedule)
+        assertEquals(1, f.scheduleWrites.attempts.get())
+        assertTrue(f.schedules.scheduleEvents.first().isEmpty())
+        f.scheduleWrites.gate?.complete(Unit)
+        compose.onNodeWithContentDescription("保存").performClick()
+        f.await { !f.home.uiState.value.showAddScheduleDialog }
+        assertEquals(2, f.scheduleWrites.attempts.get())
+        val saved = f.schedules.scheduleEvents.first().single()
+        assertEquals(TITLE, saved.title)
+        assertEquals(LOCATION, saved.location)
+    }
+
+    @Test fun restoringAnInterruptedTodoSaveLeavesAReadyDraftWithoutAutomaticallyWriting() = withFixture { f ->
+        val restoration = StateRestorationTester(compose)
+        render(f, restoration)
+        openTodo()
+        compose.onNodeWithText("标题").performTextReplacement(TITLE)
+        compose.onNodeWithText("备注（可选）").performTextReplacement(NOTES)
+        f.todoWrites.gate = CompletableDeferred()
+        compose.onNodeWithContentDescription("添加").performClick()
+        f.await { f.todoWrites.attempts.get() == 1 }
+        compose.onNodeWithContentDescription("添加中").assertIsNotEnabled()
+        withContext(Dispatchers.Main) { f.create(recreatedHandle(f.homeSavedState)) }
+        restoration.emulateSavedInstanceStateRestore()
+        compose.onNodeWithText(TITLE).assertExists()
+        compose.onNodeWithContentDescription("添加").assertIsEnabled()
+        compose.onNodeWithContentDescription("取消").assertIsEnabled()
+        assertFalse(f.home.uiState.value.isAddingTodo)
+        assertEquals(1, f.todoWrites.attempts.get())
+        assertTrue(f.todos.todoItems.first().isEmpty())
+        f.todoWrites.gate?.complete(Unit)
+        compose.onNodeWithContentDescription("添加").performClick()
+        f.await { !f.home.uiState.value.showAddTodoDialog }
+        assertEquals(2, f.todoWrites.attempts.get())
+        val saved = f.todos.todoItems.first().single()
+        assertEquals(TITLE, saved.title)
+        assertEquals(NOTES, saved.description)
+    }
+
     @Test fun scheduleCreationAfterViewModelRestorationUsesTheSelectedWeekAndDate() = withFixture { f ->
         val date = LocalDate.of(2026, 12, 31)
         val days = visibleBitWeekDays(date)
@@ -69,10 +213,10 @@ class HomeFormSaveFailureTest {
             f.schedules.addEvent(ScheduleEvent(title = "跨年课程 $index", startAt = day.atTime(9, 0), endAt = day.atTime(10, 0)))
         }
         withContext(Dispatchers.Main) { f.home.setSelectedWeek(date) }
-        f.await { f.home.uiState.value.scheduleSections.flatMap { it.items }.size == 2 }
+        f.await("Load the original cross-year week") { f.home.uiState.value.scheduleSections.flatMap { it.items }.size == 2 }
         withContext(Dispatchers.Main) { f.create(recreatedHandle(f.homeSavedState)) }
         assertEquals(date, f.home.uiState.value.selectedDate)
-        f.await { f.home.uiState.value.scheduleSections.flatMap { it.items }.size == 2 }
+        f.await("Load the restored cross-year week") { f.home.uiState.value.scheduleSections.flatMap { it.items }.size == 2 }
         assertEquals(days, f.home.uiState.value.scheduleSections.map { it.date })
         render(f)
         days.forEach { day -> compose.onNodeWithText(day.format(DateTimeFormatter.ofPattern("MM/dd"))).assertIsDisplayed() }
@@ -80,7 +224,7 @@ class HomeFormSaveFailureTest {
         compose.onNodeWithText("2026/12/31").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("活动标题").performTextReplacement(TITLE)
         compose.onNodeWithContentDescription("保存").performClick()
-        f.await { !f.home.uiState.value.showAddScheduleDialog }
+        f.await("Save the restored week's new event") { !f.home.uiState.value.showAddScheduleDialog }
         val added = f.schedules.scheduleEvents.first().single { it.title == TITLE }
         assertEquals(date.atTime(9, 0), added.startAt)
         assertEquals(date.atTime(10, 0), added.endAt)
@@ -241,14 +385,15 @@ class HomeFormSaveFailureTest {
         compose.onNodeWithContentDescription("保存").assertIsNotEnabled()
     }
 
-    private fun render(f: Fixture) {
+    private fun render(f: Fixture, restoration: StateRestorationTester? = null) {
         val dark = InstrumentationRegistry.getArguments().getString("qaDark") == "true"
-        compose.setContent {
+        val content: @Composable () -> Unit = {
             CompositionLocalProvider(LocalAiEnabled provides false,
                 LocalDensity provides Density(LocalDensity.current.density, 1.3f)) {
                 CorrectionNotebookTheme(darkTheme = dark) { HomeScreen(f.home, f.statistics) }
             }
         }
+        if (restoration != null) restoration.setContent(content) else compose.setContent(content)
     }
 
     private fun assertFormError(message: String) {
@@ -357,7 +502,17 @@ class HomeFormSaveFailureTest {
             store.put("home", home)
             store.put("statistics", statistics)
         }
-        suspend fun await(predicate: () -> Boolean) = withTimeout(5_000) { while (!predicate()) delay(10) }
+        suspend fun await(step: String = "Update home state", predicate: () -> Boolean) {
+            try {
+                withTimeout(5_000) { while (!predicate()) delay(10) }
+            } catch (failure: TimeoutCancellationException) {
+                val state = home.uiState.value
+                throw AssertionError("$step: date=${state.selectedDate}, range=${state.scheduleRange}, " +
+                    "events=${state.scheduleSections.flatMap { it.items }.size}, " +
+                    "form=${state.showAddScheduleDialog}, saving=${state.isEditingSchedule}, " +
+                    "error=${state.addScheduleError}, writes=${scheduleWrites.attempts.get()}", failure)
+            }
+        }
     }
 
     companion object {

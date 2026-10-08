@@ -198,7 +198,9 @@ class HomeViewModel @Inject constructor(
             scheduleRange = ScheduleRange.entries.firstOrNull { it.name == saved?.getString("scheduleRange") }
                 ?: initial.scheduleRange,
             plannerTab = PlannerTab.entries.firstOrNull { it.name == saved?.getString("plannerTab") }
-                ?: initial.plannerTab
+                ?: initial.plannerTab,
+            showAddScheduleDialog = saved?.getBoolean("showAddScheduleDialog") ?: false,
+            showAddTodoDialog = saved?.getBoolean("showAddTodoDialog") ?: false
         )
     })
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
@@ -210,6 +212,8 @@ class HomeViewModel @Inject constructor(
                 putString("selectedDate", state.selectedDate.toString())
                 putString("scheduleRange", state.scheduleRange.name)
                 putString("plannerTab", state.plannerTab.name)
+                putBoolean("showAddScheduleDialog", state.showAddScheduleDialog)
+                putBoolean("showAddTodoDialog", state.showAddTodoDialog)
             }
         }
         val savedBundle = savedStateHandle.get<Bundle>("studyTimer")
@@ -455,9 +459,8 @@ class HomeViewModel @Inject constructor(
     }
 
     private suspend fun refreshTodayScheduleCount(targetDate: LocalDate = LocalDate.now()) {
-        _uiState.value = _uiState.value.copy(
-            todayScheduleCount = todayScheduleItems(targetDate).size
-        )
+        val count = todayScheduleItems(targetDate).size
+        _uiState.value = _uiState.value.copy(todayScheduleCount = count)
     }
 
     fun showAddTodoDialog() {
