@@ -1,10 +1,12 @@
 package com.github.garynasser.correction_notebook.ui.screens.knowledgebase
 
 import android.net.Uri
+import android.os.Bundle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitShareFileDetail
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitShareSearchResult
@@ -32,6 +34,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.transform
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.OffsetDateTime
@@ -156,15 +159,31 @@ internal fun isLatestRemoteSearch(requestId: Long, latestRequestId: Long): Boole
 class KnowledgeBaseViewModel @Inject constructor(
     private val knowledgeBaseRepository: KnowledgeBaseRepository,
     private val bitShareRepository: BitShareRepository,
-    private val studySetRepository: StudySetRepository
+    private val studySetRepository: StudySetRepository,
+    savedStateHandle: SavedStateHandle = SavedStateHandle()
 ) : ViewModel() {
 
-    private val selectedTabIndex = MutableStateFlow(0)
-    private val currentFolderId = MutableStateFlow<String?>(null)
-    private val localSearchQuery = MutableStateFlow("")
+    private val restoredNavigation = savedStateHandle.get<Bundle>("knowledgeNavigation")
+    private val selectedTabIndex = MutableStateFlow(restoredNavigation?.getInt("tab")?.takeIf { it in 0..2 } ?: 0)
+    private val currentFolderId = MutableStateFlow(restoredNavigation?.getString("folder")?.takeIf { it.isNotBlank() })
+    private val localSearchQuery = MutableStateFlow(restoredNavigation?.getString("localQuery").orEmpty())
 
-    private val remoteQuery = MutableStateFlow("")
-    private val remoteSort = MutableStateFlow(BitShareSortOption.RELEVANCE)
+    private val remoteQuery = MutableStateFlow(restoredNavigation?.getString("remoteQuery").orEmpty())
+    private val remoteSort = MutableStateFlow(BitShareSortOption.entries.firstOrNull {
+        it.name == restoredNavigation?.getString("remoteSort")
+    } ?: BitShareSortOption.RELEVANCE)
+
+    init {
+        savedStateHandle.setSavedStateProvider("knowledgeNavigation") {
+            Bundle().apply {
+                putInt("tab", selectedTabIndex.value)
+                putString("folder", currentFolderId.value)
+                putString("localQuery", localSearchQuery.value)
+                putString("remoteQuery", remoteQuery.value)
+                putString("remoteSort", remoteSort.value.name)
+            }
+        }
+    }
 
     private val remoteSearch = MutableStateFlow(RemoteSearchSnapshot())
     private val selectedRemoteDetail = MutableStateFlow<BitShareFileDetail?>(null)
@@ -194,7 +213,13 @@ class KnowledgeBaseViewModel @Inject constructor(
     ) { folderId, query ->
         folderId to query
     }.flatMapLatest { (folderId, query) ->
-        knowledgeBaseRepository.observeFolderContent(folderId, query)
+        knowledgeBaseRepository.observeFolderContent(folderId, query).transform { content ->
+            if (folderId != null && content.breadcrumbs.none { it.id == folderId }) {
+                currentFolderId.value = null
+            } else {
+                emit(content)
+            }
+        }
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
@@ -358,7 +383,13 @@ class KnowledgeBaseViewModel @Inject constructor(
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
-        initialValue = KnowledgeBaseUiState()
+        initialValue = KnowledgeBaseUiState(
+            selectedTabIndex = selectedTabIndex.value,
+            currentFolderId = currentFolderId.value,
+            localSearchQuery = localSearchQuery.value,
+            remoteQuery = remoteQuery.value,
+            remoteSort = remoteSort.value
+        )
     )
 
     fun selectTab(index: Int) {
