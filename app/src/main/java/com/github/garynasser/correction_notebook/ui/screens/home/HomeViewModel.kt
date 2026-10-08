@@ -407,7 +407,7 @@ class HomeViewModel @Inject constructor(
                 throw throwable
             } catch (throwable: Exception) {
                 _uiState.value = _uiState.value.copy(
-                    articleErrorMessage = throwable.message?.takeIf { it.isNotBlank() } ?: "推荐内容加载失败"
+                    articleErrorMessage = articleErrorMessage(throwable, "推荐内容加载失败，请稍后重试")
                 )
             } finally {
                 _uiState.value = _uiState.value.copy(isArticlesLoading = false)

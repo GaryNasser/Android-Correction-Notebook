@@ -2,6 +2,8 @@ package com.github.garynasser.correction_notebook.ui.screens.home
 
 import android.content.Intent
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -334,12 +336,14 @@ fun ArticleDetailScreen(
             }
 
             else -> {
-                Box(
+                Column(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(innerPadding)
+                        .verticalScroll(rememberScrollState())
                         .padding(20.dp),
-                    contentAlignment = Alignment.Center
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
                 ) {
                     ArticleFallbackState(
                         title = "文章加载失败",

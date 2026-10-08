@@ -450,7 +450,7 @@ class HomeFormSaveFailureTest {
         } finally { bitmap.recycle() }
     }
 
-    private class ControlledWrites(private val delegate: DataStore<Preferences>) : DataStore<Preferences> by delegate {
+    internal class ControlledWrites(private val delegate: DataStore<Preferences>) : DataStore<Preferences> by delegate {
         @Volatile var fail = false
         @Volatile var gate: CompletableDeferred<Unit>? = null
         val attempts = AtomicInteger()
@@ -462,7 +462,7 @@ class HomeFormSaveFailureTest {
         }
     }
 
-    private class Fixture {
+    internal class Fixture(private val articleApi: ArticleApiService? = null) {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         val files = listOf("todo", "schedule").map { File(context.cacheDir, "home-form-$it-${UUID.randomUUID()}.preferences_pb") }
@@ -491,7 +491,7 @@ class HomeFormSaveFailureTest {
             val sessions = StudySessionRepository(context)
             val useCase = AiStudyUseCase(ai, KnowledgeBaseAiRepository(dao), MemoryRepository(database.userMemoryDao()),
                 todos, schedules, sessions, learning, repository)
-            val articles = object : ArticleApiService by retrofit.create(ArticleApiService::class.java) {
+            val articles = articleApi ?: object : ArticleApiService by retrofit.create(ArticleApiService::class.java) {
                 override suspend fun getRecommendedArticles() = ApiResponse<List<ArticleDto>>(200, data = emptyList())
             }
             home = HomeViewModel(todos, ArticleRepository(articles), StudyPreferencesManager(context), sessions, TodoHistoryRepository(context),
