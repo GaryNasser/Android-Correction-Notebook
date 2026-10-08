@@ -1,5 +1,6 @@
 package com.github.garynasser.correction_notebook.ui.screens.home
 
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -19,6 +20,7 @@ import androidx.compose.ui.text.TextLayoutResult
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -27,6 +29,38 @@ import java.time.LocalDate
 class AddScheduleDialogTest {
     @get:Rule
     val compose = createComposeRule()
+
+    @Test
+    fun resubmittingARestoredDraftKeepsItsIdentity() {
+        val restoration = StateRestorationTester(compose)
+        val submitted = mutableListOf<ScheduleEvent>()
+        val visible = mutableStateOf(true)
+        restoration.setContent {
+            CorrectionNotebookTheme {
+                if (visible.value) AddScheduleDialog(onDismiss = {}, onAdd = { submitted += it })
+            }
+        }
+        compose.onNodeWithText("活动标题").performTextInput("Review lecture")
+        compose.onNodeWithContentDescription("保存").performClick()
+        restoration.emulateSavedInstanceStateRestore()
+        compose.onNodeWithText("活动标题").performTextReplacement("Updated review")
+        compose.onNodeWithContentDescription("保存").performClick()
+        compose.runOnIdle {
+            assertEquals(2, submitted.size)
+            assertEquals(submitted.first().id, submitted.last().id)
+            assertEquals("Updated review", submitted.last().title)
+            visible.value = false
+        }
+        compose.waitForIdle()
+        compose.runOnIdle { visible.value = true }
+        compose.onNodeWithContentDescription("保存").assertIsNotEnabled()
+        compose.onNodeWithText("活动标题").performTextInput("Another lecture")
+        compose.onNodeWithContentDescription("保存").performClick()
+        compose.runOnIdle {
+            assertEquals(3, submitted.size)
+            assertNotEquals(submitted.first().id, submitted.last().id)
+        }
+    }
 
     @Test
     fun enteringTwoHourDigitsDoesNotInsertAnUnrequestedLeadingZero() {

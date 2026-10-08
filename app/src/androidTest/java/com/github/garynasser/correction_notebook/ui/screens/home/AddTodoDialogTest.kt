@@ -27,6 +27,37 @@ import org.junit.Test
 class AddTodoDialogTest {
     @get:Rule val compose = createComposeRule()
 
+    @Test fun resubmittingARestoredDraftKeepsItsIdentity() {
+        val restoration = StateRestorationTester(compose)
+        val submitted = mutableListOf<TodoItem>()
+        val visible = mutableStateOf(true)
+        restoration.setContent {
+            CorrectionNotebookTheme {
+                if (visible.value) AddTodoDialog(onDismiss = {}, onAdd = { submitted += it })
+            }
+        }
+        compose.onNodeWithText("标题").performTextReplacement("复习课程")
+        compose.onNodeWithContentDescription("添加").performClick()
+        restoration.emulateSavedInstanceStateRestore()
+        compose.onNodeWithText("标题").performTextReplacement("更新后的复习安排")
+        compose.onNodeWithContentDescription("添加").performClick()
+        compose.runOnIdle {
+            assertEquals(2, submitted.size)
+            assertEquals(submitted.first().id, submitted.last().id)
+            assertEquals("更新后的复习安排", submitted.last().title)
+            visible.value = false
+        }
+        compose.waitForIdle()
+        compose.runOnIdle { visible.value = true }
+        compose.onNodeWithContentDescription("添加").assertIsNotEnabled()
+        compose.onNodeWithText("标题").performTextReplacement("另一条待办")
+        compose.onNodeWithContentDescription("添加").performClick()
+        compose.runOnIdle {
+            assertEquals(3, submitted.size)
+            assertNotEquals(submitted.first().id, submitted.last().id)
+        }
+    }
+
     @Test fun restoringTheDialogKeepsBothFieldsUntilSubmission() {
         var added: TodoItem? = null
         val restoration = StateRestorationTester(compose)

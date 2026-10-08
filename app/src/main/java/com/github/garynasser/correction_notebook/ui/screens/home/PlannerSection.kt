@@ -618,6 +618,7 @@ fun AddScheduleDialog(
     onDismiss: () -> Unit,
     onAdd: (ScheduleEvent) -> Unit
 ) {
+    val draftId = rememberSaveable { java.util.UUID.randomUUID().toString() }
     var title by rememberSaveable { mutableStateOf("") }
     var location by rememberSaveable { mutableStateOf("") }
     var description by rememberSaveable { mutableStateOf("") }
@@ -656,7 +657,7 @@ fun AddScheduleDialog(
                     else -> {
                         focusManager.clearFocus()
                         keyboard?.hide()
-                        onAdd(ScheduleEvent(title = title.trim(), description = description.trim(),
+                        onAdd(ScheduleEvent(id = draftId, title = title.trim(), description = description.trim(),
                             location = location.trim(), startAt = start, endAt = end, allDay = allDay))
                     }
                 }

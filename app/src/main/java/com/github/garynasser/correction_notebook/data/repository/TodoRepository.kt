@@ -31,7 +31,12 @@ class TodoRepository internal constructor(private val dataStore: DataStore<Prefe
     suspend fun addTodo(todo: TodoItem) {
         dataStore.edit { prefs ->
             val current = prefs[todoItemsKey]?.let(TodoPreferenceCodec::parseTodoItems) ?: emptyList()
-            val updated = current + todo
+            val existing = current.firstOrNull { it.id == todo.id }
+            // A restored draft must not reset the lifecycle of an already saved task.
+            val saved = existing?.let {
+                todo.copy(createdAt = it.createdAt, isCompleted = it.isCompleted, completedAt = it.completedAt)
+            } ?: todo
+            val updated = current.filterNot { it.id == todo.id } + saved
             prefs[todoItemsKey] = TodoPreferenceCodec.serializeTodoItems(updated)
         }
     }
