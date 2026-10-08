@@ -204,6 +204,7 @@ class HomeViewModel @Inject constructor(
                 ?: initial.plannerTab,
             showAddScheduleDialog = saved?.getBoolean("showAddScheduleDialog") ?: false,
             showAddTodoDialog = saved?.getBoolean("showAddTodoDialog") ?: false,
+            showModeSelector = saved?.getBoolean("showModeSelector") ?: false,
             showPomodoroSettingsDialog = saved?.getBoolean("showPomodoroSettingsDialog") ?: false,
             startPomodoroAfterSettings = saved?.getBoolean("startPomodoroAfterSettings") ?: false
         )
@@ -219,6 +220,7 @@ class HomeViewModel @Inject constructor(
                 putString("plannerTab", state.plannerTab.name)
                 putBoolean("showAddScheduleDialog", state.showAddScheduleDialog)
                 putBoolean("showAddTodoDialog", state.showAddTodoDialog)
+                putBoolean("showModeSelector", state.showModeSelector)
                 putBoolean("showPomodoroSettingsDialog", state.showPomodoroSettingsDialog)
                 putBoolean("startPomodoroAfterSettings", state.startPomodoroAfterSettings)
             }

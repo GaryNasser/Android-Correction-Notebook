@@ -14,6 +14,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
@@ -31,6 +32,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle as ComposeTextStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -42,6 +51,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -90,7 +101,7 @@ fun HomeScreen(
 ) {
     val uiState by homeViewModel.uiState.collectAsStateWithLifecycle()
     val timerState by homeViewModel.timerManager.timerState.collectAsStateWithLifecycle()
-    var showCustomTimer by remember { mutableStateOf(false) }
+    var showCustomTimer by rememberSaveable { mutableStateOf(false) }
     var activeMainTab by rememberSaveable { mutableStateOf(HomeMainTab.BIT) }
     val listState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -2535,13 +2546,14 @@ private fun formatMinutesToDisplay(minutes: Int): String {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CustomTimerDialog(
     onDismiss: () -> Unit,
     onConfirm: (Int) -> Unit
 ) {
-    var hours by remember { mutableStateOf("0") }
-    var minutes by remember { mutableStateOf("25") }
+    var hours by rememberSaveable { mutableStateOf("0") }
+    var minutes by rememberSaveable { mutableStateOf("25") }
     val parsedHours = hours.toIntOrNull() ?: 0
     val parsedMinutes = minutes.toIntOrNull() ?: 0
     val totalMinutes = parsedHours * 60 + parsedMinutes
@@ -2552,122 +2564,152 @@ fun CustomTimerDialog(
         parsedHours > 0 -> "将专注 ${parsedHours} 小时 ${parsedMinutes} 分钟"
         else -> "将专注 ${parsedMinutes} 分钟"
     }
-    val confirmSelection = {
-        if (isValidDuration) {
-            onConfirm(totalMinutes)
-        }
-    }
-
-    AlertDialog(
+    var panelBounds by remember { mutableStateOf(Rect.Zero) }
+    var contentPosition by remember { mutableStateOf(Offset.Zero) }
+    Dialog(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(8.dp),
-        title = {
-            Text(
-                text = "自定义计时器",
-                style = MaterialTheme.typography.titleMedium
-            )
-        },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Text(
-                    text = "设置您想要的学习时长",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = hours,
-                        onValueChange = { newValue ->
-                            if (newValue.isEmpty() || newValue.all { it.isDigit() }) {
-                                hours = newValue.take(2).trimStart('0').ifEmpty { "0" }
-                            }
-                        },
-                        label = { Text("小时") },
-                        modifier = Modifier.width(84.dp),
-                        singleLine = true,
-                        shape = RoundedCornerShape(8.dp),
-                        supportingText = null,
-                        keyboardOptions = KeyboardOptions(
-                            keyboardType = KeyboardType.Number,
-                            imeAction = ImeAction.Next
-                        )
-                    )
-                    Text(":", style = MaterialTheme.typography.titleLarge)
-                    OutlinedTextField(
-                        value = minutes,
-                        onValueChange = { newValue ->
-                            if (newValue.isEmpty() || (newValue.all { it.isDigit() } && (newValue.toIntOrNull() ?: 0) <= 59)) {
-                                minutes = newValue.take(2).trimStart('0').ifEmpty { "0" }
-                            }
-                        },
-                        label = { Text("分钟") },
-                        modifier = Modifier.width(84.dp),
-                        singleLine = true,
-                        shape = RoundedCornerShape(8.dp),
-                        supportingText = null,
-                        keyboardOptions = KeyboardOptions(
-                            keyboardType = KeyboardType.Number,
-                            imeAction = ImeAction.Done
-                        ),
-                        keyboardActions = KeyboardActions(onDone = { confirmSelection() })
-                    )
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+    ) {
+        val focusManager = LocalFocusManager.current
+        val keyboard = LocalSoftwareKeyboardController.current
+        val confirmSelection = {
+            if (isValidDuration) {
+                focusManager.clearFocus()
+                keyboard?.hide()
+                onConfirm(totalMinutes)
+            }
+        }
+        Box(
+            modifier = Modifier.fillMaxSize()
+                .onGloballyPositioned { contentPosition = it.positionInRoot() }
+                .pointerInput(Unit) {
+                    detectTapGestures { position ->
+                        if (!panelBounds.contains(position + contentPosition)) onDismiss()
+                    }
                 }
-                Text(
-                    text = durationLabel,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (isValidDuration) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.error
-                    },
-                    textAlign = TextAlign.Center
-                )
-                Text(
-                    text = "快速选择",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    listOf(15, 25, 45, 60).forEach { preset ->
-                        FilterChip(
-                            selected = false,
-                            onClick = {
-                                hours = (preset / 60).toString()
-                                minutes = (preset % 60).toString()
+                .safeDrawingPadding().imePadding().padding(horizontal = 12.dp, vertical = 8.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Surface(
+                modifier = Modifier.widthIn(max = 400.dp).fillMaxWidth()
+                    .onGloballyPositioned { panelBounds = it.boundsInRoot() },
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.surface
+            ) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("自定义计时器", modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        TooltipBox(
+                            positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
+                            tooltip = { PlainTooltip { Text("取消") } }, state = rememberTooltipState()
+                        ) {
+                            IconButton(onClick = onDismiss) {
+                                Icon(Icons.Default.Close, contentDescription = "取消", modifier = Modifier.size(20.dp))
+                            }
+                        }
+                        TooltipBox(
+                            positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
+                            tooltip = { PlainTooltip { Text("开始") } }, state = rememberTooltipState()
+                        ) {
+                            FilledTonalIconButton(onClick = confirmSelection, enabled = isValidDuration,
+                                shape = RoundedCornerShape(8.dp)) {
+                                Icon(Icons.Default.PlayArrow, contentDescription = "开始", modifier = Modifier.size(20.dp))
+                            }
+                        }
+                    }
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f, fill = false)
+                            .heightIn(max = 280.dp)
+                            .verticalScroll(rememberScrollState()),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutlinedTextField(
+                                value = hours,
+                                onValueChange = { newValue ->
+                                    if (newValue.length <= 2 && newValue.all { it in '0'..'9' }) {
+                                        hours = if (newValue.isEmpty()) "" else newValue.trimStart('0').ifEmpty { "0" }
+                                    }
+                                },
+                                label = { Text("小时") },
+                                textStyle = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f),
+                                singleLine = true,
+                                shape = RoundedCornerShape(8.dp),
+                                supportingText = null,
+                                keyboardOptions = KeyboardOptions(
+                                    keyboardType = KeyboardType.Number,
+                                    imeAction = ImeAction.Next
+                                )
+                            )
+                            Text(":", style = MaterialTheme.typography.titleLarge)
+                            OutlinedTextField(
+                                value = minutes,
+                                onValueChange = { newValue ->
+                                    if (newValue.length <= 2 && newValue.all { it in '0'..'9' } &&
+                                        (newValue.isEmpty() || newValue.toInt() <= 59)) {
+                                        minutes = if (newValue.isEmpty()) "" else newValue.trimStart('0').ifEmpty { "0" }
+                                    }
+                                },
+                                label = { Text("分钟") },
+                                textStyle = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f),
+                                singleLine = true,
+                                shape = RoundedCornerShape(8.dp),
+                                supportingText = null,
+                                keyboardOptions = KeyboardOptions(
+                                    keyboardType = KeyboardType.Number,
+                                    imeAction = ImeAction.Done
+                                ),
+                                keyboardActions = KeyboardActions(onDone = { confirmSelection() })
+                            )
+                        }
+                        Text(
+                            text = durationLabel,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (isValidDuration) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.error
                             },
-                            label = { Text("${preset}m") },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(8.dp)
+                            textAlign = TextAlign.Center
                         )
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            listOf(15, 25, 45, 60).chunked(2).forEach { presets ->
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    presets.forEach { preset ->
+                                        FilterChip(
+                                            selected = isValidDuration && totalMinutes == preset,
+                                            onClick = {
+                                                hours = (preset / 60).toString()
+                                                minutes = (preset % 60).toString()
+                                            },
+                                            label = {
+                                                Text("$preset 分钟", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+                                            },
+                                            modifier = Modifier.weight(1f),
+                                            shape = RoundedCornerShape(8.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
-        },
-        confirmButton = {
-            Button(
-                onClick = confirmSelection,
-                enabled = isValidDuration,
-                shape = RoundedCornerShape(8.dp)
-            ) {
-                Text("开始")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("取消")
-            }
         }
-    )
+    }
 }
 
 @Composable
