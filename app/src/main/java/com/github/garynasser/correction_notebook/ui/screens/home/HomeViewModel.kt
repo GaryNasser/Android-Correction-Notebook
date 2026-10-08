@@ -43,6 +43,7 @@ import com.github.garynasser.correction_notebook.data.repository.TodoHistoryRepo
 import com.github.garynasser.correction_notebook.data.repository.TodoRepository
 import com.github.garynasser.correction_notebook.domain.usecase.AiStudyUseCase
 import com.github.garynasser.correction_notebook.domain.usecase.StudyTimerManager
+import com.github.garynasser.correction_notebook.domain.usecase.WhiteNoisePlayback
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
@@ -191,6 +192,7 @@ class HomeViewModel @Inject constructor(
 ) : ViewModel() {
 
     val timerManager = StudyTimerManager(viewModelScope, SystemClock::elapsedRealtime)
+    val whiteNoisePlayback = WhiteNoisePlayback(context)
     private var sessionPersisted = false
     private var currentSessionStartedAt: LocalDateTime? = null
     private var currentSessionId: String? = null
@@ -1164,6 +1166,7 @@ class HomeViewModel @Inject constructor(
     }
 
     fun clearSelectedMode() {
+        whiteNoisePlayback.stop()
         _uiState.value = _uiState.value.copy(selectedMode = null, activeTimerMode = ActiveTimerMode.NONE)
     }
 
@@ -1243,6 +1246,7 @@ class HomeViewModel @Inject constructor(
     }
 
     fun finishCurrentSessionAndExit() {
+        whiteNoisePlayback.stop()
         saveCurrentSession(reset = false)
     }
 
@@ -1400,6 +1404,11 @@ class HomeViewModel @Inject constructor(
             studyPreferencesManager.setLandscapeOrientation(isLandscape)
             _uiState.value = _uiState.value.copy(isLandscapeOrientation = isLandscape)
         }
+    }
+
+    override fun onCleared() {
+        whiteNoisePlayback.stop()
+        super.onCleared()
     }
 }
 

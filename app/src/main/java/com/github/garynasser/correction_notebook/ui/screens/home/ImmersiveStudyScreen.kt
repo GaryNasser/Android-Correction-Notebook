@@ -1,7 +1,5 @@
 package com.github.garynasser.correction_notebook.ui.screens.home
 
-import android.content.Context
-import android.media.MediaPlayer
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
@@ -48,6 +46,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -58,19 +57,13 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.rememberAsyncImagePainter
-import com.github.garynasser.correction_notebook.R
 import com.github.garynasser.correction_notebook.data.model.home.PomodoroPhase
 import com.github.garynasser.correction_notebook.data.model.home.TimerState
+import com.github.garynasser.correction_notebook.data.model.home.WhiteNoise
+import com.github.garynasser.correction_notebook.data.model.home.WhiteNoiseState
 import com.github.garynasser.correction_notebook.domain.usecase.AlertManager
 import com.github.garynasser.correction_notebook.domain.usecase.StudyTimerManager
 import kotlinx.coroutines.delay
-
-enum class WhiteNoise(val displayName: String) {
-    RAIN("雨声"),
-    OCEAN("海浪"),
-    FOREST("森林"),
-    CAFE("咖啡馆")
-}
 
 @Composable
 fun ImmersiveStudyScreen(
@@ -91,7 +84,11 @@ fun ImmersiveStudyScreen(
     isSavingSoundSetting: Boolean = false,
     isSavingVibrationSetting: Boolean = false,
     soundSettingError: String? = null,
-    vibrationSettingError: String? = null
+    vibrationSettingError: String? = null,
+    noiseState: WhiteNoiseState = WhiteNoiseState(),
+    onNoiseSelect: (WhiteNoise) -> Unit = {},
+    onNoiseNone: () -> Unit = {},
+    onNoiseRetry: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val timerState by timerManager.timerState.collectAsStateWithLifecycle()
@@ -99,8 +96,6 @@ fun ImmersiveStudyScreen(
         .asPaddingValues()
         .calculateBottomPadding()
 
-    var selectedNoise by remember { mutableStateOf<WhiteNoise?>(null) }
-    var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
     var alertManager by remember { mutableStateOf<AlertManager?>(null) }
     var showControls by remember { mutableStateOf(true) }
     var showMoreSheet by remember { mutableStateOf(false) }
@@ -160,7 +155,6 @@ fun ImmersiveStudyScreen(
                 WindowInsetsControllerCompat(window, decorView)
                     .show(WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.navigationBars())
             }
-            mediaPlayer?.release()
             alertManager?.stop()
             timerManager.onTimerFinished = null
             timerManager.onPomodoroPhaseChanged = null
@@ -169,8 +163,6 @@ fun ImmersiveStudyScreen(
 
     BackHandler {
         alertManager?.stop()
-        mediaPlayer?.release()
-        mediaPlayer = null
         onExit()
     }
 
@@ -242,8 +234,6 @@ fun ImmersiveStudyScreen(
                 timerState = timerState,
                 onExit = {
                     alertManager?.stop()
-                    mediaPlayer?.release()
-                    mediaPlayer = null
                     onExit()
                 },
                 onMoreClick = { showMoreSheet = true }
@@ -281,8 +271,6 @@ fun ImmersiveStudyScreen(
                 },
                 onStop = {
                     alertManager?.stop()
-                    mediaPlayer?.release()
-                    mediaPlayer = null
                     onStop()
                 }
             )
@@ -313,7 +301,7 @@ fun ImmersiveStudyScreen(
 
     if (showMoreSheet) {
         ImmersiveMoreSheet(
-            selectedNoise = selectedNoise,
+            noiseState = noiseState,
             soundEnabled = soundEnabled,
             vibrationEnabled = vibrationEnabled,
             isSavingSoundSetting = isSavingSoundSetting,
@@ -322,23 +310,9 @@ fun ImmersiveStudyScreen(
             vibrationSettingError = vibrationSettingError,
             isPomodoroMode = isPomodoroMode,
             onDismiss = { showMoreSheet = false },
-            onNoiseSelect = { noise ->
-                if (selectedNoise == noise) {
-                    mediaPlayer?.release()
-                    mediaPlayer = null
-                    selectedNoise = null
-                } else {
-                    selectedNoise = noise
-                    mediaPlayer?.release()
-                    mediaPlayer = createMediaPlayer(context, noise)
-                    mediaPlayer?.start()
-                }
-            },
-            onNoiseNone = {
-                mediaPlayer?.release()
-                mediaPlayer = null
-                selectedNoise = null
-            },
+            onNoiseSelect = onNoiseSelect,
+            onNoiseNone = onNoiseNone,
+            onNoiseRetry = onNoiseRetry,
             onSoundChange = onSoundEnabledChange,
             onVibrationChange = onVibrationEnabledChange,
             onOpenPomodoroSettings = {
@@ -406,9 +380,10 @@ private fun StopAlertButton(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ImmersiveMoreSheet(
-    selectedNoise: WhiteNoise?,
+    noiseState: WhiteNoiseState,
     onNoiseSelect: (WhiteNoise) -> Unit,
     onNoiseNone: () -> Unit,
+    onNoiseRetry: () -> Unit,
     soundEnabled: Boolean,
     vibrationEnabled: Boolean,
     isSavingSoundSetting: Boolean,
@@ -457,14 +432,34 @@ private fun ImmersiveMoreSheet(
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("白噪音", style = MaterialTheme.typography.titleSmall)
                 WhiteNoiseSelector(
-                    selectedNoise = selectedNoise,
+                    selectedNoise = noiseState.selectedNoise,
                     onNoiseSelect = onNoiseSelect,
-                    onNoiseNone = onNoiseNone,
-                    compact = false,
-                    iconTint = MaterialTheme.colorScheme.onSurface,
-                    selectedBackground = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
-                    unselectedBackground = MaterialTheme.colorScheme.surfaceVariant
+                    onNoiseNone = onNoiseNone
                 )
+                val noise = noiseState.selectedNoise
+                if (noise != null) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (noiseState.isLoading) {
+                            CircularProgressIndicator(Modifier.size(16.dp).clearAndSetSemantics {}, strokeWidth = 2.dp)
+                        }
+                        Text(
+                            text = noiseState.error ?: when {
+                                noiseState.isLoading -> "正在加载：${noise.displayName}"
+                                noiseState.isPlaying -> "正在播放：${noise.displayName}"
+                                else -> "已暂停：${noise.displayName}"
+                            },
+                            modifier = Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (noiseState.error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (noiseState.error != null) {
+                            IconButton(onClick = onNoiseRetry) {
+                                Icon(Icons.Default.Refresh, "重试白噪音", modifier = Modifier.size(20.dp))
+                            }
+                        }
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(4.dp))
@@ -503,59 +498,45 @@ private fun AlertSettingRow(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun WhiteNoiseSelector(
     selectedNoise: WhiteNoise?,
     onNoiseSelect: (WhiteNoise) -> Unit,
-    onNoiseNone: () -> Unit,
-    compact: Boolean,
-    iconTint: Color = Color.White,
-    selectedBackground: Color = Color.White.copy(alpha = 0.4f),
-    unselectedBackground: Color = Color.White.copy(alpha = 0.15f)
+    onNoiseNone: () -> Unit
 ) {
-    val buttonSize = if (compact) 36.dp else 44.dp
-    val iconSize = if (compact) 18.dp else 22.dp
-
     Row(
+        modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier
-                .size(buttonSize)
-                .clip(CircleShape)
-                .background(if (selectedNoise == null) selectedBackground else unselectedBackground)
-                .clickable { onNoiseNone() },
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                Icons.AutoMirrored.Filled.VolumeOff,
-                "无白噪音",
-                tint = iconTint,
-                modifier = Modifier.size(iconSize)
-            )
-        }
-        WhiteNoise.entries.forEach { noise ->
-            val isSelected = selectedNoise == noise
-            Box(
-                modifier = Modifier
-                    .size(buttonSize)
-                    .clip(CircleShape)
-                    .background(if (isSelected) selectedBackground else unselectedBackground)
-                    .clickable { onNoiseSelect(noise) },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    when (noise) {
-                        WhiteNoise.RAIN -> Icons.Default.Water
-                        WhiteNoise.OCEAN -> Icons.Default.Waves
-                        WhiteNoise.FOREST -> Icons.Default.Forest
-                        WhiteNoise.CAFE -> Icons.Default.LocalCafe
-                    },
-                    noise.displayName,
-                    tint = iconTint,
-                    modifier = Modifier.size(iconSize)
-                )
+        (listOf<WhiteNoise?>(null) + WhiteNoise.entries).forEach { noise ->
+            val label = noise?.displayName ?: "无白噪音"
+            val active = selectedNoise == noise
+            Box(Modifier.weight(1f)) {
+                TooltipBox(
+                    positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                    tooltip = { PlainTooltip { Text(label) } },
+                    state = rememberTooltipState()
+                ) {
+                    FilledTonalIconButton(
+                        onClick = { if (noise == null) onNoiseNone() else onNoiseSelect(noise) },
+                        modifier = Modifier.fillMaxWidth().height(48.dp).semantics { selected = active },
+                        shape = RoundedCornerShape(8.dp),
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = if (active) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = if (active) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    ) {
+                        Icon(when (noise) {
+                            null -> Icons.AutoMirrored.Filled.VolumeOff
+                            WhiteNoise.RAIN -> Icons.Default.Water
+                            WhiteNoise.OCEAN -> Icons.Default.Waves
+                            WhiteNoise.FOREST -> Icons.Default.Forest
+                            WhiteNoise.CAFE -> Icons.Default.LocalCafe
+                        }, label, modifier = Modifier.size(22.dp))
+                    }
+                }
             }
         }
     }
@@ -776,21 +757,4 @@ private fun formatTime(seconds: Int): String {
     val mins = seconds / 60
     val secs = seconds % 60
     return "%02d:%02d".format(mins, secs)
-}
-
-private fun createMediaPlayer(context: Context, noise: WhiteNoise): MediaPlayer? {
-    return try {
-        val resId = when (noise) {
-            WhiteNoise.RAIN -> R.raw.rain
-            WhiteNoise.OCEAN -> R.raw.ocean
-            WhiteNoise.FOREST -> R.raw.forest
-            WhiteNoise.CAFE -> R.raw.cafe
-        }
-        MediaPlayer.create(context, resId)?.apply {
-            isLooping = true
-            setVolume(0.5f, 0.5f)
-        }
-    } catch (e: Exception) {
-        null
-    }
 }
