@@ -44,12 +44,14 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle as ComposeTextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -679,26 +681,32 @@ private fun WeeklyCourseGrid(
                             .offset(y = rowHeight * index.toFloat()),
                         verticalAlignment = Alignment.Top
                     ) {
-                        Column(
+                        Box(
                             modifier = Modifier
                                 .width(leftColumnWidth)
                                 .height(rowHeight)
                                 .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.72f)),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
+                            contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = section.index.toString(),
-                                fontSize = 13.sp,
-                                lineHeight = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f)
-                            )
-                            Text(
-                                text = section.start.format(DateTimeFormatter.ofPattern("HH:mm")),
-                                fontSize = 9.sp,
-                                lineHeight = 10.sp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.58f)
+                            BasicText(
+                                text = buildAnnotatedString {
+                                    withStyle(SpanStyle(fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f))) {
+                                        append(section.index.toString())
+                                    }
+                                    append("\n")
+                                    withStyle(SpanStyle(fontSize = 0.7.em,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.58f))) {
+                                        append(section.start.format(DateTimeFormatter.ofPattern("HH:mm")))
+                                    }
+                                },
+                                style = ComposeTextStyle(textAlign = TextAlign.Center),
+                                softWrap = false,
+                                autoSize = TextAutoSize.StepBased(
+                                    minFontSize = 5.sp,
+                                    maxFontSize = 13.sp,
+                                    stepSize = 0.5.sp
+                                )
                             )
                         }
                         repeat(7) {
@@ -891,9 +899,11 @@ internal fun CourseGridBlock(
     modifier: Modifier,
     onClick: () -> Unit
 ) {
-    val displayLocation = item.location.toGridLocationText()
-    val hasLocation = displayLocation.isNotBlank()
     val compactBlock = span <= 1
+    val locationText = item.location.toGridLocationText()
+    // Let a single-period room share a line with its building when it fits.
+    val displayLocation = if (compactBlock) locationText.replace('\n', ' ') else locationText
+    val hasLocation = displayLocation.isNotBlank()
     val text = buildAnnotatedString {
         withStyle(
             SpanStyle(
@@ -932,11 +942,14 @@ internal fun CourseGridBlock(
     ) {
         BasicText(
             text = text,
-            style = ComposeTextStyle(textAlign = TextAlign.Center),
+            style = ComposeTextStyle(
+                textAlign = TextAlign.Center,
+                lineBreak = LineBreak.Paragraph.copy(strategy = LineBreak.Strategy.Balanced)
+            ),
             overflow = TextOverflow.Clip,
             softWrap = true,
             autoSize = TextAutoSize.StepBased(
-                minFontSize = 4.sp,
+                minFontSize = if (compactBlock) 2.sp else 4.sp,
                 maxFontSize = maxFontSize,
                 stepSize = 0.5.sp
             )
