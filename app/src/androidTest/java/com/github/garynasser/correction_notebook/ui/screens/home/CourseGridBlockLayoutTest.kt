@@ -12,6 +12,7 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.github.garynasser.correction_notebook.data.model.home.ScheduleOccurrence
 import com.github.garynasser.correction_notebook.data.model.home.ScheduleSourceType
@@ -47,7 +48,54 @@ class CourseGridBlockLayoutTest {
         )
     }
 
-    private fun assertCourseFits(title: String, location: String, expectedLocation: String, span: Int) {
+    @Test
+    fun aShortCourseTitleDoesNotLeaveOneCharacterOnItsLastLine() {
+        val title = "导入链路验证"
+        val layouts = assertCourseFits(
+            title = title,
+            location = "文萃楼 M134\n本地验证第二行",
+            expectedLocation = "文萃楼\nM134",
+            span = 2,
+            width = 54.dp,
+            fontScale = 1f
+        )
+        layouts.forEach { layout ->
+            val lengths = (0 until layout.lineCount)
+                .filter { layout.getLineStart(it) < title.length }
+                .map { layout.getLineEnd(it, visibleEnd = true).coerceAtMost(title.length) - layout.getLineStart(it) }
+            assertEquals(2, lengths.size)
+            assertTrue("Title lines should be balanced, not $lengths", lengths.max() - lengths.min() <= 1)
+        }
+    }
+
+    @Test
+    fun aSinglePeriodCourseKeepsItsCompleteNameAndFirstAddressLine() {
+        assertCourseFits(
+            title = "数据结构与算法",
+            location = "综教 A101\n良乡校区备用教室",
+            expectedLocation = "综教 A101",
+            span = 1
+        )
+    }
+
+    @Test
+    fun anEnglishTitleKeepsItsCompleteTextAndFirstAddressLine() {
+        assertCourseFits(
+            title = "Signals and Systems",
+            location = "文萃楼 F702\n良乡校区备用教室",
+            expectedLocation = "文萃楼\nF702",
+            span = 3
+        )
+    }
+
+    private fun assertCourseFits(
+        title: String,
+        location: String,
+        expectedLocation: String,
+        span: Int,
+        width: Dp = 38.dp,
+        fontScale: Float = 1.3f
+    ): List<TextLayoutResult> {
         val course = ScheduleOccurrence(
             occurrenceId = "course",
             eventId = "event",
@@ -61,12 +109,12 @@ class CourseGridBlockLayoutTest {
         )
         compose.setContent {
             val density = LocalDensity.current.density
-            CompositionLocalProvider(LocalDensity provides Density(density, fontScale = 1.3f)) {
+            CompositionLocalProvider(LocalDensity provides Density(density, fontScale = fontScale)) {
                 CorrectionNotebookTheme {
                     CourseGridBlock(
                         item = course,
                         span = span,
-                        modifier = Modifier.width(38.dp).height((span * 35).dp),
+                        modifier = Modifier.width(width).height((span * 35).dp),
                         onClick = {}
                     )
                 }
@@ -81,5 +129,6 @@ class CourseGridBlockLayoutTest {
             assertFalse("Course name and address must not be clipped", it.hasVisualOverflow)
             assertEquals(TextAlign.Center, it.layoutInput.style.textAlign)
         }
+        return results
     }
 }
