@@ -98,6 +98,7 @@ data class HomeUiState(
     val isImportingSchedule: Boolean = false,
     val scheduleImportMessage: String? = null,
     val scheduleImportError: String? = null,
+    val icsImportApplyError: String? = null,
     val isSyncingSchoolSchedule: Boolean = false,
     val schoolScheduleSyncMessage: String? = null,
     val schoolScheduleSyncError: String? = null,
@@ -892,7 +893,8 @@ class HomeViewModel @Inject constructor(
             scheduleActionMessage = null,
             scheduleActionError = null,
             scheduleImportMessage = null,
-            scheduleImportError = null
+            scheduleImportError = null,
+            icsImportApplyError = null
         )
         viewModelScope.launch {
             try {
@@ -903,6 +905,7 @@ class HomeViewModel @Inject constructor(
                     plannerTab = PlannerTab.SCHEDULE
                 )
             } catch (throwable: CancellationException) {
+                _uiState.value = _uiState.value.copy(isImportingSchedule = false)
                 throw throwable
             } catch (throwable: Exception) {
                 _uiState.value = _uiState.value.copy(
@@ -958,7 +961,8 @@ class HomeViewModel @Inject constructor(
     }
 
     fun dismissIcsPreview() {
-        _uiState.value = _uiState.value.copy(pendingIcsPreview = null)
+        if (_uiState.value.isImportingSchedule) return
+        _uiState.value = _uiState.value.copy(pendingIcsPreview = null, icsImportApplyError = null)
     }
 
     fun dismissScheduleImportMessage() {
@@ -971,26 +975,35 @@ class HomeViewModel @Inject constructor(
     fun applyIcsPreview(decision: ImportDecision) {
         if (_uiState.value.isAnyScheduleMutationBusy()) return
         val preview = _uiState.value.pendingIcsPreview ?: return
-        _uiState.value = _uiState.value.copy(isImportingSchedule = true)
+        _uiState.value = _uiState.value.copy(isImportingSchedule = true, icsImportApplyError = null)
         viewModelScope.launch {
             try {
                 scheduleRepository.applyImportPreview(preview, decision)
-                _uiState.value = _uiState.value.copy(
-                    isImportingSchedule = false,
-                    pendingIcsPreview = null,
-                    scheduleImportMessage = "已导入 ${preview.incomingEvents.size} 个日程",
-                    scheduleImportError = null
-                )
-                refreshScheduleSections()
-                refreshLocalPlan()
             } catch (throwable: CancellationException) {
+                _uiState.value = _uiState.value.copy(isImportingSchedule = false)
                 throw throwable
             } catch (throwable: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isImportingSchedule = false,
-                    pendingIcsPreview = null,
-                    scheduleImportMessage = null,
-                    scheduleImportError = throwable.message?.takeIf { it.isNotBlank() } ?: "课表导入失败，请稍后重试"
+                    icsImportApplyError = throwable.message?.takeIf { it.isNotBlank() } ?: "课表导入失败，请稍后重试"
+                )
+                return@launch
+            }
+            _uiState.value = _uiState.value.copy(
+                isImportingSchedule = false,
+                pendingIcsPreview = null,
+                icsImportApplyError = null,
+                scheduleImportMessage = "已导入 ${preview.incomingEvents.size} 个日程",
+                scheduleImportError = null
+            )
+            try {
+                refreshScheduleSections()
+                refreshLocalPlan()
+            } catch (throwable: CancellationException) {
+                throw throwable
+            } catch (_: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    scheduleImportMessage = "已导入 ${preview.incomingEvents.size} 个日程，但界面刷新失败，请重新进入首页"
                 )
             }
         }
