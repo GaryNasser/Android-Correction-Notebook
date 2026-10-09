@@ -355,6 +355,7 @@ fun HomeScreen(
         IcsImportPreviewDialog(
             preview = preview,
             isApplying = uiState.isImportingSchedule,
+            saveError = uiState.icsImportApplyError,
             onDismiss = { homeViewModel.dismissIcsPreview() },
             onApply = { decision: ImportDecision ->
                 homeViewModel.applyIcsPreview(decision)

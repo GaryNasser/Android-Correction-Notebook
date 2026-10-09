@@ -180,7 +180,7 @@ class WhiteNoisePlaybackFlowTest {
             compose.onNodeWithContentDescription("更多").performClick()
             compose.onNodeWithContentDescription("雨声").performScrollTo().performClick()
             assertNotNull("Noise button must dispatch its selection", playback.state.value.selectedNoise)
-            f.await { playback.state.value.error != null }
+            awaitNoiseState(playback) { it.error != null }
             assertFalse(playback.state.value.isLoading)
             assertFalse(playback.state.value.isPlaying)
             compose.onNodeWithText("白噪音播放失败，请重试").performScrollTo().assertIsDisplayed()
@@ -199,7 +199,7 @@ class WhiteNoisePlaybackFlowTest {
             capture(if (dark) "dark-error" else "light-error")
             fail = false
             compose.onNodeWithContentDescription("重试白噪音").performClick()
-            f.await { playback.state.value.isPlaying }
+            awaitNoiseState(playback) { it.isPlaying }
             compose.onNodeWithText("白噪音播放失败，请重试").assertDoesNotExist()
             compose.onNodeWithText("正在播放：雨声").performScrollTo().assertIsDisplayed()
             capture(if (dark) "dark-playing" else "light-playing")
@@ -227,6 +227,14 @@ class WhiteNoisePlaybackFlowTest {
 
     private suspend fun awaitPlayer(player: Player, predicate: (Player) -> Boolean) {
         withTimeout(10_000) { while (!withContext(Dispatchers.Main) { predicate(player) }) delay(10) }
+    }
+
+    private suspend fun awaitNoiseState(playback: WhiteNoisePlayback, predicate: (WhiteNoiseState) -> Boolean) {
+        try {
+            withTimeout(10_000) { while (!predicate(playback.state.value)) delay(10) }
+        } catch (error: TimeoutCancellationException) {
+            throw AssertionError("White noise state did not settle: ${playback.state.value}", error)
+        }
     }
 
     private fun withFixture(test: suspend (HomeFormSaveFailureTest.Fixture) -> Unit) = runBlocking {

@@ -924,7 +924,8 @@ fun IcsImportPreviewDialog(
     preview: IcsImportPreview,
     isApplying: Boolean = false,
     onDismiss: () -> Unit,
-    onApply: (ImportDecision) -> Unit
+    onApply: (ImportDecision) -> Unit,
+    saveError: String? = null
 ) {
     AlertDialog(
         onDismissRequest = {
@@ -934,53 +935,67 @@ fun IcsImportPreviewDialog(
         title = { Text("导入预览", style = MaterialTheme.typography.titleMedium) },
         containerColor = MaterialTheme.colorScheme.surface,
         text = {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 430.dp),
-                contentPadding = PaddingValues(vertical = 2.dp),
+            Column(
+                modifier = Modifier.fillMaxWidth().heightIn(max = 430.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                item {
+                if (saveError != null) {
                     Text(
-                        text = preview.fileName,
+                        text = saveError,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite }
                     )
                 }
-                item {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            ImportCountRow("新增", preview.added.size, Modifier.weight(1f))
-                            ImportCountRow("更新", preview.updated.size, Modifier.weight(1f))
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            ImportCountRow("冲突", preview.conflicts.size, Modifier.weight(1f))
-                            ImportCountRow("待删除", preview.deleted.size, Modifier.weight(1f))
-                        }
-                    }
-                }
-                item {
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                }
-                if (preview.added.isEmpty() && preview.updated.isEmpty() &&
-                    preview.conflicts.isEmpty() && preview.deleted.isEmpty()
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = false),
+                    contentPadding = PaddingValues(vertical = 2.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     item {
-                        Text("没有变更", style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            text = preview.fileName,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
+                    item {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                ImportCountRow("新增", preview.added.size, Modifier.weight(1f))
+                                ImportCountRow("更新", preview.updated.size, Modifier.weight(1f))
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                ImportCountRow("冲突", preview.conflicts.size, Modifier.weight(1f))
+                                ImportCountRow("待删除", preview.deleted.size, Modifier.weight(1f))
+                            }
+                        }
+                    }
+                    item {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    }
+                    if (preview.added.isEmpty() && preview.updated.isEmpty() &&
+                        preview.conflicts.isEmpty() && preview.deleted.isEmpty()
+                    ) {
+                        item {
+                            Text("没有变更", style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    diffPreviewGroup("新增事件", preview.added)
+                    diffPreviewGroup("将更新", preview.updated)
+                    diffPreviewGroup("冲突提醒", preview.conflicts)
+                    diffPreviewGroup("覆盖时删除", preview.deleted)
                 }
-                diffPreviewGroup("新增事件", preview.added)
-                diffPreviewGroup("将更新", preview.updated)
-                diffPreviewGroup("冲突提醒", preview.conflicts)
-                diffPreviewGroup("覆盖时删除", preview.deleted)
             }
         },
         confirmButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
                     onClick = { onApply(ImportDecision.MERGE) },
+                    modifier = Modifier.heightIn(min = 48.dp),
                     enabled = !isApplying,
                     shape = RoundedCornerShape(8.dp)
                 ) {
@@ -988,6 +1003,7 @@ fun IcsImportPreviewDialog(
                 }
                 TextButton(
                     onClick = { onApply(ImportDecision.OVERWRITE) },
+                    modifier = Modifier.heightIn(min = 48.dp),
                     enabled = !isApplying,
                     shape = RoundedCornerShape(8.dp)
                 ) {
@@ -998,6 +1014,7 @@ fun IcsImportPreviewDialog(
         dismissButton = {
             TextButton(
                 onClick = onDismiss,
+                modifier = Modifier.heightIn(min = 48.dp),
                 enabled = !isApplying,
                 shape = RoundedCornerShape(8.dp)
             ) {
