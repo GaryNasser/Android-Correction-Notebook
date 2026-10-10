@@ -98,6 +98,14 @@ class HomeScheduleTextTest {
     }
 
     @Test
+    fun courseGridPlacementSkipsCrossDayItems() {
+        assertNull(sampleOccurrence(
+            startAt = LocalDateTime.of(2026, 7, 2, 8, 0),
+            endAt = LocalDateTime.of(2026, 7, 3, 9, 35)
+        ).toCourseGridPlacement())
+    }
+
+    @Test
     fun courseGridPlacementSkipsItemsOutsideCourseSections() {
         assertNull(
             sampleOccurrence(
@@ -202,6 +210,70 @@ class HomeScheduleTextTest {
         )
 
         assertEquals(listOf("all-day", "evening"), result.map { it.occurrenceId })
+    }
+
+    @Test
+    fun aMultiDayOccurrenceAppearsOnlyOnceInTheWeeklyOffGridList() {
+        val occurrence = sampleOccurrence(
+            startAt = LocalDateTime.of(2026, 7, 2, 0, 0),
+            endAt = LocalDateTime.of(2026, 7, 4, 0, 0),
+            allDay = true
+        )
+        val result = weeklyOffGridOccurrences(listOf(
+            ScheduleSection("周四", LocalDate.of(2026, 7, 2), listOf(occurrence)),
+            ScheduleSection("周五", LocalDate.of(2026, 7, 3), listOf(occurrence))
+        ))
+        assertEquals(listOf(occurrence), result)
+    }
+
+    @Test
+    fun differentInstancesOfTheSameEventRemainInTheWeeklyOffGridList() {
+        val first = sampleOccurrence(allDay = true).copy(occurrenceId = "first")
+        val second = first.copy(occurrenceId = "second", startAt = first.startAt.plusDays(1), endAt = first.endAt.plusDays(1))
+        assertEquals(listOf(first, second), weeklyOffGridOccurrences(listOf(
+            ScheduleSection("周五", LocalDate.of(2026, 7, 3), listOf(first)),
+            ScheduleSection("周六", LocalDate.of(2026, 7, 4), listOf(second))
+        )))
+    }
+
+    @Test
+    fun aSameDayTimeRangeKeepsItsCompactEndTime() {
+        assertEquals("07月03日 08:00 - 08:45", fullScheduleTime(sampleOccurrence()))
+    }
+
+    @Test
+    fun anOvernightTimeRangeIncludesBothDates() {
+        assertEquals("07月03日 23:30 - 07月04日 01:00", fullScheduleTime(sampleOccurrence(
+            startAt = LocalDateTime.of(2026, 7, 3, 23, 30), endAt = LocalDateTime.of(2026, 7, 4, 1, 0)
+        )))
+    }
+
+    @Test
+    fun aSingleAllDayEventDoesNotIncludeItsExclusiveEndDate() {
+        assertEquals("07月03日 · 全天", fullScheduleTime(sampleOccurrence(
+            startAt = LocalDateTime.of(2026, 7, 3, 0, 0), endAt = LocalDateTime.of(2026, 7, 4, 0, 0), allDay = true
+        )))
+    }
+
+    @Test
+    fun aMultiDayEventShowsItsLastIncludedDay() {
+        assertEquals("07月02日 - 07月03日 · 全天", fullScheduleTime(sampleOccurrence(
+            startAt = LocalDateTime.of(2026, 7, 2, 0, 0), endAt = LocalDateTime.of(2026, 7, 4, 0, 0), allDay = true
+        )))
+    }
+
+    @Test
+    fun anOvernightNewYearEventIncludesBothYears() {
+        assertEquals("2026年12月31日 23:30 - 2027年01月01日 01:00", fullScheduleTime(sampleOccurrence(
+            startAt = LocalDateTime.of(2026, 12, 31, 23, 30), endAt = LocalDateTime.of(2027, 1, 1, 1, 0)
+        )))
+    }
+
+    @Test
+    fun anAllDayNewYearEventIncludesBothYears() {
+        assertEquals("2026年12月31日 - 2027年01月01日 · 全天", fullScheduleTime(sampleOccurrence(
+            startAt = LocalDateTime.of(2026, 12, 31, 0, 0), endAt = LocalDateTime.of(2027, 1, 2, 0, 0), allDay = true
+        )))
     }
 
     private fun sampleOccurrence(
