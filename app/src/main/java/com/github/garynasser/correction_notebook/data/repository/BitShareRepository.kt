@@ -7,27 +7,19 @@ import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitSha
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitShareFolderSummary
 import com.github.garynasser.correction_notebook.data.remote.api.BitShareApiService
 import com.github.garynasser.correction_notebook.data.remote.network.awaitStreamingResponse
-import com.github.garynasser.correction_notebook.utils.BitShareNetworkDetector
 import com.github.garynasser.correction_notebook.utils.runCatchingCancellable
 import okhttp3.OkHttpClient
-import okhttp3.Request
 import okhttp3.ResponseBody
-import javax.inject.Inject
+import java.util.Locale
 import javax.inject.Singleton
 
 @Singleton
-class BitShareRepository internal constructor(
+class BitShareRepository(
     private val apiService: BitShareApiService,
-    private val okHttpClient: OkHttpClient,
-    private val detectEnvironment: suspend () -> BitShareNetworkDetector.NetworkEnvironment
+    private val okHttpClient: OkHttpClient
 ) {
-    @Inject
-    constructor(apiService: BitShareApiService, okHttpClient: OkHttpClient, networkDetector: BitShareNetworkDetector) :
-        this(apiService, okHttpClient, { networkDetector.detectEnvironmentWithRetry(maxRetries = 1) })
     /**
      * 搜索 BITShare 资源（文件或目录）
-     * 注意：由于 /api/public/files?folder_id= 接口返回 404，无法按目录获取文件列表，
-     * 因此目录只能通过搜索发现，无法浏览目录内的文件
      */
     suspend fun searchFiles(
         query: String,
@@ -47,7 +39,8 @@ class BitShareRepository internal constructor(
                         id = item.id,
                         title = item.name,
                         originalName = item.originalName ?: item.name,
-                        extension = item.extension.orEmpty(),
+                        extension = item.extension?.takeIf { it.isNotBlank() }
+                            ?: (item.originalName ?: item.name).substringAfterLast('.', "").lowercase(Locale.ROOT),
                         sizeBytes = item.size ?: 0L,
                         downloadCount = item.downloadCount ?: 0,
                         uploadedAt = item.uploadedAt,
@@ -114,7 +107,7 @@ class BitShareRepository internal constructor(
         BitShareFileDetail(
             id = detail.id,
             title = detail.title,
-            originalName = detail.originalName,
+            originalName = detail.originalName?.takeIf { it.isNotBlank() } ?: detail.title,
             extension = detail.extension.orEmpty(),
             path = detail.path,
             description = detail.description,
@@ -125,52 +118,14 @@ class BitShareRepository internal constructor(
         )
     }
 
-    suspend fun <T> downloadFile(fileId: String, consume: suspend (ResponseBody) -> T): Result<T> {
-        var consuming = false
-        suspend fun download(request: Request): Result<T> = runCatchingCancellable {
-            okHttpClient.newCall(request).awaitStreamingResponse { response ->
-                check(response.isSuccessful) { "HTTP ${response.code}" }
-                val body = checkNotNull(response.body) { "下载响应为空" }
-                validateDownloadBody(body)
-                consuming = true
-                consume(body)
-            }
+    suspend fun <T> downloadFile(fileId: String, consume: suspend (ResponseBody) -> T): Result<T> = runCatchingCancellable {
+        val request = apiService.downloadFile(fileId).request()
+        okHttpClient.newCall(request).awaitStreamingResponse { response ->
+            check(response.isSuccessful) { "BITShare 下载失败：HTTP ${response.code}" }
+            val body = checkNotNull(response.body) { "下载响应为空" }
+            validateDownloadBody(body)
+            consume(body)
         }
-        val primaryAttempt = runCatchingCancellable { download(apiService.downloadFile(fileId).request()).getOrThrow() }
-        if (primaryAttempt.isSuccess || consuming) {
-            return primaryAttempt
-        }
-
-        val fallbackErrorMessages = mutableListOf<String>()
-        primaryAttempt.exceptionOrNull()?.message?.let(fallbackErrorMessages::add)
-
-        buildDownloadCandidateUrls(fileId).forEach { url ->
-            val attempt = download(Request.Builder().url(url).get().build())
-            if (attempt.isSuccess || consuming) {
-                return attempt
-            }
-
-            attempt.exceptionOrNull()?.message?.let { message ->
-                fallbackErrorMessages += "$url -> $message"
-            }
-        }
-
-        return Result.failure(
-            IllegalStateException(
-                buildString {
-                    append("BITShare 下载失败")
-                    if (fallbackErrorMessages.isNotEmpty()) {
-                        append("：")
-                        append(fallbackErrorMessages.joinToString("；"))
-                    }
-                }
-            )
-        )
-    }
-
-    private suspend fun buildDownloadCandidateUrls(fileId: String): List<String> {
-        val environment = detectEnvironment()
-        return bitShareDownloadFallbackUrls(environment, fileId)
     }
 
     private fun validateDownloadBody(body: ResponseBody) {
@@ -185,16 +140,5 @@ class BitShareRepository internal constructor(
             body.close()
             error(errorMessage)
         }
-    }
-}
-
-internal fun bitShareDownloadFallbackUrls(
-    environment: BitShareNetworkDetector.NetworkEnvironment,
-    fileId: String
-): List<String> {
-    return if (environment == BitShareNetworkDetector.NetworkEnvironment.INTRANET) {
-        listOf("http://10.170.35.57:8890/api/public/files/$fileId/download")
-    } else {
-        emptyList()
     }
 }

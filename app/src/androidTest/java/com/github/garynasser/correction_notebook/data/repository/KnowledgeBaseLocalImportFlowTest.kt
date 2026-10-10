@@ -239,7 +239,7 @@ class KnowledgeBaseLocalImportFlowTest {
         suspend fun start(scope: CoroutineScope) {
             val service = Retrofit.Builder().baseUrl("http://127.0.0.1/").client(client)
                 .addConverterFactory(GsonConverterFactory.create()).build().create(BitShareApiService::class.java)
-            val remote = BitShareRepository(service, client) { throw AssertionError("Local imports must not probe the network") }
+            val remote = BitShareRepository(service, client)
             withContext(Dispatchers.Main) {
                 model = KnowledgeBaseViewModel(repository, remote, StudySetRepository(database.knowledgeBaseDao()))
                 store.put("local-import", model)

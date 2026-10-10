@@ -388,7 +388,7 @@ class KnowledgeBaseLearningContextFlowTest {
             val service = Retrofit.Builder().baseUrl("http://127.0.0.1/").client(client)
                 .addConverterFactory(GsonConverterFactory.create()).build().create(BitShareApiService::class.java)
             withContext(Dispatchers.Main) {
-                model = KnowledgeBaseViewModel(local, BitShareRepository(service, client) { throw AssertionError("No network expected") }, study)
+                model = KnowledgeBaseViewModel(local, BitShareRepository(service, client), study)
                 store.put("learning", model)
                 model.enterFolder(folders[0].id)
             }
