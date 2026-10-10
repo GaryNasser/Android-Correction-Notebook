@@ -40,6 +40,8 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle as ComposeTextStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -1047,7 +1049,7 @@ private val COURSE_SECTIONS = listOf(
 )
 
 internal fun ScheduleOccurrence.toCourseGridPlacement(): CourseGridPlacement? {
-    if (allDay) return null
+    if (allDay || startAt.toLocalDate() != endAt.toLocalDate()) return null
     val startTime = startAt.toLocalTime()
     val endTime = endAt.toLocalTime()
     val overlappingSectionIndices = COURSE_SECTIONS
@@ -1118,6 +1120,7 @@ internal fun weeklyOffGridOccurrences(sections: List<ScheduleSection>): List<Sch
         .asSequence()
         .flatMap { it.items.asSequence() }
         .filter { it.toCourseGridPlacement() == null }
+        .distinctBy { it.occurrenceId }
         .sortedWith(compareBy<ScheduleOccurrence> { it.startAt }.thenBy { it.title })
         .toList()
 }
@@ -1288,15 +1291,9 @@ private fun ScheduleOccurrenceDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        modifier = Modifier.padding(horizontal = 12.dp),
         shape = RoundedCornerShape(8.dp),
-        title = {
-            Text(
-                text = item.title,
-                style = MaterialTheme.typography.titleMedium,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-        },
+        containerColor = MaterialTheme.colorScheme.surface,
         text = {
             Column(
                 modifier = Modifier
@@ -1305,6 +1302,12 @@ private fun ScheduleOccurrenceDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                Text(
+                    text = item.title,
+                    modifier = Modifier.semantics { heading() },
+                    style = MaterialTheme.typography.titleMedium.copy(lineBreak = LineBreak.Heading),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
                 Text(fullScheduleTime(item), style = MaterialTheme.typography.bodyMedium)
                 if (item.location.isNotBlank()) {
                     Text(
@@ -1323,10 +1326,12 @@ private fun ScheduleOccurrenceDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("关闭") }
+            TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text("关闭") }
         },
         dismissButton = {
-            TextButton(onClick = onDelete) { Text("删除") }
+            TextButton(onClick = onDelete, modifier = Modifier.heightIn(min = 48.dp)) {
+                Text("删除", color = MaterialTheme.colorScheme.error)
+            }
         }
     )
 }
@@ -1607,12 +1612,22 @@ private fun compactScheduleTime(item: ScheduleOccurrence): String {
     }
 }
 
-private fun fullScheduleTime(item: ScheduleOccurrence): String {
-    return if (item.allDay) {
-        "${item.startAt.format(DateTimeFormatter.ofPattern("MM月dd日"))} · 全天"
-    } else {
-        "${item.startAt.format(DateTimeFormatter.ofPattern("MM月dd日 HH:mm"))} - ${item.endAt.format(DateTimeFormatter.ofPattern("HH:mm"))}"
+internal fun fullScheduleTime(item: ScheduleOccurrence): String {
+    if (item.allDay) {
+        val firstDay = item.startAt.toLocalDate()
+        val lastDay = item.endAt.minusNanos(1).toLocalDate()
+        val format = DateTimeFormatter.ofPattern(if (firstDay.year == lastDay.year) "MM月dd日" else "yyyy年MM月dd日")
+        val range = if (firstDay == lastDay) firstDay.format(format)
+            else "${firstDay.format(format)} - ${lastDay.format(format)}"
+        return "$range · 全天"
     }
+    val format = DateTimeFormatter.ofPattern(
+        if (item.startAt.year == item.endAt.year) "MM月dd日 HH:mm" else "yyyy年MM月dd日 HH:mm"
+    )
+    val end = if (item.startAt.toLocalDate() == item.endAt.toLocalDate()) {
+        item.endAt.format(DateTimeFormatter.ofPattern("HH:mm"))
+    } else item.endAt.format(format)
+    return "${item.startAt.format(format)} - $end"
 }
 
 @Composable
