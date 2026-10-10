@@ -102,5 +102,72 @@ class ScheduleDeletionTest {
         assertEquals(listOf(incoming), applyIcsImport(local, preview, ImportDecision.OVERWRITE))
     }
 
+    @Test fun mergingTheOriginalImportDoesNotRestoreALocallyDeletedMovedInstance() {
+        val events = listOf(course, moved)
+        val selected = resolve(events).single { it.eventId == moved.id }
+        val local = deleteScheduleOccurrence(events, selected, false, updatedAt = 200)
+        val incoming = events.map { it.copy(id = "reimport-${it.id}", lastImportedAt = 300, updatedAt = 300) }
+        val preview = IcsImportPreview("course.ics", "calendar-a", incomingEvents = incoming,
+            added = emptyList(), updated = emptyList(), conflicts = emptyList(), deleted = emptyList())
+        assertEquals(local, applyIcsImport(local, preview, ImportDecision.MERGE))
+        assertEquals(listOf(start, start.plusWeeks(1)), resolve(applyIcsImport(local, preview, ImportDecision.MERGE)).map { it.startAt })
+        assertEquals(incoming, applyIcsImport(local, preview, ImportDecision.OVERWRITE))
+    }
+
+    @Test fun deletingAMovedInstanceWithAnImportedExclusionStillMarksTheMasterAsLocallyEdited() {
+        val events = listOf(course.copy(exDateList = listOf(moved.recurrenceId!!)), moved)
+        val selected = resolve(events).single { it.eventId == moved.id }
+        val local = deleteScheduleOccurrence(events, selected, false, updatedAt = 200)
+        assertEquals(events.first().copy(updatedAt = 200), local.single())
+        assertEquals(local, applyIcsImport(local, preview(events), ImportDecision.MERGE))
+        assertEquals(local, deleteScheduleOccurrence(local, selected, false, updatedAt = 300))
+    }
+
+    @Test fun anExistingMovedInstanceIsNotHiddenByItsLocallyEditedMaster() {
+        val master = course.copy(exDateList = listOf(moved.recurrenceId!!), updatedAt = 200)
+        val incomingMoved = moved.copy(id = "incoming-moved", title = "更新后的调课", startAt = moved.startAt.plusHours(1))
+        val merged = applyIcsImport(listOf(master, moved), preview(listOf(course, incomingMoved)), ImportDecision.MERGE)
+        assertEquals(listOf(master, incomingMoved), merged)
+        assertTrue(resolve(merged).any { it.eventId == incomingMoved.id })
+    }
+
+    @Test fun importedExclusionsDoNotBlockNewDetachedInstances() {
+        val imported = course.copy(exDateList = listOf(moved.recurrenceId!!))
+        val merged = applyIcsImport(listOf(imported), preview(listOf(imported, moved)), ImportDecision.MERGE)
+        assertEquals(listOf(imported, moved), merged)
+        assertTrue(resolve(merged).any { it.eventId == moved.id })
+    }
+
+    @Test fun localExclusionsOnlyProtectTheirMatchingOriginalDate() {
+        val master = course.copy(exDateList = listOf(start.plusWeeks(1)), updatedAt = 200)
+        val merged = applyIcsImport(listOf(master), preview(listOf(course, moved)), ImportDecision.MERGE)
+        assertEquals(listOf(master, moved), merged)
+        assertTrue(resolve(merged).any { it.eventId == moved.id })
+    }
+
+    @Test fun anotherCalendarOrSourceCannotBlockThisCalendarsDetachedInstance() {
+        val others = listOf(course.copy(id = "other-calendar", sourceCalendarId = "calendar-b",
+            exDateList = listOf(moved.recurrenceId!!), updatedAt = 200),
+            course.copy(id = "school", sourceType = ScheduleSourceType.SCHOOL_IMPORT,
+                exDateList = listOf(moved.recurrenceId!!), updatedAt = 200))
+        assertEquals(others + course + moved, applyIcsImport(others, preview(listOf(course, moved)), ImportDecision.MERGE))
+    }
+
+    @Test fun aMatchedLegacyCalendarStillProtectsItsLocallyDeletedMovedInstance() {
+        val old = course.copy(sourceCalendarId = "legacy", exDateList = listOf(moved.recurrenceId!!), updatedAt = 200)
+        val incoming = preview(listOf(course, moved)).copy(replacedCalendarIds = setOf("legacy"))
+        assertEquals(listOf(old), applyIcsImport(listOf(old), incoming, ImportDecision.MERGE))
+    }
+
+    @Test fun anUnidentifiedMasterCannotExcludeAnUnidentifiedDetachedInstance() {
+        val master = course.copy(sourceEventUid = null, exDateList = listOf(moved.recurrenceId!!), updatedAt = 200)
+        val unidentifiedMoved = moved.copy(sourceEventUid = null)
+        assertEquals(listOf(master, unidentifiedMoved), applyIcsImport(listOf(master),
+            preview(listOf(master, unidentifiedMoved)), ImportDecision.MERGE))
+    }
+
+    private fun preview(events: List<ScheduleEvent>) = IcsImportPreview("course.ics", "calendar-a", incomingEvents = events,
+        added = emptyList(), updated = emptyList(), conflicts = emptyList(), deleted = emptyList())
+
     private fun resolve(events: List<ScheduleEvent>) = buildScheduleOccurrences(events, start.toLocalDate(), start.plusWeeks(3).toLocalDate())
 }

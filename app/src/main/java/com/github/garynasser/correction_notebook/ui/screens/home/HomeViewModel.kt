@@ -977,6 +977,8 @@ class HomeViewModel @Inject constructor(
     fun applyIcsPreview(decision: ImportDecision) {
         if (_uiState.value.isAnyScheduleMutationBusy()) return
         val preview = _uiState.value.pendingIcsPreview ?: return
+        val completionMessage = if (decision == ImportDecision.MERGE) "合并导入完成"
+            else "已覆盖导入 ${preview.incomingEvents.size} 个日程"
         _uiState.value = _uiState.value.copy(isImportingSchedule = true, icsImportApplyError = null)
         viewModelScope.launch {
             try {
@@ -995,7 +997,7 @@ class HomeViewModel @Inject constructor(
                 isImportingSchedule = false,
                 pendingIcsPreview = null,
                 icsImportApplyError = null,
-                scheduleImportMessage = "已导入 ${preview.incomingEvents.size} 个日程",
+                scheduleImportMessage = completionMessage,
                 scheduleImportError = null
             )
             try {
@@ -1005,7 +1007,7 @@ class HomeViewModel @Inject constructor(
                 throw throwable
             } catch (_: Exception) {
                 _uiState.value = _uiState.value.copy(
-                    scheduleImportMessage = "已导入 ${preview.incomingEvents.size} 个日程，但界面刷新失败，请重新进入首页"
+                    scheduleImportMessage = "$completionMessage，但界面刷新失败，请重新进入首页"
                 )
             }
         }

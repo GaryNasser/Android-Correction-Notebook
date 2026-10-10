@@ -227,6 +227,10 @@ internal fun applyIcsImport(
         }
         .map(::icsEventCompositeKey)
         .toSet()
+    val locallyExcludedOverrideKeys = locallyExcludedIcsOverrideKeys(
+        current.filter { it.sourceType == ScheduleSourceType.ICS_IMPORT && it.sourceCalendarId in sourceIds },
+        preview.incomingEvents
+    )
     val retained = current.filterNot { event ->
         event.sourceType == ScheduleSourceType.ICS_IMPORT &&
             event.sourceCalendarId in sourceIds &&
@@ -234,8 +238,28 @@ internal fun applyIcsImport(
             icsEventCompositeKey(event) !in locallyEditedKeys
     }
     return retained + preview.incomingEvents.filterNot {
-        icsEventCompositeKey(it) in locallyEditedKeys
+        icsEventCompositeKey(it) in locallyEditedKeys || icsEventCompositeKey(it) in locallyExcludedOverrideKeys
     }
+}
+
+internal fun locallyExcludedIcsOverrideKeys(
+    matchedEvents: List<ScheduleEvent>,
+    incomingEvents: List<ScheduleEvent>
+): Set<String> {
+    val existingKeys = matchedEvents.map(::icsEventCompositeKey).toSet()
+    val localMastersByUid = matchedEvents.filter {
+        it.sourceType == ScheduleSourceType.ICS_IMPORT && it.recurrenceId == null &&
+            it.lastImportedAt != null && it.updatedAt > it.lastImportedAt &&
+            it.exDateList.isNotEmpty() && !it.sourceEventUid.isNullOrBlank()
+    }.groupBy { it.sourceEventUid!!.trim() }
+    return incomingEvents.mapNotNull { incoming ->
+        val originalStart = incoming.recurrenceId ?: return@mapNotNull null
+        val key = icsEventCompositeKey(incoming)
+        key.takeIf {
+            incoming.sourceType == ScheduleSourceType.ICS_IMPORT && key !in existingKeys &&
+                localMastersByUid[incoming.sourceEventUid?.trim()].orEmpty().any { originalStart in it.exDateList }
+        }
+    }.toSet()
 }
 
 internal fun deleteScheduleOccurrence(
@@ -256,11 +280,12 @@ internal fun deleteScheduleOccurrence(
 
     // A moved instance must exclude its original date, or deleting it would restore the old course.
     val originalStart = selected.recurrenceId ?: item.startAt
+    val removesOverride = events.any { belongsToSeries(it) && it.recurrenceId == originalStart }
     return events.filterNot {
         belongsToSeries(it) && it.recurrenceId == originalStart
     }.map { event ->
-        if (belongsToSeries(event) && event.recurrenceId == null && originalStart !in event.exDateList) {
-            event.copy(exDateList = event.exDateList + originalStart, updatedAt = updatedAt)
+        if (belongsToSeries(event) && event.recurrenceId == null && (originalStart !in event.exDateList || removesOverride)) {
+            event.copy(exDateList = (event.exDateList + originalStart).distinct(), updatedAt = updatedAt)
         } else event
     }
 }
