@@ -156,7 +156,10 @@ class ScheduleDeletionTest {
     @Test fun aMatchedLegacyCalendarStillProtectsItsLocallyDeletedMovedInstance() {
         val old = course.copy(sourceCalendarId = "legacy", exDateList = listOf(moved.recurrenceId!!), updatedAt = 200)
         val incoming = preview(listOf(course, moved)).copy(replacedCalendarIds = setOf("legacy"))
-        assertEquals(listOf(old), applyIcsImport(listOf(old), incoming, ImportDecision.MERGE))
+        val merged = applyIcsImport(listOf(old), incoming, ImportDecision.MERGE)
+        assertEquals(listOf(old.copy(sourceCalendarId = incoming.sourceCalendarId)), merged)
+        assertEquals(listOf(start, start.plusWeeks(1)), resolve(merged).map { it.startAt })
+        assertEquals(merged, applyIcsImport(merged, incoming, ImportDecision.MERGE))
     }
 
     @Test fun anUnidentifiedMasterCannotExcludeAnUnidentifiedDetachedInstance() {

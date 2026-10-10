@@ -20,7 +20,7 @@ class WeekDatePickerFlowTest {
     @Test fun aCourseCreatedFromTheWeekKeepsItsOriginalAddressAndCanBeDeleted() {
         val title = "课程排版验证"
         val location = "文萃楼 M134\n本地验证第二行"
-        val gridText = "$title\n文萃楼\nM134"
+        val gridText = "$title\n文萃楼 M134"
         compose.onNodeWithContentDescription("添加日程").performClick()
         compose.onNodeWithText("活动标题").performTextReplacement(title)
         compose.onNodeWithText("地点").performTextReplacement(location)

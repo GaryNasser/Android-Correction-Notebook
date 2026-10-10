@@ -954,8 +954,8 @@ internal fun CourseGridBlock(
 ) {
     val compactBlock = span <= 1
     val locationText = item.location.toGridLocationText()
-    // Let a single-period room share a line with its building when it fits.
-    val displayLocation = if (compactBlock) locationText.replace('\n', ' ') else locationText
+    // Wrap address parts only when needed, leaving short blocks room for the complete course name.
+    val displayLocation = locationText.replace('\n', ' ')
     val hasLocation = displayLocation.isNotBlank()
     val text = buildAnnotatedString {
         withStyle(
@@ -990,7 +990,7 @@ internal fun CourseGridBlock(
             .clip(RoundedCornerShape(8.dp))
             .background(scheduleSourceColor(item.sourceType))
             .clickable(onClick = onClick)
-            .padding(horizontal = 3.dp, vertical = if (compactBlock) 2.dp else 4.dp),
+            .padding(horizontal = 3.dp, vertical = 2.dp),
         contentAlignment = Alignment.Center
     ) {
         BasicText(
