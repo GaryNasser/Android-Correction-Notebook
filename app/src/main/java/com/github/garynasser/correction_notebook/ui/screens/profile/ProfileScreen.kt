@@ -6,8 +6,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Help
 import androidx.compose.material.icons.automirrored.filled.Logout
@@ -55,7 +57,7 @@ fun ProfileScreen(
     val profileMessage by viewModel.profileMessage.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    var showLogoutDialog by remember { mutableStateOf(false) }
+    var showLogoutDialog by rememberSaveable { mutableStateOf(false) }
     var showFeedbackDialog by rememberSaveable { mutableStateOf(false) }
     var showAiSettingsDialog by remember { mutableStateOf(false) }
 
@@ -199,13 +201,16 @@ fun ProfileScreen(
                 if (!isLoading) showLogoutDialog = false
             },
             shape = RoundedCornerShape(8.dp),
+            containerColor = MaterialTheme.colorScheme.surface,
             title = { Text("退出延河课堂", style = MaterialTheme.typography.titleMedium) },
             text = {
-                Text(
-                    text = "退出后会清除当前课程登录状态，已保存的学习数据和本地设置不会删除。",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Box(Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState())) {
+                    Text(
+                        text = "退出后会清除当前课程登录状态，已保存的学习数据和本地设置不会删除。",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             },
             confirmButton = {
                 Button(
@@ -241,9 +246,13 @@ fun ProfileScreen(
         AlertDialog(
             onDismissRequest = { showFeedbackDialog = false },
             shape = RoundedCornerShape(8.dp),
+            containerColor = MaterialTheme.colorScheme.surface,
             title = { Text("帮助与反馈", style = MaterialTheme.typography.titleMedium) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(
+                    modifier = Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
                     Text(
                         text = "如有 bug 或功能建议，请联系开发者邮箱：",
                         style = MaterialTheme.typography.bodyMedium,
