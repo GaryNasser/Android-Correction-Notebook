@@ -77,6 +77,7 @@ dependencies {
     implementation(libs.androidx.security.crypto)
     implementation(libs.androidx.hilt.navigation.compose)
     implementation(libs.okhttp)
+    implementation(libs.jsoup)
     implementation(libs.androidx.media3.session)
     implementation(libs.okhttp.urlconnection)
     implementation(libs.androidx.media3.exoplayer)

@@ -29,8 +29,10 @@ media3 = "1.2.0"
 firebaseCrashlyticsBuildtools = "3.0.6"  # Compose编译器版本
 room = "2.6.1"
 libRecur = "0.17.1"
+jsoup = "1.18.3"
 
 [libraries]
+jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
 lib-recur = { group = "org.dmfs", name = "lib-recur", version.ref = "libRecur" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }

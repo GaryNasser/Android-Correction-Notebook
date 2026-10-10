@@ -10,6 +10,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.garynasser.correction_notebook.data.model.home.PomodoroSettings
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import org.junit.Assert.*
@@ -29,7 +30,11 @@ class StudyPreferencesRecoveryTest {
             assertTrue(manager.soundEnabled.first())
             assertTrue(manager.vibrationEnabled.first())
             assertArrayEquals(corrupt, backups(directory).single().readBytes())
-            val updates = async(start = CoroutineStart.UNDISPATCHED) { manager.soundEnabled.take(2).toList() }
+            val initialValueObserved = CompletableDeferred<Unit>()
+            val updates = async(start = CoroutineStart.UNDISPATCHED) {
+                manager.soundEnabled.onEach { initialValueObserved.complete(Unit) }.take(2).toList()
+            }
+            initialValueObserved.await()
             manager.setSoundEnabled(false)
             assertEquals(listOf(true, false), updates.await())
             manager.setVibrationEnabled(false)

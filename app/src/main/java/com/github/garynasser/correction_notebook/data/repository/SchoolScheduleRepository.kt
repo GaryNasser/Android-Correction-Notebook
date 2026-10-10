@@ -41,8 +41,8 @@ class SchoolScheduleRepository @Inject constructor(
         val credential = credentialManager.getCredentials()
             ?: throw SchoolScheduleException("请先登录 BITStudy，再同步教务课表")
         val startedAt = System.currentTimeMillis()
-        val rawCourses = remoteDataSource.getSchedule(credential.studentId, credential.password, term.id)
-        return applyTermSchedule(term, rawCourses, startedAt)
+        val termSchedule = remoteDataSource.getTermSchedule(credential.studentId, credential.password, term)
+        return applyTermSchedule(termSchedule.term, termSchedule.courses, startedAt)
     }
 
     private suspend fun applyTermSchedule(

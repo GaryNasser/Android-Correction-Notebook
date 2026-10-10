@@ -20,6 +20,7 @@ import com.github.garynasser.correction_notebook.data.model.yanhe.CourseSection
 import com.github.garynasser.correction_notebook.data.model.yanhe.Video
 import com.github.garynasser.correction_notebook.data.remote.api.VideoApiService
 import com.github.garynasser.correction_notebook.data.remote.cas.BitCasClient
+import com.github.garynasser.correction_notebook.data.remote.cas.ssoResponseFixture
 import com.github.garynasser.correction_notebook.data.remote.manager.VideoRemoteManager
 import com.github.garynasser.correction_notebook.ui.screens.yanhe.CourseListViewModel
 import com.github.garynasser.correction_notebook.ui.screens.yanhe.CourseUiState
@@ -33,8 +34,6 @@ import kotlinx.coroutines.*
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.ResponseBody.Companion.toResponseBody
-import okhttp3.HttpUrl.Companion.toHttpUrl
-import okio.Buffer
 import org.junit.Assert.*
 import org.junit.Test
 import retrofit2.Retrofit
@@ -377,15 +376,8 @@ class YanheSessionFlowTest {
         suspend fun awaitOld() = withContext(Dispatchers.IO) { assertTrue(entered.await(5, TimeUnit.SECONDS)) }
         val client = OkHttpClient.Builder().addInterceptor { chain ->
             val request = chain.request()
+            ssoResponseFixture(request)?.let { return@addInterceptor it }
             val (body, callbackToken) = when {
-                request.url.encodedPath == "/cas/v1/tickets" -> {
-                    val buffer = Buffer()
-                    request.body!!.writeTo(buffer)
-                    val id = ("https://qa.invalid/?" + buffer.readUtf8()).toHttpUrl().queryParameter("username")
-                    "<form action='/cas/v1/tickets/TGT-$id'></form>" to null
-                }
-                request.url.encodedPath.startsWith("/cas/v1/tickets/TGT-") ->
-                    "ST-${request.url.encodedPath.substringAfter("TGT-")}" to null
                 request.url.encodedPath == "/v1/cas/callback" -> {
                     val id = request.url.queryParameter("ticket")!!.removePrefix("ST-")
                     if (id == OLD.studentId) {

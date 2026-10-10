@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
@@ -33,11 +35,14 @@ import com.github.garynasser.correction_notebook.data.model.auth.AuthState
 import com.github.garynasser.correction_notebook.data.model.auth.UserCredential
 import com.github.garynasser.correction_notebook.data.remote.api.VideoApiService
 import com.github.garynasser.correction_notebook.data.remote.cas.BitCasClient
+import com.github.garynasser.correction_notebook.data.remote.cas.CasChallengeCoordinator
+import com.github.garynasser.correction_notebook.data.remote.cas.ssoResponseFixture
 import com.github.garynasser.correction_notebook.data.remote.manager.VideoRemoteManager
 import com.github.garynasser.correction_notebook.data.repository.AuthStateManager
 import com.github.garynasser.correction_notebook.data.repository.VideoRepository
 import com.github.garynasser.correction_notebook.data.repository.YanheRepository
 import com.github.garynasser.correction_notebook.ui.components.AuthFormTemplate
+import com.github.garynasser.correction_notebook.ui.components.CasChallengeDialog
 import com.github.garynasser.correction_notebook.ui.theme.CorrectionNotebookTheme
 import java.io.IOException
 import java.io.File
@@ -54,6 +59,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
+import okhttp3.FormBody
 import okhttp3.Call
 import okhttp3.EventListener
 import okhttp3.Protocol
@@ -67,6 +73,61 @@ import retrofit2.converter.gson.GsonConverterFactory
 
 class CasScreenFlowTest {
     @get:Rule val compose = createComposeRule()
+
+    @Test
+    fun smsDialogKeepsOldSessionUntilTheCorrectCodeCompletesLogin() = withFixture { fixture ->
+        fixture.network.requireSms = true
+        fixture.network.release.countDown()
+        showWithChallenges(fixture)
+        compose.runOnIdle { fixture.vm.submitYanheLogin() }
+        compose.waitUntil(5_000) { fixture.network.challenges.prompt.value != null }
+        compose.onNodeWithText("验证码已发送至 138****8000").assertIsDisplayed()
+        assertEquals(fixture.previousToken, runBlocking { fixture.tokens.getYanheLoginToken() })
+        assertEquals(fixture.previousCredential, fixture.credentials.getCredentials())
+        compose.onNodeWithTag("cas-code-input").performTextReplacement("000000")
+        compose.onNodeWithText("验证").performClick()
+        compose.waitUntil(5_000) { fixture.network.challenges.prompt.value?.error != null }
+        compose.onNodeWithText("验证码错误").assertIsDisplayed()
+        capture("qa-cas-sms-retry.png")
+        compose.onNodeWithTag("cas-code-input").performTextReplacement("123456")
+        compose.onNodeWithText("验证").performClick()
+        compose.waitUntil(5_000) { fixture.auth.authState.value is AuthState.Authenticated }
+        assertEquals("qa-token", runBlocking { fixture.tokens.getYanheLoginToken() })
+        assertEquals(UserCredential("qa-student", "qa-password"), fixture.credentials.getCredentials())
+        assertEquals(1, fixture.network.smsSends.get())
+        assertNull(fixture.network.challenges.prompt.value)
+    }
+
+    @Test
+    fun dismissingSmsDoesNotChangeCredentialsAndRetryRemainsAvailable() = withFixture { fixture ->
+        fixture.network.requireSms = true
+        fixture.network.release.countDown()
+        showWithChallenges(fixture)
+        compose.runOnIdle { fixture.vm.submitYanheLogin() }
+        compose.waitUntil(5_000) { fixture.network.challenges.prompt.value != null }
+        compose.onNodeWithText("取消").performClick()
+        compose.waitUntil(5_000) { !fixture.vm.isCasLoading }
+        assertEquals(fixture.previousToken, runBlocking { fixture.tokens.getYanheLoginToken() })
+        assertEquals(fixture.previousCredential, fixture.credentials.getCredentials())
+        compose.onNodeWithText("登录延河课堂").performScrollTo().assertIsEnabled().performClick()
+        compose.waitUntil(5_000) { fixture.network.challenges.prompt.value != null }
+        compose.onNodeWithTag("cas-code-input").performTextReplacement("123456")
+        compose.onNodeWithText("验证").performClick()
+        compose.waitUntil(5_000) { fixture.auth.authState.value is AuthState.Authenticated }
+    }
+
+    private fun showWithChallenges(fixture: Fixture) {
+        compose.setContent {
+            CorrectionNotebookTheme {
+                CasScreen(viewModel = fixture.vm, onBackButtonClick = {})
+                val prompt by fixture.network.challenges.prompt.collectAsState()
+                prompt?.let { current ->
+                    CasChallengeDialog(current, { fixture.network.challenges.submit(current.id, it) },
+                        { fixture.network.challenges.cancel(current.id) })
+                }
+            }
+        }
+    }
 
     @Test
     fun inFlightAuthenticationKeepsBackAvailable() = withFixture { fixture ->
@@ -132,7 +193,7 @@ class CasScreenFlowTest {
         compose.setContent { CorrectionNotebookTheme { CasScreen(viewModel = fixture.vm, onBackButtonClick = {}) } }
         compose.onNodeWithText("登录延河课堂").performScrollTo().performClick()
         compose.waitUntil(5_000) { fixture.vm.errorMessage != null }
-        compose.onNodeWithText("统一认证失败，请检查学号或密码").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("统一认证失败，请检查学号、密码或验证码").performScrollTo().assertIsDisplayed()
         assertEquals(fixture.previousToken, runBlocking { fixture.tokens.getYanheLoginToken() })
         assertEquals(fixture.previousCredential, fixture.credentials.getCredentials())
         fixture.network.rejectCredentials = false
@@ -268,7 +329,7 @@ class CasScreenFlowTest {
         var previousCredential: UserCredential? = null
         lateinit var vm: RegistrationViewModel
         fun createViewModel() {
-            val yanhe = YanheRepository(tokens, credentials, BitCasClient(network.client))
+            val yanhe = YanheRepository(tokens, credentials, BitCasClient(network.client, network.challenges))
             val api = Retrofit.Builder().baseUrl("https://unused.invalid/")
                 .client(OkHttpClient.Builder().addInterceptor { throw AssertionError("Unexpected video request") }.build())
                 .addConverterFactory(GsonConverterFactory.create()).build().create(VideoApiService::class.java)
@@ -282,6 +343,9 @@ class CasScreenFlowTest {
     }
 
     private class CasNetwork {
+        val challenges = CasChallengeCoordinator()
+        val smsSends = AtomicInteger()
+        @Volatile var requireSms = false
         val entered = CountDownLatch(1)
         val release = CountDownLatch(1)
         val cancelled = CountDownLatch(1)
@@ -291,13 +355,27 @@ class CasScreenFlowTest {
             override fun canceled(call: Call) { cancelled.countDown() }
         }).addInterceptor { chain ->
             val request = chain.request()
-            if (rejectCredentials && request.url.encodedPath == "/cas/v1/tickets") {
+            if (rejectCredentials && request.url.encodedPath == "/cas/login" && request.method == "POST") {
                 return@addInterceptor Response.Builder().request(request).protocol(Protocol.HTTP_1_1)
                     .code(401).message("Unauthorized").body("Unauthorized".toResponseBody()).build()
             }
+            val smsBody = when {
+                requireSms && request.url.encodedPath == "/cas/login" && request.method == "POST" &&
+                    (request.body as FormBody).let { form -> (0 until form.size).any { form.name(it) == "type" && form.value(it) == "UsernamePassword" } } ->
+                    "<form action='${request.url}' id='secondSmsLoginForm'><p id='login-page-flowkey'>second-qa</p><p id='user-object-id'>user-qa</p></form>"
+                request.url.encodedPath.endsWith("/getPhoneNumberByUserId") -> """{"data":{"tel":"opaque-phone","maskTel":"138****8000"}}"""
+                request.url.encodedPath.endsWith("/sendSmsCode") -> { smsSends.incrementAndGet(); """{"code":200}""" }
+                request.url.encodedPath.endsWith("/checkToken") -> {
+                    val body = okio.Buffer().also { request.body!!.writeTo(it) }.readUtf8()
+                    if (com.google.gson.JsonParser.parseString(body).asJsonObject.get("token").asString == "123456")
+                        """{"code":200}""" else """{"code":400,"message":"验证码错误"}"""
+                }
+                else -> null
+            }
+            if (smsBody != null) return@addInterceptor Response.Builder().request(request).protocol(Protocol.HTTP_1_1)
+                .code(200).message("OK").body(smsBody.toResponseBody()).build()
+            ssoResponseFixture(request)?.let { return@addInterceptor it }
             val body = when (request.url.encodedPath) {
-                "/cas/v1/tickets" -> "<form action='/cas/v1/tickets/TGT-qa'></form>"
-                "/cas/v1/tickets/TGT-qa" -> "ST-qa"
                 "/v1/cas/callback" -> {
                     callbackRequests.incrementAndGet()
                     entered.countDown()

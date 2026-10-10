@@ -20,6 +20,7 @@ import kotlinx.coroutines.withTimeout
 import okhttp3.Call
 import okhttp3.EventListener
 import okhttp3.OkHttpClient
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.Response
@@ -36,7 +37,7 @@ class CasNetworkCancellationTest {
 
     @Test
     fun cancellingServiceTicketInterruptsHeadersAndBody() {
-        listOf(false, true).forEach { checkCancellation(it, "/cas/v1/tickets/TGT-test") }
+        listOf(false, true).forEach { checkCancellation(it, "/cas/login", stalledMethod = "POST") }
     }
 
     @Test
@@ -48,7 +49,7 @@ class CasNetworkCancellationTest {
     }
 
     @Test
-    fun cancellingSchoolCallbackInterruptsTheRequest() = checkCancellation(false, SCHOOL_INDEX, school = true)
+    fun cancellingSchoolCallbackInterruptsTheRequest() = checkCancellation(false, SCHOOL_AUTH_CALLBACK, school = true)
 
     @Test
     fun cancellingSchoolTermAndScheduleInterruptsHeadersAndBody() {
@@ -62,10 +63,11 @@ class CasNetworkCancellationTest {
 
     private fun checkCancellation(
         afterHeaders: Boolean,
-        stalledPath: String = "/cas/v1/tickets",
+        stalledPath: String = "/cas/login",
         yanhe: Boolean = false,
         school: Boolean = false,
-        timed: Boolean = false
+        timed: Boolean = false,
+        stalledMethod: String? = null
     ) = runBlocking { supervisorScope {
         val entered = CountDownLatch(1)
         val release = CountDownLatch(1)
@@ -94,14 +96,14 @@ class CasNetworkCancellationTest {
             .eventListener(object : EventListener() {
                 override fun canceled(call: Call) { cancelled.countDown() }
                 override fun callFailed(call: Call, ioe: IOException) {
-                    if (call.request().url.encodedPath == stalledPath) callFinished.countDown()
+                    if (call.request().url.encodedPath == stalledPath && (stalledMethod == null || call.request().method == stalledMethod)) callFinished.countDown()
                 }
                 override fun callEnd(call: Call) {
-                    if (call.request().url.encodedPath == stalledPath) callFinished.countDown()
+                    if (call.request().url.encodedPath == stalledPath && (stalledMethod == null || call.request().method == stalledMethod)) callFinished.countDown()
                 }
             })
             .addInterceptor { chain ->
-                if (chain.request().url.encodedPath != stalledPath) {
+                if (chain.request().url.encodedPath != stalledPath || (stalledMethod != null && chain.request().method != stalledMethod)) {
                     successfulResponse(chain.request())
                 } else {
                     val url = chain.request().url.newBuilder().scheme("http").host("127.0.0.1")
@@ -146,14 +148,19 @@ class CasNetworkCancellationTest {
 
     companion object {
         const val SCHOOL_INDEX = "/jwapp/sys/wdkbby/*default/index.do"
+        const val SCHOOL_AUTH_CALLBACK = "/auth-protocol-core/loginSuccess"
         const val SCHOOL_TERM = "/jwapp/sys/wdkbby/modules/jshkcb/dqxnxq.do"
         const val SCHOOL_SCHEDULE = "/jwapp/sys/wdkbby/modules/xskcb/cxxszhxqkb.do"
 
         fun successfulResponse(request: Request): Response {
             val body = when (request.url.encodedPath) {
-                "/cas/v1/tickets" -> "<form action='/cas/v1/tickets/TGT-test'></form>"
-                "/cas/v1/tickets/TGT-test" -> "ST-test"
-                "/v1/cas/callback", SCHOOL_INDEX -> ""
+                "/cas/login" -> "<form action='${request.url}'></form><div id='login-page-flowkey'>execution-test</div><div id='login-croypto'>MDEyMzQ1Njc4OWFiY2RlZg==</div>"
+                "/cas/api/protected/user/findCaptchaCount/test-student",
+                "/cas/api/protected/user/findCaptchaCount/student",
+                "/cas/api/protected/user/findCaptchaCount/student+id" -> """{"code":200,"data":{"captchaInvisible":false}}"""
+                "/v1/cas/callback", SCHOOL_INDEX, SCHOOL_AUTH_CALLBACK,
+                "/auth-protocol-core/login", "/jwapp/sys/xsfacx/*default/index.do",
+                "/jwapp/sys/funauthapp/api/getAppConfig/xsfacx-4766859113956613.do" -> ""
                 "/v1/auth/token" -> """{"code":0,"data":{"token":"test-token"}}"""
                 SCHOOL_TERM -> """{"dqxnxq":{"XNXQDM":"2026-2027-1","XNXQMC":"Autumn","KSRQ":"2026-09-07"}}"""
                 SCHOOL_SCHEDULE -> """{"cxxszhxqkb":[{"KCMC":"Linear algebra","SKXQ":"1","SKJC":"3-4","SKZC":"1-16","JASMC":"A101"}]}"""
@@ -162,8 +169,18 @@ class CasNetworkCancellationTest {
             val finalRequest = if (request.url.encodedPath == "/v1/cas/callback") {
                 request.newBuilder().url(request.url.newBuilder().addQueryParameter("code", "test+code &value").build()).build()
             } else request
-            return Response.Builder().request(finalRequest).protocol(Protocol.HTTP_1_1).code(200)
-                .message("OK").body(body.toResponseBody()).build()
+            val builder = Response.Builder().request(finalRequest).protocol(Protocol.HTTP_1_1).code(200)
+                .message("OK").body(body.toResponseBody())
+            if (request.url.encodedPath == "/cas/login" && request.method == "POST") {
+                val service = request.url.queryParameter("service")!!.toHttpUrl()
+                builder.code(302).header("Location", service.newBuilder().addQueryParameter("ticket", "ST-test").build().toString())
+            }
+            if (request.url.encodedPath == "/auth-protocol-core/login") {
+                val service = "https://jxzxehall.bit.edu.cn$SCHOOL_AUTH_CALLBACK?sessionToken=qa-test"
+                builder.code(302).header("Location", "https://sso.bit.edu.cn/cas/login".toHttpUrl()
+                    .newBuilder().addQueryParameter("service", service).build().toString())
+            }
+            return builder.build()
         }
     }
 }

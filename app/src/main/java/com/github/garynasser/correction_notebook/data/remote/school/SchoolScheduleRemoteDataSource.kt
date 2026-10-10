@@ -30,7 +30,7 @@ class SchoolScheduleRemoteDataSource @Inject constructor(
     private val bitCasClient: BitCasClient,
     @BasicRetrofit private val okHttpClient: OkHttpClient
 ) {
-    private val schoolClient: OkHttpClient = okHttpClient.newBuilder()
+    private fun newSchoolClient(): OkHttpClient = okHttpClient.newBuilder()
         .cookieJar(JavaNetCookieJar(CookieManager().apply {
             setCookiePolicy(CookiePolicy.ACCEPT_ALL)
         }))
@@ -39,30 +39,49 @@ class SchoolScheduleRemoteDataSource @Inject constructor(
         .build()
 
     suspend fun getCurrentTerm(studentId: String, password: String): SchoolTerm = withContext(Dispatchers.IO) {
-        establishSession(studentId, password)
-        parseCurrentTerm(getJson(CURRENT_TERM_URL))
+        val client = newSchoolClient()
+        establishSession(client, studentId, password)
+        resolveTermStart(client, parseCurrentTerm(getJson(client, CURRENT_TERM_URL)))
     }
 
     suspend fun getTerms(studentId: String, password: String): List<SchoolTerm> = withContext(Dispatchers.IO) {
-        establishSession(studentId, password)
-        parseTerms(getJson(TERMS_URL), currentOnly = false)
+        val client = newSchoolClient()
+        establishSession(client, studentId, password)
+        parseTerms(getJson(client, TERMS_URL), currentOnly = false)
     }
 
     suspend fun getCurrentTermSchedule(studentId: String, password: String): SchoolTermSchedule = withContext(Dispatchers.IO) {
-        establishSession(studentId, password)
-        val term = parseCurrentTerm(getJson(CURRENT_TERM_URL))
+        val client = newSchoolClient()
+        establishSession(client, studentId, password)
+        val term = resolveTermStart(client, parseCurrentTerm(getJson(client, CURRENT_TERM_URL)))
         SchoolTermSchedule(
             term = term,
-            courses = fetchSchedule(term.id)
+            courses = fetchSchedule(client, term.id)
         )
     }
 
-    suspend fun getSchedule(studentId: String, password: String, termId: String): List<SchoolCourseRaw> = withContext(Dispatchers.IO) {
-        establishSession(studentId, password)
-        fetchSchedule(termId)
+    suspend fun getTermSchedule(studentId: String, password: String, term: SchoolTerm): SchoolTermSchedule = withContext(Dispatchers.IO) {
+        val client = newSchoolClient()
+        establishSession(client, studentId, password)
+        val resolved = resolveTermStart(client, term)
+        SchoolTermSchedule(resolved, fetchSchedule(client, resolved.id))
     }
 
-    private suspend fun fetchSchedule(termId: String): List<SchoolCourseRaw> {
+    private suspend fun resolveTermStart(client: OkHttpClient, term: SchoolTerm): SchoolTerm {
+        if (term.startDate != null) return term
+        val payload = JsonObject().apply { addProperty("XNXQDM", term.id); addProperty("ZC", "1") }
+        val request = Request.Builder().url(WEEK_DATES_URL).headers(defaultHeaders())
+            .post(FormBody.Builder().add("requestParamStr", payload.toString()).build()).build()
+        val root = executeJsonRequest(client, request)
+        val rows = root.get("data")?.takeIf { it.isJsonArray }?.asJsonArray?.toList().orEmpty()
+        val monday = rows.mapNotNull { it.asJsonObjectOrNull() }
+            .singleOrNull { it.firstInt("XQ") == 1 }?.firstDate("RQ")
+            ?.takeIf { it.dayOfWeek == java.time.DayOfWeek.MONDAY }
+            ?: throw SchoolScheduleException("学校校历没有返回有效的第一周周一日期，已保留本地课表")
+        return term.copy(startDate = monday)
+    }
+
+    private suspend fun fetchSchedule(client: OkHttpClient, termId: String): List<SchoolCourseRaw> {
         val body = FormBody.Builder()
             .add("XNXQDM", termId)
             .add("xnxqdm", termId)
@@ -72,12 +91,30 @@ class SchoolScheduleRemoteDataSource @Inject constructor(
             .headers(defaultHeaders())
             .post(body)
             .build()
-        return parseCourses(executeJsonRequest(request))
+        return parseCourses(executeJsonRequest(client, request))
     }
 
-    private suspend fun establishSession(studentId: String, password: String) {
-        val st = bitCasClient.getServiceTicketFor(studentId, password, SCHOOL_INDEX_URL)
-        val callback = SCHOOL_INDEX_URL.toHttpUrl()
+    private suspend fun establishSession(client: OkHttpClient, studentId: String, password: String) {
+        val preflight = Request.Builder().url(SCHOOL_AUTH_URL).headers(defaultHeaders()).get().build()
+        val service = client.newBuilder().followRedirects(false).followSslRedirects(false).build()
+            .newCall(preflight).awaitResponse { response ->
+                if (response.code !in 300..399) throw SchoolScheduleException("教学中心认证入口没有返回跳转地址")
+                val loginUrl = response.header("Location")?.let { response.request.url.resolve(it) }
+                    ?: throw SchoolScheduleException("教学中心认证入口缺少跳转地址")
+                if (loginUrl.scheme != "https" || loginUrl.host != "sso.bit.edu.cn" || loginUrl.port != 443 || loginUrl.encodedPath != "/cas/login") {
+                    throw SchoolScheduleException("教学中心返回了非学校统一认证地址")
+                }
+                val callback = loginUrl.queryParameter("service")?.toHttpUrl()
+                    ?: throw SchoolScheduleException("教学中心未提供统一认证回调")
+                if (callback.scheme != "https" || callback.host != "jxzxehall.bit.edu.cn" || callback.port != 443 ||
+                    callback.encodedPath != "/auth-protocol-core/loginSuccess" || callback.queryParameter("sessionToken").isNullOrBlank() ||
+                    callback.username.isNotEmpty() || callback.password.isNotEmpty()) {
+                    throw SchoolScheduleException("教学中心统一认证回调地址异常")
+                }
+                callback.toString()
+            }
+        val st = bitCasClient.getServiceTicketFor(studentId, password, service)
+        val callback = service.toHttpUrl()
             .newBuilder()
             .addQueryParameter("ticket", st)
             .build()
@@ -86,26 +123,31 @@ class SchoolScheduleRemoteDataSource @Inject constructor(
             .headers(defaultHeaders())
             .get()
             .build()
-        schoolClient
-            .newCall(request)
-            .awaitResponse { response ->
-                if (!response.isSuccessful) {
-                    throw SchoolScheduleException("学校系统认证回调失败：${response.code}")
-                }
-            }
+        visitSchoolPage(client, request)
+        listOf(SCHOOL_APP_INDEX_URL, SCHOOL_CONFIG_URL, SCHOOL_INDEX_URL).forEach { url ->
+            visitSchoolPage(client, Request.Builder().url(url).headers(defaultHeaders()).get().build())
+        }
     }
 
-    private suspend fun getJson(url: String): JsonObject {
+    private suspend fun visitSchoolPage(client: OkHttpClient, request: Request) {
+        client.newCall(request).awaitResponse { response ->
+            if (!response.isSuccessful || response.request.url.host !in setOf("jxzxehall.bit.edu.cn", "jxzxehallapp.bit.edu.cn")) {
+                throw SchoolScheduleException("学校系统认证或应用初始化失败：${response.code}")
+            }
+        }
+    }
+
+    private suspend fun getJson(client: OkHttpClient, url: String): JsonObject {
         val request = Request.Builder()
             .url(url)
             .headers(defaultHeaders())
             .get()
             .build()
-        return executeJsonRequest(request)
+        return executeJsonRequest(client, request)
     }
 
-    private suspend fun executeJsonRequest(request: Request): JsonObject {
-        return schoolClient.newCall(request).awaitResponse { response ->
+    private suspend fun executeJsonRequest(client: OkHttpClient, request: Request): JsonObject {
+        return client.newCall(request).awaitResponse { response ->
             val body = response.body?.string().orEmpty()
             if (!response.isSuccessful) {
                 throw SchoolScheduleException("学校系统请求失败：${response.code}")
@@ -158,11 +200,15 @@ class SchoolScheduleRemoteDataSource @Inject constructor(
             val weekdayText = item.firstString("XQ", "SKXQ", "weekday", "xq", "XQJ", "SKXQJ", "weekdayName")
             val weekday = item.firstInt("XQ", "SKXQ", "weekday", "xq")
                 ?: SchoolScheduleParsers.parseWeekday(weekdayText)
-            val sectionRange = SchoolScheduleParsers.parseSectionRange(
-                item.firstString("JC", "SKJC", "JCDM", "sections", "jc")
-            )
+            val usesNativeSections = item.has("KSJC") || item.has("JSJC")
+            val sectionRange = if (usesNativeSections) {
+                val first = item.firstInt("KSJC")
+                val last = item.firstInt("JSJC")
+                if (first != null && last != null) first to last else null
+            } else SchoolScheduleParsers.parseSectionRange(item.firstString("JC", "SKJC", "JCDM", "sections", "jc"))
             val weeks = SchoolScheduleParsers.parseWeeks(
-                item.firstString("ZC", "SKZC", "ZCMC", "weeks", "zc", "zcmc")
+                item.firstString("ZC", "SKZC", "ZCMC", "weeks", "zc", "zcmc"),
+                binaryMask = usesNativeSections
             )
             if (weekday == null || sectionRange == null || weeks.isEmpty()) {
                 throw SchoolScheduleException("课程“$courseName”的星期、节次或周次不完整，已保留本地课表")
@@ -294,10 +340,15 @@ class SchoolScheduleRemoteDataSource @Inject constructor(
 
     companion object {
         private const val SCHOOL_BASE_URL = "https://jxzxehallapp.bit.edu.cn"
+        private const val SCHOOL_APP_INDEX_URL = "$SCHOOL_BASE_URL/jwapp/sys/xsfacx/*default/index.do"
+        private val SCHOOL_AUTH_URL = "https://jxzxehall.bit.edu.cn/auth-protocol-core/login".toHttpUrl()
+            .newBuilder().addQueryParameter("service", SCHOOL_APP_INDEX_URL).build()
+        private const val SCHOOL_CONFIG_URL = "$SCHOOL_BASE_URL/jwapp/sys/funauthapp/api/getAppConfig/xsfacx-4766859113956613.do?v=08260885168155102"
         private const val SCHOOL_INDEX_URL = "$SCHOOL_BASE_URL/jwapp/sys/wdkbby/*default/index.do"
         private const val CURRENT_TERM_URL = "$SCHOOL_BASE_URL/jwapp/sys/wdkbby/modules/jshkcb/dqxnxq.do"
         private const val TERMS_URL = "$SCHOOL_BASE_URL/jwapp/sys/wdkbby/modules/jshkcb/xnxqcx.do"
         private const val SCHEDULE_URL = "$SCHOOL_BASE_URL/jwapp/sys/wdkbby/modules/xskcb/cxxszhxqkb.do"
+        private const val WEEK_DATES_URL = "$SCHOOL_BASE_URL/jwapp/sys/wdkbby/wdkbByController/cxzkbrq.do"
         private const val USER_AGENT =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
     }
