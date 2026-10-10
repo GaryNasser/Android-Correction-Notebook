@@ -91,6 +91,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -1053,7 +1054,13 @@ private fun LazyListScope.diffPreviewGroup(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Text(item.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+            Text(
+                item.title,
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    lineBreak = LineBreak.Paragraph.copy(strategy = LineBreak.Strategy.Balanced)
+                ),
+                fontWeight = FontWeight.Medium
+            )
             Text(
                 item.startsAt.format(DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm")),
                 style = MaterialTheme.typography.bodySmall,

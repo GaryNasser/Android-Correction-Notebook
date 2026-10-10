@@ -42,6 +42,7 @@ class IcsImportRepository(
 
         val existingByKey = existingEvents.associateBy(::icsEventCompositeKey)
         val incomingByKey = incomingEvents.associateBy(::icsEventCompositeKey)
+        val locallyExcludedOverrideKeys = locallyExcludedIcsOverrideKeys(existingEvents, incomingEvents)
 
         val added = mutableListOf<IcsDiffItem>()
         val updated = mutableListOf<IcsDiffItem>()
@@ -51,6 +52,9 @@ class IcsImportRepository(
             val key = icsEventCompositeKey(incoming)
             val existing = existingByKey[key]
             when {
+                key in locallyExcludedOverrideKeys -> conflicts += incoming.toDiff(
+                    IcsDiffType.CONFLICT, "该次调课的原日期已在本地排除；合并时保留本地安排，覆盖时恢复导入版本"
+                )
                 existing == null -> added += incoming.toDiff(IcsDiffType.ADDED, "导入后会新增到日程表")
                 !sameLogicalContent(existing, incoming) -> {
                     if (existing.lastImportedAt != null && existing.updatedAt > existing.lastImportedAt) {
