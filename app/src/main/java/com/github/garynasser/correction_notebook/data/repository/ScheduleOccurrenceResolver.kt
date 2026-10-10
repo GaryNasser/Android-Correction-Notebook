@@ -103,5 +103,6 @@ private fun ScheduleEvent.instanceKey(start: LocalDateTime): RecurrenceInstanceK
 private fun ScheduleEvent.toOccurrence(start: LocalDateTime, end: LocalDateTime) = ScheduleOccurrence(
     occurrenceId = "${id}_${start.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)}",
     eventId = id, title = title, description = description, location = location,
-    startAt = start, endAt = end, allDay = allDay, sourceType = sourceType
+    startAt = start, endAt = end, allDay = allDay, sourceType = sourceType,
+    isRecurring = !recurrenceRule.isNullOrBlank() || recurrenceId != null
 )
