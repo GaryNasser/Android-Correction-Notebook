@@ -41,6 +41,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.DriveFileMove
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.CloudDownload
@@ -85,6 +86,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -95,10 +97,15 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TooltipAnchorPosition
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -2017,6 +2024,7 @@ internal fun StudySetQuizPage(
     val current = questions.getOrNull(safeIndex)
     var selectedOption by rememberSaveable(studySet.id, current?.id) { mutableStateOf<String?>(null) }
     var showAnswer by rememberSaveable(studySet.id, current?.id) { mutableStateOf(false) }
+    val contentScrollState = key(studySet.id, current?.id) { rememberScrollState() }
 
     LaunchedEffect(current?.id) {
         selectedQuestionId = current?.id
@@ -2069,8 +2077,8 @@ internal fun StudySetQuizPage(
                         Column(
                             modifier = Modifier
                                 .weight(1f)
-                                .verticalScroll(rememberScrollState()),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                                .verticalScroll(contentScrollState),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
                                 if (current.type == "MULTIPLE_CHOICE") "选择题" else "简答题",
@@ -2121,33 +2129,35 @@ internal fun StudySetQuizPage(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            TextButton(
-                                modifier = Modifier.weight(1f),
+                            StudyPageNavigationButton(
+                                label = "上一题",
+                                icon = Icons.AutoMirrored.Filled.ArrowBack,
                                 onClick = {
                                     selectedOption = null
                                     showAnswer = false
                                     selectedQuestionId = questions.getOrNull(safeIndex - 1)?.id ?: current.id
                                 },
                                 enabled = safeIndex > 0
-                            ) { Text("上一题") }
+                            )
                             Text(
                                 selectedOption?.let { "已选择" } ?: if (showAnswer) "已显示答案" else "未作答",
-                                modifier = Modifier.weight(1.25f),
+                                modifier = Modifier.weight(1f),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
-                            TextButton(
-                                modifier = Modifier.weight(1f),
+                            StudyPageNavigationButton(
+                                label = "下一题",
+                                icon = Icons.AutoMirrored.Filled.ArrowForward,
                                 onClick = {
                                     selectedOption = null
                                     showAnswer = false
                                     selectedQuestionId = questions.getOrNull(safeIndex + 1)?.id ?: current.id
                                 },
                                 enabled = safeIndex < questions.lastIndex
-                            ) { Text("下一题") }
+                            )
                         }
                     }
                 }
@@ -2172,6 +2182,7 @@ internal fun StudySetLearningPage(
     val safeIndex = cards.indexOfFirst { it.flashcardId == selectedCardId }.coerceAtLeast(0)
     val current = cards.getOrNull(safeIndex)
     var showAnswer by rememberSaveable(studySet.id, current?.flashcardId) { mutableStateOf(false) }
+    val contentScrollState = key(studySet.id, current?.flashcardId) { rememberScrollState() }
     val isComplete = cards.isNotEmpty() && cards.all { it.flashcardId in reviewedCardIds }
     val canReview = current != null && !isReviewing && current.flashcardId !in reviewedCardIds
 
@@ -2282,8 +2293,8 @@ internal fun StudySetLearningPage(
                         Column(
                             modifier = Modifier
                                 .weight(1f)
-                                .verticalScroll(rememberScrollState()),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                                .verticalScroll(contentScrollState),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
                                 if (current.type == KnowledgeCardType.QA_FLASHCARD) "问答闪卡" else "知识点卡",
@@ -2292,7 +2303,7 @@ internal fun StudySetLearningPage(
                             )
                             Text(
                                 current.title.ifBlank { current.front },
-                                style = MaterialTheme.typography.titleLarge,
+                                style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
                             if (current.type == KnowledgeCardType.QA_FLASHCARD) {
@@ -2351,26 +2362,47 @@ internal fun StudySetLearningPage(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                TextButton(
-                    modifier = Modifier.weight(1f),
+                StudyPageNavigationButton(
+                    label = "上一张",
+                    icon = Icons.AutoMirrored.Filled.ArrowBack,
                     onClick = { selectedCardId = cards.getOrNull(safeIndex - 1)?.flashcardId ?: current?.flashcardId },
                     enabled = safeIndex > 0 && !isReviewing
-                ) { Text("上一张") }
+                )
                 Text(
                     "已复习 ${cards.count { it.flashcardId in reviewedCardIds }} / ${cards.size}",
-                    modifier = Modifier.weight(1.25f),
+                    modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center
                 )
-                TextButton(
-                    modifier = Modifier.weight(1f),
+                StudyPageNavigationButton(
+                    label = "下一张",
+                    icon = Icons.AutoMirrored.Filled.ArrowForward,
                     onClick = { selectedCardId = cards.getOrNull(safeIndex + 1)?.flashcardId ?: current?.flashcardId },
                     enabled = current != null && safeIndex < cards.lastIndex && !isReviewing
-                ) { Text("下一张") }
+                )
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun StudyPageNavigationButton(
+    label: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    enabled: Boolean
+) {
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
+        tooltip = { PlainTooltip { Text(label) } },
+        state = rememberTooltipState()
+    ) {
+        IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(48.dp)) {
+            Icon(icon, contentDescription = label, modifier = Modifier.size(20.dp))
         }
     }
 }

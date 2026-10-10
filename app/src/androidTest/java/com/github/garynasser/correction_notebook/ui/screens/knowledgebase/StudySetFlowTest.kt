@@ -59,7 +59,7 @@ class StudySetFlowTest {
             val state by fixture.vm.uiState.collectAsState()
             CorrectionNotebookTheme { StudySetLearningPage(summary(), state.knowledgeCards, {}, {}, { _, _, _ -> }) }
         }
-        compose.onNodeWithText("下一张").performClick()
+        compose.onNodeWithContentDescription("下一张").performClick()
         compose.onNodeWithText("显示答案").performClick()
         compose.onNodeWithText("答案 b").assertExists()
         fixture.dao.insertFlashcards(listOf(card("0-new", "z-old")))
@@ -96,6 +96,70 @@ class StudySetFlowTest {
     @Test fun learningContentFitsNarrowDarkScreen() = checkSession(true, false)
     @Test fun quizContentFitsNarrowLightScreen() = checkSession(false, true)
     @Test fun quizContentFitsNarrowDarkScreen() = checkSession(true, true)
+    @Test fun switchingLearningCardsStartsAtTheTopButRestorationKeepsTheReadingPosition() = checkContentNavigation(false)
+    @Test fun switchingQuizQuestionsStartsAtTheTopButRestorationKeepsTheReadingPosition() = checkContentNavigation(true)
+
+    private fun checkContentNavigation(quiz: Boolean) {
+        val headers = if (quiz) listOf("第一题：矩阵的特征值", "第二题：矩阵的特征向量")
+            else listOf("第一张卡片：矩阵的特征值", "第二张卡片：矩阵的特征向量")
+        val longContent = "理解特征值和特征向量，需要先区分矩阵作用前后向量的方向与长度。".repeat(50)
+        val tails = listOf("第一项正文末尾", "第二项正文末尾")
+        val restoration = StateRestorationTester(compose)
+        var reviews = 0
+        restoration.setContent {
+            CorrectionNotebookTheme(darkTheme = InstrumentationRegistry.getArguments().getString("qaDark") == "true",
+                dynamicColor = false) {
+                if (quiz) {
+                    StudySetQuizPage(summary(), headers.mapIndexed { index, title ->
+                        StudySetQuizItem("question-$index", "z-old", "MULTIPLE_CHOICE", title,
+                            options = listOf("A. $longContent", "B. ${tails[index]}"), answer = "A")
+                    }, null, {})
+                } else {
+                    StudySetLearningPage(summary(), headers.mapIndexed { index, title ->
+                        DueReviewItem("card-$index", "z-old", setTitle, null, type = KnowledgeCardType.KNOWLEDGE_CARD,
+                            title = title, front = "", back = "", explanation = longContent,
+                            example = tails[index], hint = "", nextReviewAt = 0)
+                    }, {}, {}, { _, _, _ -> reviews++ })
+                }
+            }
+        }
+        val previousLabel = if (quiz) "上一题" else "上一张"
+        val nextLabel = if (quiz) "下一题" else "下一张"
+        compose.onNodeWithContentDescription(previousLabel).assertIsNotEnabled()
+        compose.onNodeWithContentDescription(nextLabel).assertIsEnabled()
+        listOf(previousLabel, nextLabel).forEach {
+            val bounds = compose.onNodeWithContentDescription(it).assertIsDisplayed().fetchSemanticsNode().touchBoundsInRoot
+            val minimum = 48f * InstrumentationRegistry.getInstrumentation().targetContext.resources.displayMetrics.density
+            assertTrue("Navigation must retain a 48dp touch target", bounds.width + 1f >= minimum && bounds.height + 1f >= minimum)
+        }
+        val firstTail = if (quiz) "B. ${tails[0]}" else tails[0]
+        compose.onNodeWithText(firstTail).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(headers[0], useUnmergedTree = true).assertIsNotDisplayed()
+        restoration.emulateSavedInstanceStateRestore()
+        compose.onNodeWithText(firstTail).assertIsDisplayed()
+        compose.onNodeWithText(headers[0], useUnmergedTree = true).assertIsNotDisplayed()
+        compose.onNodeWithContentDescription(nextLabel).performClick()
+        compose.onNodeWithText(headers[0], useUnmergedTree = true).assertDoesNotExist()
+        screenshot(if (quiz) "quiz-next-content" else "learning-next-content")
+        assertHeaderAtTop(headers[1])
+        compose.onNodeWithContentDescription(nextLabel).assertIsNotEnabled()
+        compose.onNodeWithContentDescription(previousLabel).assertIsEnabled()
+        val secondTail = if (quiz) "B. ${tails[1]}" else tails[1]
+        compose.onNodeWithText(secondTail).performScrollTo().assertIsDisplayed()
+        restoration.emulateSavedInstanceStateRestore()
+        compose.onNodeWithText(secondTail).assertIsDisplayed()
+        compose.onNodeWithText(headers[1], useUnmergedTree = true).assertIsNotDisplayed()
+        compose.onNodeWithContentDescription(previousLabel).performClick()
+        assertHeaderAtTop(headers[0])
+        compose.runOnIdle { assertEquals(0, reviews) }
+    }
+
+    private fun assertHeaderAtTop(title: String) {
+        val titleBounds = compose.onNodeWithText(title, useUnmergedTree = true).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        val viewport = compose.onNode(hasScrollAction()).fetchSemanticsNode().boundsInRoot
+        assertTrue("A new item must start at its heading", titleBounds.top >= viewport.top && titleBounds.bottom <= viewport.bottom)
+        assertFullText(title)
+    }
 
     @Test fun failedReviewStaysOnCurrentCardAndSuccessfulRetryAdvancesOnlyOnce() = withFixture { fixture ->
         fixture.dao.insertFlashcards(listOf(card("a", "z-old"), card("b", "z-old")))
@@ -183,7 +247,7 @@ class StudySetFlowTest {
         }
         assertFullText(setTitle)
         val titleBounds = compose.onNodeWithText(setTitle, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
-        val footer = compose.onNodeWithText(if (quiz) "下一题" else "下一张").fetchSemanticsNode().boundsInRoot
+        val footer = compose.onNodeWithContentDescription(if (quiz) "下一题" else "下一张").fetchSemanticsNode().boundsInRoot
         compose.runOnIdle {
             val insets = view.rootWindowInsets.getInsets(android.view.WindowInsets.Type.systemBars() or android.view.WindowInsets.Type.displayCutout())
             assertTrue("Title overlaps the status bar", titleBounds.top >= insets.top)
