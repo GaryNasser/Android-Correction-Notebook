@@ -195,13 +195,7 @@ class CourseWeekPresentationTest {
     }
 
     private fun gridText(event: ScheduleEvent): String {
-        val location = when (event.id) {
-            "english" -> "文萃楼\nF702"
-            "single" -> "综教 A101"
-            "matrix" -> "综教\nA101"
-            else -> "文萃楼\nM134"
-        }
-        return "${event.title}\n$location"
+        return "${event.title}\n${event.location.lineSequence().first()}"
     }
 
     private fun openDetails(event: ScheduleEvent) {

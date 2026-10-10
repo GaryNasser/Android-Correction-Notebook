@@ -33,7 +33,7 @@ class CourseGridBlockLayoutTest {
         assertCourseFits(
             title = "毛泽东思想和中国特色社会主义理论体系概论",
             location = "文萃楼 M134\n良乡校区备用教室",
-            expectedLocation = "文萃楼\nM134",
+            expectedLocation = "文萃楼 M134",
             span = 3
         )
     }
@@ -43,7 +43,7 @@ class CourseGridBlockLayoutTest {
         assertCourseFits(
             title = "体育/游泳（初级）",
             location = "游泳馆 浅水区 南侧\n良乡校区",
-            expectedLocation = "游泳馆\n浅水区\n南侧",
+            expectedLocation = "游泳馆 浅水区 南侧",
             span = 2
         )
     }
@@ -54,7 +54,7 @@ class CourseGridBlockLayoutTest {
         val layouts = assertCourseFits(
             title = title,
             location = "文萃楼 M134\n本地验证第二行",
-            expectedLocation = "文萃楼\nM134",
+            expectedLocation = "文萃楼 M134",
             span = 2,
             width = 54.dp,
             fontScale = 1f
@@ -83,8 +83,19 @@ class CourseGridBlockLayoutTest {
         assertCourseFits(
             title = "Signals and Systems",
             location = "文萃楼 F702\n良乡校区备用教室",
-            expectedLocation = "文萃楼\nF702",
+            expectedLocation = "文萃楼 F702",
             span = 3
+        )
+    }
+
+    @Test
+    fun twoShortPeriodsKeepTheRoomAtLargeFontScale() {
+        assertCourseFits(
+            title = "本地调整后的计算理论与算法分析设计",
+            location = "文萃楼 F702\n良乡校区",
+            expectedLocation = "文萃楼 F702",
+            span = 2,
+            height = 35.dp
         )
     }
 
@@ -94,7 +105,8 @@ class CourseGridBlockLayoutTest {
         expectedLocation: String,
         span: Int,
         width: Dp = 38.dp,
-        fontScale: Float = 1.3f
+        fontScale: Float = 1.3f,
+        height: Dp = (span * 35).dp
     ): List<TextLayoutResult> {
         val course = ScheduleOccurrence(
             occurrenceId = "course",
@@ -114,7 +126,7 @@ class CourseGridBlockLayoutTest {
                     CourseGridBlock(
                         item = course,
                         span = span,
-                        modifier = Modifier.width(width).height((span * 35).dp),
+                        modifier = Modifier.width(width).height(height),
                         onClick = {}
                     )
                 }

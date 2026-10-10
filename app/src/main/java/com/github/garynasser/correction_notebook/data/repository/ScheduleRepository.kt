@@ -236,6 +236,12 @@ internal fun applyIcsImport(
             event.sourceCalendarId in sourceIds &&
             icsEventCompositeKey(event) in incomingKeys &&
             icsEventCompositeKey(event) !in locallyEditedKeys
+    }.map { event ->
+        // Retained masters and overrides must share the incoming calendar identity after migration.
+        if (event.sourceType == ScheduleSourceType.ICS_IMPORT && event.sourceCalendarId in sourceIds &&
+            event.sourceCalendarId != preview.sourceCalendarId) {
+            event.copy(sourceCalendarId = preview.sourceCalendarId)
+        } else event
     }
     return retained + preview.incomingEvents.filterNot {
         icsEventCompositeKey(it) in locallyEditedKeys || icsEventCompositeKey(it) in locallyExcludedOverrideKeys
