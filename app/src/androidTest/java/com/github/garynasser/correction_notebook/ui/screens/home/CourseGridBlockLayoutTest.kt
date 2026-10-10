@@ -89,6 +89,28 @@ class CourseGridBlockLayoutTest {
     }
 
     @Test
+    fun anEnglishCourseWrapsBetweenWordsInsteadOfInsideThem() {
+        val title = "Computer Organization and Architecture"
+        val layouts = assertCourseFits(
+            title = title,
+            location = "理教楼 406\n备用教室",
+            expectedLocation = "理教楼 406",
+            span = 2,
+            width = 52.dp,
+            fontScale = 1.3f,
+            height = 96.dp
+        )
+        val words = Regex("[A-Za-z]+").findAll(title).map { it.range }.toList()
+        layouts.forEach { layout ->
+            for (line in 1 until layout.lineCount) {
+                val start = layout.getLineStart(line)
+                assertFalse("A course line must not start inside an English word at $start",
+                    words.any { start > it.first && start <= it.last })
+            }
+        }
+    }
+
+    @Test
     fun twoShortPeriodsKeepTheRoomAtLargeFontScale() {
         assertCourseFits(
             title = "本地调整后的计算理论与算法分析设计",

@@ -1001,10 +1001,9 @@ internal fun CourseGridBlock(
             ),
             overflow = TextOverflow.Clip,
             softWrap = true,
-            autoSize = TextAutoSize.StepBased(
+            autoSize = CourseGridTextAutoSize(
                 minFontSize = if (compactBlock) 2.sp else 4.sp,
-                maxFontSize = maxFontSize,
-                stepSize = 0.5.sp
+                maxFontSize = maxFontSize
             )
         )
     }
