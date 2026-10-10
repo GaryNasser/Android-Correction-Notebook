@@ -12,7 +12,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 
-private val DarkColorScheme = darkColorScheme(
+internal val DarkColorScheme = darkColorScheme(
     primary = CampusMintDark,
     onPrimary = Color(0xFF00382E),
     primaryContainer = DarkPrimaryContainer,
@@ -32,7 +32,7 @@ private val DarkColorScheme = darkColorScheme(
     outlineVariant = Color(0xFF445C56)
 )
 
-private val LightColorScheme = lightColorScheme(
+internal val LightColorScheme = lightColorScheme(
     primary = CampusMint,
     onPrimary = Color.White,
     primaryContainer = LightPrimaryContainer,

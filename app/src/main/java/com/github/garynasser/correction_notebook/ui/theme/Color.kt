@@ -2,10 +2,10 @@ package com.github.garynasser.correction_notebook.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val CampusMint = Color(0xFF2F8F7B)
+val CampusMint = Color(0xFF247562)
 val CampusMintDark = Color(0xFF91DDCD)
-val CampusSky = Color(0xFF3B8EA5)
-val CampusLeaf = Color(0xFF5AA981)
+val CampusSky = Color(0xFF276E83)
+val CampusLeaf = Color(0xFF34754F)
 val CampusCream = Color(0xFFFFF8EE)
 
 val LightBackground = Color(0xFFF6FBF8)
