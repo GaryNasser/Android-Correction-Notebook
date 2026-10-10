@@ -106,7 +106,7 @@ class KnowledgeBaseDraftFlowTest {
                 .addConverterFactory(GsonConverterFactory.create()).build().create(BitShareApiService::class.java)
             val store = ViewModelStore()
             val model = withContext(Dispatchers.Main) {
-                KnowledgeBaseViewModel(repository, BitShareRepository(service, client) { throw AssertionError("Renaming must not probe the network") }, StudySetRepository(dao))
+                KnowledgeBaseViewModel(repository, BitShareRepository(service, client), StudySetRepository(dao))
                     .also { store.put("rename", it) }
             }
             val collector = launch(Dispatchers.Default) { model.uiState.collect {} }

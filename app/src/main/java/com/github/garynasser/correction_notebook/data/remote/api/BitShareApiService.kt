@@ -5,12 +5,21 @@ import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitSha
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitShareFolderListResponse
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitShareFolderDetailDto
 import okhttp3.ResponseBody
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import retrofit2.http.GET
 import retrofit2.http.Path
 import retrofit2.http.Query
 import retrofit2.http.Streaming
 
 interface BitShareApiService {
+    companion object {
+        // www.bitshare.com.cn is the navigation page; its public app route uses port 10043.
+        const val BASE_URL = "https://app.bitshare.com.cn:10043/"
+
+        fun folderPageUrl(folderId: String): String = BASE_URL.toHttpUrl().newBuilder()
+            .addQueryParameter("folder", folderId).build().toString()
+    }
+
     // ============ Search ============
     @GET("api/public/search")
     suspend fun searchFiles(

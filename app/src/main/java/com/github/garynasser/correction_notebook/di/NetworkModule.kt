@@ -12,7 +12,6 @@ import com.github.garynasser.correction_notebook.data.remote.api.VideoApiService
 import com.github.garynasser.correction_notebook.data.remote.network.AuthInterceptor
 import com.github.garynasser.correction_notebook.data.remote.network.TokenAuthenticator
 import com.github.garynasser.correction_notebook.utils.SignatureUtils
-import com.github.garynasser.correction_notebook.utils.BitShareNetworkDetector
 import com.google.gson.Gson
 import dagger.Module
 import dagger.Provides
@@ -45,7 +44,6 @@ annotation class BitShareRetrofit
 object NetworkModule {
     private const val BASE_URL = "http://bit-study.sadatlab.asia/"
     private const val GITHUB_API_BASE_URL = "https://api.github.com/"
-    private const val BIT_SHARE_BASE_URL = "https://app.bitshare.com.cn/"
 
     private fun createLoggingInterceptor(): HttpLoggingInterceptor {
         return HttpLoggingInterceptor().apply {
@@ -61,12 +59,6 @@ object NetworkModule {
     @Singleton
     fun provideTokenManager(@ApplicationContext context: Context): TokenManager {
         return TokenManager(context)
-    }
-
-    @Provides
-    @Singleton
-    fun provideBitShareNetworkDetector(@ApplicationContext context: Context): BitShareNetworkDetector {
-        return BitShareNetworkDetector(context)
     }
 
     @Provides
@@ -149,7 +141,7 @@ object NetworkModule {
         @BasicRetrofit okHttpClient: OkHttpClient
     ): BitShareApiService {
         return Retrofit.Builder()
-            .baseUrl(BIT_SHARE_BASE_URL)
+            .baseUrl(BitShareApiService.BASE_URL)
             .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()

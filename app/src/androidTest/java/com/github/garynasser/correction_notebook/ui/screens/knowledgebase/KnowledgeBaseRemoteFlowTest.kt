@@ -9,6 +9,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.test.*
@@ -257,6 +259,34 @@ class KnowledgeBaseRemoteFlowTest {
     @Test fun longFolderDetailsRemainReadableOnAShortLightScreen() = checkLongFolder(dark = false)
     @Test fun longFolderDetailsRemainReadableOnAShortDarkScreen() = checkLongFolder(dark = true)
 
+    @Test fun folderBrowserActionOpensThePublicRouteWithoutCampusNetworkInstructions() = withFixture { f ->
+        val opened = mutableListOf<String>()
+        val handler = object : UriHandler {
+            override fun openUri(uri: String) { opened += uri }
+        }
+        f.searchItems = listOf(BitShareSearchItemDto("folder", "folder", "课程目录", null, null, null, null, null))
+        compose.setContent {
+            CompositionLocalProvider(LocalUriHandler provides handler) { TestScreen(f.model, dark = false) }
+        }
+        search(f, expectedCount = 1)
+        compose.onNodeWithText("需校园网或 VPN").assertDoesNotExist()
+        compose.onNodeWithText("课程目录").performClick()
+        f.await { f.model.uiState.value.selectedRemoteFolderDetail?.id == "folder" }
+        compose.onNodeWithText("浏览目录").assertIsDisplayed().performClick()
+        compose.runOnIdle { assertEquals(listOf(BitShareApiService.folderPageUrl("folder")), opened) }
+        compose.onNodeWithText("关闭").assertIsDisplayed().performClick()
+        assertTrue(f.database.knowledgeBaseDao().getAllFiles().isEmpty())
+    }
+
+    @Test fun nameOnlySearchResultsDoNotRepeatTheFileName() = withFixture { f ->
+        f.searchItems = listOf(BitShareSearchItemDto("file", "file", "Lecture.PDF", null, null, 42, 7, null))
+        compose.setContent { TestScreen(f.model, dark = false) }
+        search(f, expectedCount = 1)
+        compose.onAllNodesWithText("Lecture.PDF").assertCountEquals(1)
+        assertEquals("pdf", f.model.uiState.value.remoteResults.single().extension)
+        compose.onNodeWithText("需校园网或 VPN").assertDoesNotExist()
+    }
+
     private fun checkLongFolder(dark: Boolean) = withFixture { f ->
         val name = "矩阵分析与计算理论课程资料目录".repeat(4)
         val description = "本目录收录矩阵分析课程的讲义、课堂笔记与复习资料。".repeat(6)
@@ -486,7 +516,7 @@ class KnowledgeBaseRemoteFlowTest {
             val api = Retrofit.Builder().baseUrl("http://127.0.0.1/").client(client)
                 .addConverterFactory(GsonConverterFactory.create()).build().create(BitShareApiService::class.java)
             withContext(Dispatchers.Main) {
-                model = KnowledgeBaseViewModel(local, BitShareRepository(api, client) { error("No network fallback expected") }, StudySetRepository(database.knowledgeBaseDao()))
+                model = KnowledgeBaseViewModel(local, BitShareRepository(api, client), StudySetRepository(database.knowledgeBaseDao()))
                 store.put("remote", model)
             }
             collector = scope.launch(Dispatchers.Default) { model.uiState.collect {} }

@@ -313,7 +313,7 @@ class StudySetFlowTest {
         fun create() {
             val api = Retrofit.Builder().baseUrl("https://unused.invalid/").client(network).build().create(BitShareApiService::class.java)
             vm = KnowledgeBaseViewModel(KnowledgeBaseRepository(dao, KnowledgeBaseFileStorage(context), context),
-                BitShareRepository(api, network) { error("Unexpected network detection") }, repository)
+                BitShareRepository(api, network), repository)
             store.put("study-set", vm)
         }
         suspend fun await(predicate: (KnowledgeBaseUiState) -> Boolean) = withTimeout(5_000) {

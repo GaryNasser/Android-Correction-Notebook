@@ -55,6 +55,7 @@ import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
@@ -119,6 +120,7 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.input.pointer.pointerInput
@@ -134,6 +136,7 @@ import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitShareFileDetail
+import com.github.garynasser.correction_notebook.data.remote.api.BitShareApiService
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitShareSearchResult
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitShareSortOption
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.BitShareFolderDetail
@@ -169,6 +172,7 @@ fun KnowledgeBaseScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
     val focusManager = LocalFocusManager.current
     val searchRemoteResources = {
         focusManager.clearFocus()
@@ -599,7 +603,11 @@ fun KnowledgeBaseScreen(
     uiState.selectedRemoteFolderDetail?.let { folderDetail ->
         RemoteFolderDetailDialog(
             detail = folderDetail,
-            onDismiss = { viewModel.dismissRemoteFolderDetail() }
+            onDismiss = { viewModel.dismissRemoteFolderDetail() },
+            onOpenWebsite = {
+                runCatching { uriHandler.openUri(BitShareApiService.folderPageUrl(folderDetail.id)) }
+                    .onFailure { Toast.makeText(context, "无法打开浏览器", Toast.LENGTH_SHORT).show() }
+            }
         )
     }
 
@@ -2469,24 +2477,6 @@ private fun BitSharePage(
                 }
             }
 
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    Icons.Default.Warning,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = "需校园网或 VPN",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
             if (uiState.isRemoteDetailLoading || uiState.isRemoteFolderLoading) {
                 KnowledgeBaseStatusStrip(
                     text = if (uiState.isRemoteFolderLoading) {
@@ -2524,7 +2514,7 @@ private fun BitSharePage(
             uiState.remoteQuery.isBlank() -> {
                 EmptyStateCard(
                     title = "搜索公开资料",
-                    description = "请先连接 BIT 校园网或 VPN，再输入课程名、老师名或关键词搜索。",
+                    description = "尚未搜索",
                     icon = Icons.Default.CloudDownload
                 )
             }
@@ -2826,7 +2816,9 @@ private fun RemoteResultRow(
                     )
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(result.originalName, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        if (result.originalName != result.title) {
+                            Text(result.originalName, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        }
                         Text(
                             "${formatFileSize(result.sizeBytes)} · 下载 ${result.downloadCount}",
                             style = MaterialTheme.typography.bodySmall
@@ -2994,7 +2986,8 @@ internal fun RemoteDetailDialog(
 @Composable
 private fun RemoteFolderDetailDialog(
     detail: BitShareFolderDetail,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onOpenWebsite: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -3013,10 +3006,15 @@ private fun RemoteFolderDetailDialog(
                 if (detail.breadcrumbs.isNotEmpty()) {
                     DetailLine("路径", detail.breadcrumbs.joinToString(" > ") { it.name })
                 }
-                Text("仅提供目录信息", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         },
-        confirmButton = {},
+        confirmButton = {
+            TextButton(onClick = onOpenWebsite) {
+                Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("浏览目录")
+            }
+        },
         dismissButton = {
             TextButton(onClick = onDismiss, shape = RoundedCornerShape(8.dp)) {
                 Text("关闭")

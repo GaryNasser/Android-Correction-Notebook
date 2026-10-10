@@ -9,7 +9,6 @@ import com.github.garynasser.correction_notebook.data.local.knowledgebase.Knowle
 import com.github.garynasser.correction_notebook.data.repository.BitShareRepository
 import com.github.garynasser.correction_notebook.data.repository.KnowledgeBaseRepository
 import com.github.garynasser.correction_notebook.data.remote.api.BitShareApiService
-import com.github.garynasser.correction_notebook.utils.BitShareNetworkDetector
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -299,10 +298,9 @@ object KnowledgeBaseModule {
     @Singleton
     fun provideBitShareRepository(
         apiService: BitShareApiService,
-        @BasicRetrofit okHttpClient: OkHttpClient,
-        networkDetector: BitShareNetworkDetector
+        @BasicRetrofit okHttpClient: OkHttpClient
     ): BitShareRepository {
-        return BitShareRepository(apiService, okHttpClient, networkDetector)
+        return BitShareRepository(apiService, okHttpClient)
     }
 
     private fun SupportSQLiteDatabase.hasTable(tableName: String): Boolean {

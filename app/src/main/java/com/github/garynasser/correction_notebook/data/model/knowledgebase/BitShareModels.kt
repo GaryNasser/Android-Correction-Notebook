@@ -22,12 +22,12 @@ data class BitShareSearchItemDto(
 
 data class BitShareFileDetailDto(
     val id: String,
-    val title: String,
+    @SerializedName(value = "name", alternate = ["title"]) val title: String,
     val extension: String?,
     @SerializedName("folder_id") val folderId: String?,
     val path: String?,
     val description: String?,
-    @SerializedName("original_name") val originalName: String,
+    @SerializedName("original_name") val originalName: String?,
     @SerializedName("mime_type") val mimeType: String?,
     val size: Long,
     @SerializedName("uploaded_at") val uploadedAt: String?,

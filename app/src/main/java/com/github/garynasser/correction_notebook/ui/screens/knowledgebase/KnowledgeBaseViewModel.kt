@@ -551,8 +551,6 @@ class KnowledgeBaseViewModel @Inject constructor(
 
     /**
      * 加载文件夹详情
-     * 注意：由于 /api/public/files?folder_id= 接口返回 404，无法获取文件夹内的文件列表，
-     * 因此只能显示文件夹信息，无法列出文件夹内容
      */
     fun loadRemoteFolderDetail(folderId: String) {
         if (isRemoteFolderLoading.value || isRemoteDetailLoading.value) return

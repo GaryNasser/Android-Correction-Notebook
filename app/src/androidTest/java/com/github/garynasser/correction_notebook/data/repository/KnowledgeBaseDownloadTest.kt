@@ -15,7 +15,6 @@ import com.github.garynasser.correction_notebook.ui.screens.knowledgebase.Knowle
 import com.github.garynasser.correction_notebook.ui.screens.knowledgebase.openFileExternally
 import com.github.garynasser.correction_notebook.data.model.knowledgebase.KnowledgeBaseFileSummary
 import com.github.garynasser.correction_notebook.data.remote.api.BitShareApiService
-import com.github.garynasser.correction_notebook.utils.BitShareNetworkDetector.NetworkEnvironment
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.IOException
@@ -145,10 +144,28 @@ class KnowledgeBaseDownloadTest {
     fun cancellationInterruptsADownloadWaitingForHeaders() = checkHttpCancellation(afterHeaders = false)
 
     @Test
-    fun cancellationInterruptsTheIntranetFallbackBody() = checkHttpCancellation(afterHeaders = true, fallback = true)
-
-    @Test
-    fun cancellationInterruptsTheIntranetFallbackHeaders() = checkHttpCancellation(afterHeaders = false, fallback = true)
+    fun failedPublicDownloadDoesNotRepeatTheRequestOrTryAnIntranetAddress() = runBlocking {
+        var requests = 0
+        var consumes = 0
+        val client = OkHttpClient.Builder().addInterceptor { chain ->
+            requests++
+            assertEquals("app.bitshare.com.cn", chain.request().url.host)
+            assertEquals(10043, chain.request().url.port)
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(503).message("Unavailable")
+                .body("unavailable".toResponseBody()).build()
+        }.build()
+        try {
+            val remote = BitShareRepository(service(client, BitShareApiService.BASE_URL), client)
+            val result = remote.downloadFile(detail.id) { consumes++ }
+            assertTrue(result.isFailure)
+            assertTrue(result.exceptionOrNull()?.message.orEmpty().contains("HTTP 503"))
+            assertEquals(1, requests)
+            assertEquals(0, consumes)
+        } finally {
+            client.dispatcher.executorService.shutdownNow()
+            client.connectionPool.evictAll()
+        }
+    }
 
     @Test
     fun fullRemoteDownloadImportsReadableContentAndResolvesDuplicateNames() = runBlocking {
@@ -158,7 +175,7 @@ class KnowledgeBaseDownloadTest {
             Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK")
                 .body(bytes.toResponseBody("text/plain".toMediaType())).build()
         }.build()
-        val remote = BitShareRepository(service(client), client) { error("Successful download must not probe another network") }
+        val remote = BitShareRepository(service(client), client)
         try {
             repeat(2) {
                 remote.downloadFile("file with space") { body ->
@@ -209,7 +226,7 @@ class KnowledgeBaseDownloadTest {
                 Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK")
                     .body(text.toResponseBody(type.toMediaType())).build()
             }.build()
-            val remote = BitShareRepository(service(client), client) { NetworkEnvironment.INTERNET }
+            val remote = BitShareRepository(service(client), client)
             try {
                 assertTrue(remote.downloadFile(detail.id) { consumes++ }.isFailure)
                 assertEquals(0, consumes)
@@ -231,7 +248,7 @@ class KnowledgeBaseDownloadTest {
             Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK")
                 .body(payload.toResponseBody("text/plain".toMediaType())).build()
         }.build()
-        val remote = BitShareRepository(service(client), client) { error("Import failure must not trigger a network fallback") }
+        val remote = BitShareRepository(service(client), client)
         val failure = IOException("No storage space")
         try {
             val result = remote.downloadFile<Unit>(detail.id) { throw failure }
@@ -286,7 +303,7 @@ class KnowledgeBaseDownloadTest {
             } else payload.toResponseBody("text/plain".toMediaType())
             Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK").body(body).build()
         }.build()
-        val remote = BitShareRepository(service(client), client) { error("No live network probes in this test") }
+        val remote = BitShareRepository(service(client), client)
         val model = KnowledgeBaseViewModel(repository, remote, StudySetRepository(database.knowledgeBaseDao()))
         val store = ViewModelStore().apply { put("download", model) }
         val collector = launch(Dispatchers.Default) { model.uiState.collect { } }
@@ -340,7 +357,7 @@ class KnowledgeBaseDownloadTest {
         Retrofit.Builder().baseUrl(url).client(client).addConverterFactory(GsonConverterFactory.create()).build()
             .create(BitShareApiService::class.java)
 
-    private fun checkHttpCancellation(afterHeaders: Boolean, fallback: Boolean = false) = runBlocking { supervisorScope {
+    private fun checkHttpCancellation(afterHeaders: Boolean) = runBlocking { supervisorScope {
         val entered = CountDownLatch(1)
         val release = CountDownLatch(1)
         val cancelled = CountDownLatch(1)
@@ -364,22 +381,13 @@ class KnowledgeBaseDownloadTest {
                 }
             }
         }
-        val stalledHost = if (fallback) "10.170.35.57" else "127.0.0.1"
+        val stalledHost = "127.0.0.1"
         val client = OkHttpClient.Builder().eventListener(object : EventListener() {
             override fun canceled(call: Call) { if (call.request().url.host == stalledHost) cancelled.countDown() }
             override fun callFailed(call: Call, ioe: IOException) { if (call.request().url.host == stalledHost) finished.countDown() }
             override fun callEnd(call: Call) { if (call.request().url.host == stalledHost) finished.countDown() }
-        }).addInterceptor { chain ->
-            if (!fallback) chain.proceed(chain.request())
-            else if (chain.request().url.host == stalledHost) {
-                val url = chain.request().url.newBuilder().host("127.0.0.1").port(server.localPort).build()
-                chain.proceed(chain.request().newBuilder().url(url).build())
-            } else {
-                Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(503).message("Unavailable")
-                    .body("unavailable".toResponseBody()).build()
-            }
-        }.build()
-        val remote = BitShareRepository(service(client, "http://127.0.0.1:${server.localPort}/"), client) { NetworkEnvironment.INTRANET }
+        }).build()
+        val remote = BitShareRepository(service(client, "http://127.0.0.1:${server.localPort}/"), client)
         val download = async(Dispatchers.IO) {
             remote.downloadFile(detail.id) { body ->
                 repository.importDownloadedFile(detail, KnowledgeBaseRepository.ROOT_FOLDER_ID, body.byteStream()).getOrThrow()

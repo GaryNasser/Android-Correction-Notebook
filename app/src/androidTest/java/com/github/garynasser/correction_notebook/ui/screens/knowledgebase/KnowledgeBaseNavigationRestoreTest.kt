@@ -213,7 +213,7 @@ class KnowledgeBaseNavigationRestoreTest {
 
         suspend fun start() {
             withContext(Dispatchers.Main) {
-                model = KnowledgeBaseViewModel(local, BitShareRepository(api, client) { error("No probe expected") },
+                model = KnowledgeBaseViewModel(local, BitShareRepository(api, client),
                     StudySetRepository(dao), handle).also { store.put("navigation", it) }
             }
             collector = scope.launch(Dispatchers.Default) { model.uiState.collect {} }
