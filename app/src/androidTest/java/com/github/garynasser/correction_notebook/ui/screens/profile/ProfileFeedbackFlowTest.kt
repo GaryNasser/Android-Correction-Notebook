@@ -46,21 +46,46 @@ class ProfileFeedbackFlowTest {
     @Test fun feedbackKeepsAllTextAndActionsVisible() {
         openFeedback()
         capture()
+        val scrolling = hasScrollAction() and hasAnyAncestor(isDialog())
         listOf("如有 bug 或功能建议，请联系开发者邮箱：", email, "确定").forEach { text ->
+            if (text != "确定") compose.onNodeWithText(text).performScrollTo()
+            val layouts = mutableListOf<TextLayoutResult>()
             compose.onNodeWithText(text).assertIsDisplayed()
                 .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { action ->
-                    val layouts = mutableListOf<TextLayoutResult>()
                     assertTrue(action(layouts))
-                    layouts.forEach {
-                        assertFalse("$text must fit vertically", it.didOverflowHeight)
-                        assertEquals(text.length, it.getLineEnd(it.lineCount - 1))
-                        repeat(it.lineCount) { line ->
-                            assertFalse(it.isLineEllipsized(line))
-                            // Intrinsic CJK text widths can round down by a fraction of a pixel.
-                            assertTrue("$text must fit horizontally", it.getLineRight(line) <= it.size.width + 1f)
+                }
+            assertTrue(layouts.isNotEmpty())
+            layouts.forEach { layout ->
+                assertFalse("$text must fit vertically", layout.didOverflowHeight)
+                assertEquals(text.length, layout.getLineEnd(layout.lineCount - 1))
+                repeat(layout.lineCount) { line ->
+                    assertFalse(layout.isLineEllipsized(line))
+                    // Intrinsic CJK text widths can round down by a fraction of a pixel.
+                    assertTrue("$text must fit horizontally", layout.getLineRight(line) <= layout.size.width + 1f)
+                    if (text != "确定") {
+                        val viewport = compose.onNode(scrolling).fetchSemanticsNode().boundsInRoot
+                        val node = compose.onNodeWithText(text).fetchSemanticsNode()
+                        val top = node.positionInRoot.y + layout.getLineTop(line)
+                        val bottom = node.positionInRoot.y + layout.getLineBottom(line)
+                        val delta = when {
+                            top < viewport.top -> top - viewport.top
+                            bottom > viewport.bottom -> bottom - viewport.bottom
+                            else -> 0f
                         }
+                        compose.onNode(scrolling).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, delta) }
+                        val visible = compose.onNodeWithText(text).fetchSemanticsNode()
+                        assertTrue("$text line $line must be readable", visible.positionInRoot.y + layout.getLineTop(line) >= viewport.top - 2f)
+                        assertTrue("$text line $line must be readable", visible.positionInRoot.y + layout.getLineBottom(line) <= viewport.bottom + 2f)
                     }
                 }
+            }
+        }
+        val copy = compose.onNodeWithContentDescription("复制邮箱").performScrollTo().assertIsDisplayed().assertIsEnabled()
+        val confirm = compose.onNodeWithText("确定").assertIsDisplayed().assertIsEnabled()
+        listOf(copy, confirm).forEach {
+            val bounds = it.fetchSemanticsNode().touchBoundsInRoot
+            val minimum = 48f * compose.activity.resources.displayMetrics.density
+            assertTrue("Feedback actions must have a 48dp touch target", bounds.height + 1f >= minimum && bounds.width + 1f >= minimum)
         }
         capture()
     }
@@ -81,6 +106,7 @@ class ProfileFeedbackFlowTest {
         if (!fromSettings) compose.onNodeWithContentDescription("设置").performClick()
         compose.onAllNodes(hasScrollAction())[0].performScrollToNode(hasText("帮助与反馈"))
         compose.onNodeWithText("帮助与反馈").performClick()
-        compose.onNodeWithText(email).assertIsDisplayed()
+        compose.onNode(hasText("帮助与反馈") and hasAnyAncestor(isDialog())).assertIsDisplayed()
+        compose.onNodeWithText(email).performScrollTo().assertIsDisplayed()
     }
 }
