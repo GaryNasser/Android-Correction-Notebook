@@ -60,7 +60,8 @@ data class ScheduleOccurrence(
     val startAt: LocalDateTime,
     val endAt: LocalDateTime,
     val allDay: Boolean,
-    val sourceType: ScheduleSourceType
+    val sourceType: ScheduleSourceType,
+    val isRecurring: Boolean = false
 )
 
 data class IcsDiffItem(

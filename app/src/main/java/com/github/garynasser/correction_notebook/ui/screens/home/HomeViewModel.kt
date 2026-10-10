@@ -870,12 +870,14 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    fun deleteSchedule(eventId: String) {
+    fun deleteSchedule(item: ScheduleOccurrence, deleteSeries: Boolean = false) {
         runScheduleEditAction(
-            successMessage = "已删除日程",
+            successMessage = if (item.isRecurring) {
+                if (deleteSeries) "已删除整组日程" else "已删除这一次日程"
+            } else "已删除日程",
             failureMessage = "日程删除失败，请稍后再试"
         ) {
-            scheduleRepository.deleteEvent(eventId)
+            scheduleRepository.deleteOccurrence(item, deleteSeries)
         }
     }
 

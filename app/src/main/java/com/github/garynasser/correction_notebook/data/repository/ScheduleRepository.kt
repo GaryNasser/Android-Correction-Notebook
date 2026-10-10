@@ -64,6 +64,15 @@ class ScheduleRepository internal constructor(private val dataStore: DataStore<P
         }
     }
 
+    suspend fun deleteOccurrence(item: ScheduleOccurrence, deleteSeries: Boolean = false) {
+        dataStore.edit { prefs ->
+            val current = prefs[scheduleEventsKey]?.let(SchedulePreferenceCodec::parseEvents) ?: emptyList()
+            prefs[scheduleEventsKey] = SchedulePreferenceCodec.serializeEvents(
+                deleteScheduleOccurrence(current, item, deleteSeries)
+            )
+        }
+    }
+
     suspend fun getEventById(eventId: String): ScheduleEvent? {
         return scheduleEvents.first().firstOrNull { it.id == eventId }
     }
@@ -226,6 +235,33 @@ internal fun applyIcsImport(
     }
     return retained + preview.incomingEvents.filterNot {
         icsEventCompositeKey(it) in locallyEditedKeys
+    }
+}
+
+internal fun deleteScheduleOccurrence(
+    events: List<ScheduleEvent>,
+    item: ScheduleOccurrence,
+    deleteSeries: Boolean,
+    updatedAt: Long = System.currentTimeMillis()
+): List<ScheduleEvent> {
+    val selected = events.firstOrNull { it.id == item.eventId } ?: return events
+    if (selected.recurrenceRule.isNullOrBlank() && selected.recurrenceId == null) {
+        return events.filterNot { it.id == selected.id }
+    }
+    val uid = selected.sourceEventUid?.trim()?.takeIf { it.isNotEmpty() }
+    fun belongsToSeries(event: ScheduleEvent): Boolean = event.id == selected.id ||
+        (uid != null && event.sourceEventUid?.trim() == uid &&
+            event.sourceType == selected.sourceType && event.sourceCalendarId == selected.sourceCalendarId)
+    if (deleteSeries) return events.filterNot(::belongsToSeries)
+
+    // A moved instance must exclude its original date, or deleting it would restore the old course.
+    val originalStart = selected.recurrenceId ?: item.startAt
+    return events.filterNot {
+        belongsToSeries(it) && it.recurrenceId == originalStart
+    }.map { event ->
+        if (belongsToSeries(event) && event.recurrenceId == null && originalStart !in event.exDateList) {
+            event.copy(exDateList = event.exDateList + originalStart, updatedAt = updatedAt)
+        } else event
     }
 }
 

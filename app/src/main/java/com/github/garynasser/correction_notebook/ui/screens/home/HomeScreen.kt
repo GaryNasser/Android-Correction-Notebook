@@ -8,6 +8,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.text.KeyboardActions
@@ -41,6 +43,7 @@ import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle as ComposeTextStyle
@@ -281,7 +284,7 @@ fun HomeScreen(
                     onAddSchedule = { homeViewModel.showAddScheduleDialog() },
                     onWeekChange = { homeViewModel.setSelectedWeek(it) },
                     onToday = { homeViewModel.setSelectedWeek(LocalDate.now()) },
-                    onDeleteSchedule = { homeViewModel.deleteSchedule(it) }
+                    onDeleteSchedule = { item, deleteSeries -> homeViewModel.deleteSchedule(item, deleteSeries) }
                 )
                 HomeMainTab.STUDY -> StudyDashboardPage(
                     listState = listState,
@@ -501,7 +504,7 @@ private fun BitSchedulePage(
     onAddSchedule: () -> Unit,
     onWeekChange: (LocalDate) -> Unit,
     onToday: () -> Unit,
-    onDeleteSchedule: (String) -> Unit
+    onDeleteSchedule: (ScheduleOccurrence, Boolean) -> Unit
 ) {
     var selectedOccurrence by remember { mutableStateOf<ScheduleOccurrence?>(null) }
     var occurrenceToDelete by remember { mutableStateOf<ScheduleOccurrence?>(null) }
@@ -564,26 +567,13 @@ private fun BitSchedulePage(
     }
 
     occurrenceToDelete?.let { item ->
-        AlertDialog(
-            onDismissRequest = {
-                if (!uiState.isEditingSchedule) occurrenceToDelete = null
-            },
-            title = { Text("删除日程") },
-            text = { Text("确定删除“${item.title}”吗？") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        onDeleteSchedule(item.eventId)
-                        occurrenceToDelete = null
-                    },
-                    enabled = !uiState.isEditingSchedule
-                ) { Text(if (uiState.isEditingSchedule) "删除中" else "删除") }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { occurrenceToDelete = null },
-                    enabled = !uiState.isEditingSchedule
-                ) { Text("取消") }
+        ScheduleDeleteDialog(
+            item = item,
+            busy = uiState.isEditingSchedule || uiState.isImportingSchedule || uiState.isSyncingSchoolSchedule,
+            onDismiss = { occurrenceToDelete = null },
+            onDelete = { deleteSeries ->
+                onDeleteSchedule(item, deleteSeries)
+                occurrenceToDelete = null
             }
         )
     }
@@ -598,6 +588,67 @@ private fun BitSchedulePage(
             }
         )
     }
+}
+
+@Composable
+private fun ScheduleDeleteDialog(
+    item: ScheduleOccurrence,
+    busy: Boolean,
+    onDismiss: () -> Unit,
+    onDelete: (Boolean) -> Unit
+) {
+    var deleteSeries by rememberSaveable(item.occurrenceId) { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = { if (!busy) onDismiss() },
+        modifier = Modifier.padding(horizontal = 12.dp),
+        shape = RoundedCornerShape(8.dp),
+        containerColor = MaterialTheme.colorScheme.surface,
+        title = { Text("删除日程", style = MaterialTheme.typography.titleMedium) },
+        text = {
+            Column(
+                Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    if (item.isRecurring) item.title else "确定删除“${item.title}”吗？",
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(fullScheduleTime(item), style = MaterialTheme.typography.bodySmall)
+                if (item.isRecurring) {
+                    Column(Modifier.selectableGroup()) {
+                        listOf(false to "仅这一次", true to "整组日程").forEach { (series, label) ->
+                            Row(
+                                Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                    .selectable(selected = deleteSeries == series, enabled = !busy,
+                                        role = Role.RadioButton, onClick = { deleteSeries = series }),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(selected = deleteSeries == series, onClick = null, enabled = !busy)
+                                Spacer(Modifier.width(8.dp))
+                                Text(label)
+                            }
+                        }
+                    }
+                    Text(
+                        if (deleteSeries) "此重复日程的所有日期和调课记录都会删除，无法撤销。"
+                        else "其他日期的日程会保留。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (deleteSeries) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    Text("删除后无法撤销。", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onDelete(deleteSeries) }, enabled = !busy, modifier = Modifier.heightIn(min = 48.dp)) {
+                Text("删除", color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !busy, modifier = Modifier.heightIn(min = 48.dp)) { Text("取消") }
+        }
+    )
 }
 
 @Composable
