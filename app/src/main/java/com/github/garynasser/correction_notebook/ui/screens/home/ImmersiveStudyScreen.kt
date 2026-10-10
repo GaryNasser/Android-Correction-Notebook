@@ -210,6 +210,8 @@ fun ImmersiveStudyScreen(
                 contentScale = ContentScale.Crop,
                 alpha = 1f
             )
+            // Keep even the secondary white text readable over the brightest uploaded photos.
+            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.72f)))
         }
 
         Box(
