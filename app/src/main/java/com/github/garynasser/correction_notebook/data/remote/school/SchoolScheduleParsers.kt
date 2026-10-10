@@ -36,9 +36,12 @@ internal object SchoolScheduleParsers {
         }
     }
 
-    fun parseWeeks(raw: String?): List<Int> {
-        val text = raw.orEmpty()
+    fun parseWeeks(raw: String?, binaryMask: Boolean = false): List<Int> {
+        val text = raw.orEmpty().trim()
         if (text.isBlank()) return emptyList()
+        if (binaryMask && text.all { it == '0' || it == '1' }) {
+            return text.mapIndexedNotNull { index, value -> (index + 1).takeIf { value == '1' } }
+        }
 
         val results = mutableSetOf<Int>()
         text.split(segmentSeparator)

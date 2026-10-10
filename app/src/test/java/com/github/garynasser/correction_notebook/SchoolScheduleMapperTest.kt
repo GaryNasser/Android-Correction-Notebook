@@ -14,6 +14,15 @@ import java.time.LocalTime
 class SchoolScheduleMapperTest {
     private val mapper = SchoolScheduleMapper()
 
+    @Test fun missingSchoolCalendarDateIsRejectedInsteadOfGuessingCurrentYear() {
+        val error = runCatching {
+            mapper.mapCourses(SchoolTerm("2024-2025-1", "Old term"),
+                listOf(SchoolCourseRaw("Course", weekday = 1, startSection = 1, endSection = 2, weeks = listOf(1))), 0)
+        }.exceptionOrNull()
+        assertTrue(error is SchoolScheduleException)
+        assertTrue(error!!.message.orEmpty().contains("已保留本地"))
+    }
+
     @Test
     fun invalidCoursesRejectTheWholeBatchInsteadOfSilentlyDroppingOccurrences() {
         val term = SchoolTerm("qa-term", "QA term", LocalDate.of(2026, 9, 7))

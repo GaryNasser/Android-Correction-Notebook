@@ -35,6 +35,7 @@ class YanheRepository @Inject constructor(
     suspend fun clearYanheSession(expectedVersion: Long? = null): Long = sessionMutex.withLock {
         expectedVersion?.let(::ensureSession)
         isSignedOut = true
+        bitCasClient.clearSession()
         _sessionRevision.value++
         loginAttempt++
         try {
@@ -47,6 +48,7 @@ class YanheRepository @Inject constructor(
 
     suspend fun authenticateStudent(credential: UserCredential): Result<String> {
         val (version, attempt) = sessionMutex.withLock { sessionVersion to ++loginAttempt }
+        bitCasClient.clearSession()
         return authenticateBeforeCommit(
             requestToken = {
                 bitCasClient.getYanheToken(

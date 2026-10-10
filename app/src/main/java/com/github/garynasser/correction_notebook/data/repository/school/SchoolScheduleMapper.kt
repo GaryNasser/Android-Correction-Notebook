@@ -15,7 +15,8 @@ import javax.inject.Inject
 class SchoolScheduleMapper @Inject constructor() {
     private val sectionTimes: Map<Int, Pair<LocalTime, LocalTime>> = defaultSectionTimes
     fun mapCourses(term: SchoolTerm, courses: List<SchoolCourseRaw>, importedAt: Long): List<ScheduleEvent> {
-        val termStart = term.startDate ?: inferTermStart()
+        val termStart = term.startDate
+            ?: throw SchoolScheduleException("学校未返回学期开始日期，已保留本地课表")
         val firstMonday = termStart.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
         val calendarId = schoolCalendarId(term.id)
 
@@ -72,13 +73,6 @@ class SchoolScheduleMapper @Inject constructor() {
             course.endSection.toString(),
             course.location
         ).joinToString("#")
-    }
-
-    private fun inferTermStart(today: LocalDate = LocalDate.now()): LocalDate {
-        val month = today.monthValue
-        val year = today.year
-        val roughStart = if (month in 2..7) LocalDate.of(year, 2, 24) else LocalDate.of(year, 9, 1)
-        return roughStart.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
     }
 
     private fun String.stableHash(): String {

@@ -14,6 +14,23 @@ class SchoolScheduleRemoteDataSourceTest {
         okHttpClient = OkHttpClient()
     )
 
+    @Test fun parsesNativeSchoolSectionFieldsAndBinaryWeekMask() {
+        val root = JsonParser.parseString("""{"datas":{"cxxszhxqkb":{"rows":[{"KCM":"机器学习","SKXQ":4,"KSJC":8,"JSJC":10,"SKZC":"1010000000000001","JASMC":"文萃楼F702"}]}}}""").asJsonObject
+        val course = dataSource.parseCourses(root).single()
+        assertEquals(8, course.startSection)
+        assertEquals(10, course.endSection)
+        assertEquals(listOf(1, 3, 16), course.weeks)
+        assertEquals("文萃楼F702", course.location)
+    }
+
+    @Test fun parsesCurrentSchoolTermUsingDmAndMcRows() {
+        val root = JsonParser.parseString("""{"datas":{"dqxnxq":{"rows":[{"DM":"2026-2027-1","MC":"秋季学期"}]}}}""").asJsonObject
+        val term = dataSource.parseCurrentTerm(root)
+        assertEquals("2026-2027-1", term.id)
+        assertEquals("秋季学期", term.name)
+        org.junit.Assert.assertNull(term.startDate)
+    }
+
     @Test
     fun parseCoursesSkipsStructuredFieldsAndUsesFallbackKeys() {
         val root = JsonParser.parseString(

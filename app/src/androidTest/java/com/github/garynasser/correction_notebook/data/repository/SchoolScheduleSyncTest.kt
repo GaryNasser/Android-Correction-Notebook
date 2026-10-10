@@ -8,6 +8,7 @@ import com.github.garynasser.correction_notebook.data.model.home.ScheduleEvent
 import com.github.garynasser.correction_notebook.data.model.home.ScheduleSourceType
 import com.github.garynasser.correction_notebook.data.model.school.SchoolScheduleException
 import com.github.garynasser.correction_notebook.data.remote.cas.BitCasClient
+import com.github.garynasser.correction_notebook.data.remote.cas.ssoResponseFixture
 import com.github.garynasser.correction_notebook.data.remote.school.SchoolScheduleRemoteDataSource
 import com.github.garynasser.correction_notebook.data.repository.school.SchoolScheduleMapper
 import kotlinx.coroutines.flow.first
@@ -24,6 +25,18 @@ import java.time.LocalDateTime
 import java.util.UUID
 
 class SchoolScheduleSyncTest {
+    @Test fun nativeFieldsUseSchoolCalendarBeforeWritingTheCourses() = withFixture { fixture ->
+        fixture.includeTermDate = false
+        fixture.rows = """{"KCM":"Matrix analysis","SKXQ":2,"KSJC":3,"JSJC":4,"SKZC":"1000000000000000","JASMC":"Building A 101"}"""
+        fixture.syncAndAssertComplete()
+    }
+
+    @Test fun missingSchoolCalendarCannotReplaceLocalCourses() = withFixture { fixture ->
+        fixture.includeTermDate = false
+        fixture.calendarRows = ""
+        fixture.assertRejectedWithoutChanges()
+    }
+
     @Test fun anUnparseableCourseCannotReplaceTheCompleteLocalSchedule() = withFixture { fixture ->
         val invalidRows = listOf(
             """{"KCMC":"Missing weekday","JC":"3-4","ZC":"1-2"}""",
@@ -90,14 +103,17 @@ class SchoolScheduleSyncTest {
     private class Fixture(val schedule: ScheduleRepository, credentials: CredentialManager) {
         val termId = "qa_${UUID.randomUUID()}"
         var rows = VALID_ROW
+        var includeTermDate = true
+        var calendarRows = """{"XQ":1,"RQ":"2026-09-07"}"""
         val client = OkHttpClient.Builder().addInterceptor { chain ->
             val request = chain.request()
+            ssoResponseFixture(request)?.let { return@addInterceptor it }
             val body = when (request.url.encodedPath) {
-                "/cas/v1/tickets" -> "<form action='/cas/v1/tickets/TGT-qa'></form>"
-                "/cas/v1/tickets/TGT-qa" -> "ST-qa"
                 "/jwapp/sys/wdkbby/*default/index.do" -> "QA callback"
                 "/jwapp/sys/wdkbby/modules/jshkcb/dqxnxq.do" ->
-                    """{"dqxnxq":{"XNXQDM":"$termId","XNXQMC":"QA term","KSRQ":"2026-09-07"}}"""
+                    if (includeTermDate) """{"dqxnxq":{"XNXQDM":"$termId","XNXQMC":"QA term","KSRQ":"2026-09-07"}}"""
+                    else """{"datas":{"dqxnxq":{"rows":[{"DM":"$termId","MC":"QA term"}]}}}"""
+                "/jwapp/sys/wdkbby/wdkbByController/cxzkbrq.do" -> """{"data":[$calendarRows]}"""
                 "/jwapp/sys/wdkbby/modules/xskcb/cxxszhxqkb.do" -> {
                     val form = request.body as FormBody
                     assertEquals(termId, form.value(0))

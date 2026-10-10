@@ -1,7 +1,9 @@
 package com.github.garynasser.correction_notebook.data.remote.cas
 
 import com.github.garynasser.correction_notebook.data.model.school.SchoolScheduleException
+import com.github.garynasser.correction_notebook.data.model.school.SchoolTerm
 import com.github.garynasser.correction_notebook.data.remote.cas.CasNetworkCancellationTest.Companion.SCHOOL_INDEX
+import com.github.garynasser.correction_notebook.data.remote.cas.CasNetworkCancellationTest.Companion.SCHOOL_AUTH_CALLBACK
 import com.github.garynasser.correction_notebook.data.remote.cas.CasNetworkCancellationTest.Companion.SCHOOL_SCHEDULE
 import com.github.garynasser.correction_notebook.data.remote.cas.CasNetworkCancellationTest.Companion.successfulResponse
 import com.github.garynasser.correction_notebook.data.remote.school.SchoolScheduleRemoteDataSource
@@ -15,20 +17,79 @@ import okhttp3.ResponseBody
 import okhttp3.ResponseBody.Companion.toResponseBody
 import okio.ForwardingSource
 import okio.buffer
+import okio.Buffer
+import com.google.gson.JsonParser
 import org.junit.Assert.*
 import org.junit.Test
 
 class CasSchoolRequestFlowTest {
+    @Test fun schoolCalendarCompletesNativeTermBeforeMappingBinaryWeekRows() = withClient { requests ->
+        requests.response = { request ->
+            when (request.url.encodedPath) {
+                CasNetworkCancellationTest.SCHOOL_TERM -> successfulResponse(request).newBuilder()
+                    .body("""{"datas":{"dqxnxq":{"rows":[{"DM":"2026-2027-1","MC":"Autumn"}]}}}""".toResponseBody()).build()
+                WEEK_DATES -> {
+                    val form = request.body as FormBody
+                    assertEquals("requestParamStr", form.name(0))
+                    val payload = JsonParser.parseString(form.value(0)).asJsonObject
+                    assertEquals("2026-2027-1", payload.get("XNXQDM").asString)
+                    assertEquals("1", payload.get("ZC").asString)
+                    Response.Builder().request(request).protocol(okhttp3.Protocol.HTTP_1_1).code(200).message("OK")
+                        .body("""{"data":[{"XQ":2,"RQ":"2026-09-08"},{"XQ":1,"RQ":"2026-09-07"}]}""".toResponseBody()).build()
+                }
+                SCHOOL_SCHEDULE -> successfulResponse(request).newBuilder()
+                    .body("""{"datas":{"cxxszhxqkb":{"rows":[{"KCM":"Native course","SKXQ":2,"KSJC":3,"JSJC":4,"SKZC":"1010000000000000","JASMC":"A101"}]}}}""".toResponseBody()).build()
+                else -> successfulResponse(request)
+            }
+        }
+        val source = SchoolScheduleRemoteDataSource(BitCasClient(requests.client), requests.client)
+        val result = source.getCurrentTermSchedule("student", "test-password")
+        assertEquals(LocalDate.of(2026, 9, 7), result.term.startDate)
+        assertEquals(listOf(1, 3), result.courses.single().weeks)
+        assertTrue(requests.seen.indexOfFirst { it.url.encodedPath == WEEK_DATES } < requests.seen.indexOfFirst { it.url.encodedPath == SCHOOL_SCHEDULE })
+    }
+
+    @Test fun selectedHistoricalTermFetchesItsOwnCalendarInsteadOfCurrentYear() = withClient { requests ->
+        requests.response = { request ->
+            if (request.url.encodedPath == WEEK_DATES) {
+                val form = request.body as FormBody
+                assertEquals("2025-2026-1", JsonParser.parseString(form.value(0)).asJsonObject.get("XNXQDM").asString)
+                Response.Builder().request(request).protocol(okhttp3.Protocol.HTTP_1_1).code(200).message("OK")
+                    .body("""{"data":[{"XQ":1,"RQ":"2025-08-25"}]}""".toResponseBody()).build()
+            } else successfulResponse(request)
+        }
+        val source = SchoolScheduleRemoteDataSource(BitCasClient(requests.client), requests.client)
+        val result = source.getTermSchedule("student", "test-password", SchoolTerm("2025-2026-1", "Old term"))
+        assertEquals(LocalDate.of(2025, 8, 25), result.term.startDate)
+    }
+
+    @Test fun untrustedSchoolPreflightCannotSendSchoolCredentialsAnywhere() = withClient { requests ->
+        listOf(
+            "https://attacker.invalid/cas/login?service=https://jxzxehall.bit.edu.cn/auth-protocol-core/loginSuccess",
+            "https://sso.bit.edu.cn/cas/login?service=https%3A%2F%2Fattacker.invalid%2FloginSuccess%3FsessionToken%3Dfake"
+        ).forEach { location ->
+            requests.seen.clear()
+            requests.response = { request -> successfulResponse(request).newBuilder().header("Location", location).build() }
+            val source = SchoolScheduleRemoteDataSource(BitCasClient(requests.client), requests.client)
+            assertTrue(runCatching { source.getCurrentTermSchedule("student", "test-password") }.exceptionOrNull() is SchoolScheduleException)
+            assertEquals(1, requests.seen.size)
+            assertEquals("/auth-protocol-core/login", requests.seen.single().url.encodedPath)
+        }
+    }
+
     @Test
     fun serviceTicketPreservesEncodedCredentialsAndService() = withClient { requests ->
         val service = "https://school.example/path?term=1&value=with space"
         val ticket = BitCasClient(requests.client).getServiceTicketFor("student+id", "test&password+", service)
         assertEquals("ST-test", ticket)
-        val login = requests.seen[0].body as FormBody
-        assertEquals("student+id", login.value(0))
-        assertEquals("test&password+", login.value(1))
-        assertEquals(service, (requests.seen[1].body as FormBody).value(0))
-        assertTrue(requests.seen.all { it.method == "POST" })
+        val submitted = requests.seen.single { it.method == "POST" && it.url.encodedPath == "/cas/login" }
+        val login = submitted.body as FormBody
+        val fields = (0 until login.size).associate { login.name(it) to login.value(it) }
+        assertEquals("student+id", fields["username"])
+        assertEquals(BitSsoCrypto.encrypt("test&password+", "MDEyMzQ1Njc4OWFiY2RlZg=="), fields["password"])
+        assertFalse(fields["password"] == "test&password+")
+        assertEquals(service, submitted.url.queryParameter("service"))
+        assertEquals("execution-test", fields["execution"])
     }
 
     @Test
@@ -53,7 +114,7 @@ class CasSchoolRequestFlowTest {
             }
         }
         assertEquals("test-token", BitCasClient(requests.client).getYanheToken("student", "test-password"))
-        assertEquals(4, requests.seen.size)
+        assertEquals(5, requests.seen.size)
     }
 
     @Test
@@ -66,7 +127,7 @@ class CasSchoolRequestFlowTest {
             } else response
         }
         assertEquals("direct-token", BitCasClient(requests.client).getYanheToken("student", "test-password"))
-        assertEquals(3, requests.seen.size)
+        assertEquals(4, requests.seen.size)
     }
 
     @Test
@@ -78,9 +139,11 @@ class CasSchoolRequestFlowTest {
         assertEquals("Linear algebra", result.courses.single().courseName)
         assertEquals("A101", result.courses.single().location)
         assertEquals((1..16).toList(), result.courses.single().weeks)
-        val callback = requests.seen.single { it.url.encodedPath == SCHOOL_INDEX }
+        val callback = requests.seen.single { it.url.encodedPath == SCHOOL_AUTH_CALLBACK }
         assertEquals("ST-test", callback.url.queryParameter("ticket"))
+        assertEquals("qa-test", callback.url.queryParameter("sessionToken"))
         assertEquals("GET", callback.method)
+        assertTrue(requests.seen.indexOf(callback) < requests.seen.indexOfFirst { it.url.encodedPath == SCHOOL_INDEX })
         val schedule = requests.seen.single { it.url.encodedPath == SCHOOL_SCHEDULE }
         assertEquals("POST", schedule.method)
         assertEquals("https://jxzxehallapp.bit.edu.cn", schedule.header("Origin"))
@@ -94,7 +157,12 @@ class CasSchoolRequestFlowTest {
         val cas = BitCasClient(requests.client)
         listOf(401, 503).forEach { status ->
             var closed = false
-            requests.response = { request -> tracked(successfulResponse(request).newBuilder().code(status).build()) { closed = true } }
+            requests.response = { request ->
+                val response = successfulResponse(request)
+                if (status == 503 || request.method == "POST") {
+                    tracked(response.newBuilder().code(status).body("<p id='login-error-code'>1030027</p>".toResponseBody()).build()) { closed = true }
+                } else response
+            }
             val failure = runCatching { cas.getServiceTicketFor("student", "test-password", "https://school.example/") }.exceptionOrNull()
             assertTrue(failure is CasAuthException)
             assertEquals(status == 401, failure is CasCredentialException)
@@ -151,5 +219,9 @@ class CasSchoolRequestFlowTest {
             override fun contentLength() = body.contentLength()
             override fun source() = source
         }).build()
+    }
+
+    companion object {
+        private const val WEEK_DATES = "/jwapp/sys/wdkbby/wdkbByController/cxzkbrq.do"
     }
 }

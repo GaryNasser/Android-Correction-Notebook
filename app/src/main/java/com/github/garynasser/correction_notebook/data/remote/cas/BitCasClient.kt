@@ -7,12 +7,10 @@ import com.github.garynasser.correction_notebook.utils.SignatureUtils
 import com.google.gson.JsonParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.FormBody
 import okhttp3.Headers
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import java.io.IOException
 import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.util.UUID
@@ -24,10 +22,16 @@ import javax.inject.Singleton
 @Singleton
 class BitCasClient @Inject constructor(
     @BasicRetrofit private val okHttpClient: OkHttpClient,
+    challenges: CasChallengeCoordinator,
 ) {
+    constructor(okHttpClient: OkHttpClient) : this(okHttpClient, CasChallengeCoordinator())
+
+    private val sso = BitSsoClient(okHttpClient, challenges)
+
+    fun clearSession() = sso.clearSession()
+
     suspend fun getYanheToken(studentId: String, password: String): String = withContext(Dispatchers.IO) {
-        val tgtUrl = getTgtUrl(studentId, password)
-        val st = getServiceTicket(tgtUrl, YANHE_CALLBACK_URL)
+        val st = sso.ticket(studentId, password, YANHE_CALLBACK_URL)
         val callbackUrl = YANHE_CALLBACK_URL.toHttpUrl()
             .newBuilder()
             .addQueryParameter("ticket", st)
@@ -59,8 +63,7 @@ class BitCasClient @Inject constructor(
     }
 
     suspend fun getServiceTicketFor(studentId: String, password: String, serviceUrl: String): String = withContext(Dispatchers.IO) {
-        val tgtUrl = getTgtUrl(studentId, password)
-        getServiceTicket(tgtUrl, serviceUrl)
+        sso.ticket(studentId, password, serviceUrl)
     }
 
     private suspend fun exchangeCodeForToken(code: String): String {
@@ -103,69 +106,6 @@ class BitCasClient @Inject constructor(
             }
             token
         }
-    }
-
-    private suspend fun getTgtUrl(studentId: String, password: String): String {
-        val body = FormBody.Builder()
-            .add("username", studentId)
-            .add("password", password)
-            .build()
-
-        val request = Request.Builder()
-            .url(CAS_TICKET_URL)
-            .headers(defaultHeadersBuilder().build())
-            .header("Content-Type", "application/x-www-form-urlencoded")
-            .post(body)
-            .build()
-
-        val html = fetchBody(request)
-        return extractFormAction(html)
-            ?: throw CasCredentialException("统一认证失败，请检查学号或密码")
-    }
-
-    private suspend fun getServiceTicket(tgtUrl: String, serviceUrl: String): String {
-        val body = FormBody.Builder()
-            .add("service", serviceUrl)
-            .build()
-
-        val request = Request.Builder()
-            .url(tgtUrl)
-            .headers(defaultHeadersBuilder().build())
-            .header("Content-Type", "application/x-www-form-urlencoded")
-            .post(body)
-            .build()
-
-        return fetchBody(request).trim()
-            .takeIf { it.startsWith("ST-") }
-            ?: throw CasAuthException("统一认证未返回有效票据")
-    }
-
-    private suspend fun fetchBody(request: Request): String {
-        try {
-            return okHttpClient.newCall(request).awaitResponse { response ->
-                val body = response.body?.string().orEmpty()
-                if (!response.isSuccessful) {
-                    if (isCasCredentialFailureStatus(response.code)) {
-                        throw CasCredentialException("统一认证失败，请检查学号或密码")
-                    }
-                    throw CasAuthException("统一认证请求失败：${response.code}")
-                }
-                body
-            }
-        } catch (e: IOException) {
-            throw CasAuthException("无法连接北理工统一认证", e)
-        }
-    }
-
-    private fun extractFormAction(html: String): String? {
-        val action = FORM_ACTION_REGEX.find(html)
-            ?.groupValues
-            ?.getOrNull(2)
-            ?.trim()
-            .orEmpty()
-
-        if (action.isBlank()) return null
-        return if (action.startsWith("http")) action else URI(CAS_BASE_URL).resolve(action).toString()
     }
 
     private fun defaultHeadersBuilder() = Headers.Builder()
@@ -232,24 +172,14 @@ class BitCasClient @Inject constructor(
     private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
 
     companion object {
-        private const val CAS_BASE_URL = "https://sso.bit.edu.cn/cas/"
-        private const val CAS_TICKET_URL = "https://sso.bit.edu.cn/cas/v1/tickets"
         private const val YANHE_CALLBACK_URL = "https://cbiz.yanhekt.cn/v1/cas/callback"
         private const val YANHE_AUTH_TOKEN_URL = "https://cbiz.yanhekt.cn/v1/auth/token"
         private const val USER_AGENT =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         private const val VPN_KEY = "wrdvpnisthebest!"
-        private val FORM_ACTION_REGEX = Regex(
-            "<form[^>]*action\\s*=\\s*(['\"])(.*?)\\1",
-            setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
-        )
     }
 }
 
 open class CasAuthException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
 class CasCredentialException(message: String) : CasAuthException(message)
-
-internal fun isCasCredentialFailureStatus(statusCode: Int): Boolean {
-    return statusCode == 400 || statusCode == 401
-}
