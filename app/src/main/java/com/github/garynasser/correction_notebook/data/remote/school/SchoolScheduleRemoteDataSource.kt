@@ -20,6 +20,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.net.CookieManager
 import java.net.CookiePolicy
+import java.net.HttpCookie
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
@@ -30,13 +31,22 @@ class SchoolScheduleRemoteDataSource @Inject constructor(
     private val bitCasClient: BitCasClient,
     @BasicRetrofit private val okHttpClient: OkHttpClient
 ) {
-    private fun newSchoolClient(): OkHttpClient = okHttpClient.newBuilder()
-        .cookieJar(JavaNetCookieJar(CookieManager().apply {
+    private fun newSchoolClient(): OkHttpClient {
+        val cookies = CookieManager().apply {
             setCookiePolicy(CookiePolicy.ACCEPT_ALL)
-        }))
-        .followRedirects(true)
-        .followSslRedirects(true)
-        .build()
+            // EMAP selects course-name language independently of the Android locale.
+            cookieStore.add(SCHOOL_BASE_URL.toHttpUrl().toUri(), HttpCookie("EMAP_LANG", "zh").apply {
+                path = "/"
+                secure = true
+                version = 0
+            })
+        }
+        return okHttpClient.newBuilder()
+            .cookieJar(JavaNetCookieJar(cookies))
+            .followRedirects(true)
+            .followSslRedirects(true)
+            .build()
+    }
 
     suspend fun getCurrentTerm(studentId: String, password: String): SchoolTerm = withContext(Dispatchers.IO) {
         val client = newSchoolClient()
@@ -334,6 +344,7 @@ class SchoolScheduleRemoteDataSource @Inject constructor(
     private fun defaultHeaders(): Headers = Headers.Builder()
         .add("User-Agent", USER_AGENT)
         .add("Accept", "application/json, text/plain, */*")
+        .add("Accept-Language", "zh-CN,zh;q=0.9")
         .add("Referer", SCHOOL_INDEX_URL)
         .add("Origin", SCHOOL_BASE_URL)
         .build()
