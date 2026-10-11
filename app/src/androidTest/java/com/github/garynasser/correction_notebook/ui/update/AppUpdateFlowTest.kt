@@ -18,7 +18,7 @@ import androidx.compose.ui.unit.Density
 import androidx.lifecycle.ViewModelStore
 import androidx.test.platform.app.InstrumentationRegistry
 import com.github.garynasser.correction_notebook.data.remote.api.UpdateApiService
-import com.github.garynasser.correction_notebook.data.remote.model.GitHubReleaseDto
+import com.github.garynasser.correction_notebook.data.remote.model.WebsiteReleaseDto
 import com.github.garynasser.correction_notebook.data.repository.AppUpdateRepository
 import com.github.garynasser.correction_notebook.data.model.appupdate.AppVersionInfo
 import com.github.garynasser.correction_notebook.ui.theme.CorrectionNotebookTheme
@@ -84,7 +84,7 @@ class AppUpdateFlowTest {
     }
 
     @Test fun manualNoUpdateMessageDoesNotAppearDuringSilentChecks() = withViewModel { vm, api ->
-        api.release = api.release.copy(tagName = vm.uiState.value.currentVersionName)
+        api.release = api.release.copy(tag = vm.uiState.value.currentVersionName)
         withContext(Dispatchers.Main) { vm.checkForUpdates(silent = true) }
         vm.uiState.first { !it.isChecking }
         assertNull(vm.uiState.value.snackbarMessage)
@@ -99,7 +99,7 @@ class AppUpdateFlowTest {
     @Test fun serverFailuresExplainTheProblemWithoutReportingUpToDate() = withViewModel { vm, api ->
         listOf(404 to "暂未找到可用的发布版本", 403 to "更新服务暂时受限，请稍后重试",
             429 to "更新服务暂时受限，请稍后重试", 500 to "更新服务暂不可用，请稍后重试").forEach { (code, message) ->
-            api.failure = HttpException(Response.error<GitHubReleaseDto>(code, "{}".toResponseBody()))
+            api.failure = HttpException(Response.error<WebsiteReleaseDto>(code, "{}".toResponseBody()))
             withContext(Dispatchers.Main) { vm.checkForUpdates(silent = false) }
             vm.uiState.first { !it.isChecking }
             assertNull(vm.uiState.value.availableUpdate)
@@ -125,14 +125,14 @@ class AppUpdateFlowTest {
         }
         assertEquals("下载链接格式不正确", openUpdateDownload(browser, "https:/app.apk"))
         assertNull(browser.opened)
-        compose.onNodeWithText("前往更新").performClick()
+        compose.onNodeWithText("前往官网下载").performClick()
         compose.onNodeWithText("没有可打开下载链接的应用").assertIsDisplayed()
         assertNotNull(vm.uiState.value.availableUpdate)
         browser.failure = null
-        compose.onNodeWithText("前往更新").performClick()
-        compose.onNodeWithText("前往更新").assertDoesNotExist()
+        compose.onNodeWithText("前往官网下载").performClick()
+        compose.onNodeWithText("前往官网下载").assertDoesNotExist()
         assertEquals(Intent.ACTION_VIEW, browser.opened!!.action)
-        assertEquals("https://example.com/releases/v99", browser.opened!!.dataString)
+        assertEquals(UpdateApiService.DOWNLOAD_PAGE_URL, browser.opened!!.dataString)
         assertNull(vm.uiState.value.availableUpdate)
         assertNull(vm.uiState.value.downloadErrorMessage)
     }
@@ -215,7 +215,7 @@ class AppUpdateFlowTest {
                     AppUpdateViewModel(AppUpdateRepository(api), InstrumentationRegistry.getInstrumentation().targetContext)
                         .also { store.put("http-update", it); it.checkForUpdates(silent = false) }
                 }
-                assertTrue(request.await().contains("GET /repos/GaryNasser/Android-Correction-Notebook/releases/latest"))
+                assertTrue(request.await().contains("GET /api/release.json"))
                 vm.uiState.first { !it.isChecking }
                 assertEquals("检查更新超时，请重试", vm.uiState.value.snackbarMessage)
                 assertNull(vm.uiState.value.availableUpdate)
@@ -242,13 +242,13 @@ class AppUpdateFlowTest {
                 }
             }
         }
-        listOf(versionInfo.updateTitle, "当前 1.0.2", "更新到 v99.0.0", error, "前往更新", "稍后").forEach(::assertFullText)
+        listOf(versionInfo.updateTitle, "当前 1.0.2", "更新到 v99.0.0", error, "前往官网下载", "稍后").forEach(::assertFullText)
         assertFullText(versionInfo.updateContent)
-        compose.onNodeWithText("前往更新").assertIsDisplayed()
+        compose.onNodeWithText("前往官网下载").assertIsDisplayed()
         compose.onNodeWithText(error).assertIsDisplayed()
         saveScreenshot(if (dark) "dark" else "light")
         compose.onNode(hasScrollAction()).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 100000f) }
-        compose.onNodeWithText("前往更新").assertIsDisplayed()
+        compose.onNodeWithText("前往官网下载").assertIsDisplayed()
         val notes = compose.onNodeWithText(versionInfo.updateContent).fetchSemanticsNode().boundsInRoot
         val errorBounds = compose.onNodeWithText(error).fetchSemanticsNode().boundsInRoot
         assertTrue("Release notes cannot cover the download error", notes.bottom <= errorBounds.top + 1f)
@@ -297,12 +297,12 @@ class AppUpdateFlowTest {
     }
 
     private class FakeApi : UpdateApiService {
-        var release = GitHubReleaseDto(tagName = "v99.0.0", htmlUrl = "https://example.com/releases/v99")
+        var release = WebsiteReleaseDto(tag = "v99.0.0")
         var failure: Exception? = null
         var gate: CompletableDeferred<Unit>? = null
         var calls = 0
         val entered = CompletableDeferred<Unit>()
-        override suspend fun getLatestVersion(): GitHubReleaseDto {
+        override suspend fun getLatestVersion(): WebsiteReleaseDto {
             calls++
             entered.complete(Unit)
             gate?.await()

@@ -11,6 +11,8 @@
 
 BITStudy 是一款面向高校学生的 Android 学习类应用，集成了**课程表 / 错题本 / 番茄钟 / 沉浸白噪音 / 课程视频回放 / AI 辅导 / 个人知识库 / 学习统计**等多种能力，旨在帮助学生更高效地组织学习、复习错题、跟进课程进度。
 
+官网与 APK 下载：[bitstudy.fangwenky.dpdns.org](https://bitstudy.fangwenky.dpdns.org/#download)。
+
 ---
 
 ## 📑 目录
@@ -67,7 +69,7 @@ BITStudy 是一款面向高校学生的 Android 学习类应用，集成了**课
 - 用户信息、应用设置、AI 服务商配置、版本更新检查。
 
 ### 🛡️ 其它工程能力
-- 应用内更新 (`UpdateApiService`)：版本检查与下载。
+- 应用内更新 (`UpdateApiService`)：从官网检查版本，发现更新后跳转官网下载。
 - **BITShare 校内资源**：对接校内文件分享平台搜索 / 详情接口。
 - 全量错误拦截：`AuthInterceptor` / `TokenAuthenticator` 统一处理鉴权。
 - **16 KB Page Size** 对齐适配（`android.enableNativeHeapAlignmentFor16kbPageSize`）。
@@ -256,6 +258,8 @@ spring-correction-book-master/
 > 后端非开源仓库的一部分，仅作开发参考。
 
 ### 对接的外部平台
+
+- **官网更新服务**：`GET https://bitstudy.fangwenky.dpdns.org/api/release.json`，读取 `tag`、`notes`、`published_at`；按版本名称比较更新（接口不提供 Android `versionCode`），不启用强制更新。更新按钮打开 `https://bitstudy.fangwenky.dpdns.org/#download`，由官网下载区提供已镜像的 APK。保留启动时静默检查和个人中心手动检查，失败时允许重试。
 
 - **BITShare**：校内文件分享平台，详见 `docs/BITShare-API-接口文档.md`（本地文档，未入库）。
 - **统一身份认证 (CAS)**：北京理工大学校园账号登录。
