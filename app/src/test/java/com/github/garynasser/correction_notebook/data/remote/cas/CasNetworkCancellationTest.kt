@@ -41,11 +41,11 @@ class CasNetworkCancellationTest {
     }
 
     @Test
-    fun cancellingYanheCallbackInterruptsTheRequest() = checkCancellation(false, "/v1/cas/callback", yanhe = true)
+    fun cancellingYanheLoginEntryInterruptsTheRequest() = checkCancellation(false, "/casapi/index.php", yanhe = true)
 
     @Test
-    fun cancellingTokenExchangeInterruptsHeadersAndBody() {
-        listOf(false, true).forEach { checkCancellation(it, "/v1/auth/token", yanhe = true) }
+    fun cancellingPortalProfileValidationInterruptsHeadersAndBody() {
+        listOf(false, true).forEach { checkCancellation(it, "/userapi/v1/infosimple", yanhe = true) }
     }
 
     @Test
@@ -153,23 +153,31 @@ class CasNetworkCancellationTest {
         const val SCHOOL_SCHEDULE = "/jwapp/sys/wdkbby/modules/xskcb/cxxszhxqkb.do"
 
         fun successfulResponse(request: Request): Response {
+            if (request.url.encodedPath == "/casapi/index.php") {
+                val builder = Response.Builder().request(request).protocol(Protocol.HTTP_1_1).code(200)
+                    .message("OK").body("".toResponseBody())
+                if (request.url.queryParameter("ticket") != null) {
+                    return builder.header("Set-Cookie", "_token=eyJtest.payload.signature; Path=/; Secure; HttpOnly").build()
+                }
+                val service = request.url.newBuilder().setQueryParameter("auType", "cas").build()
+                val location = "https://sso.bit.edu.cn/cas/login".toHttpUrl().newBuilder()
+                    .addQueryParameter("service", service.toString()).build()
+                return builder.code(302).header("Location", location.toString()).build()
+            }
             val body = when (request.url.encodedPath) {
                 "/cas/login" -> "<form action='${request.url}'></form><div id='login-page-flowkey'>execution-test</div><div id='login-croypto'>MDEyMzQ1Njc4OWFiY2RlZg==</div>"
                 "/cas/api/protected/user/findCaptchaCount/test-student",
                 "/cas/api/protected/user/findCaptchaCount/student",
                 "/cas/api/protected/user/findCaptchaCount/student+id" -> """{"code":200,"data":{"captchaInvisible":false}}"""
-                "/v1/cas/callback", SCHOOL_INDEX, SCHOOL_AUTH_CALLBACK,
+                SCHOOL_INDEX, SCHOOL_AUTH_CALLBACK,
                 "/auth-protocol-core/login", "/jwapp/sys/xsfacx/*default/index.do",
                 "/jwapp/sys/funauthapp/api/getAppConfig/xsfacx-4766859113956613.do" -> ""
-                "/v1/auth/token" -> """{"code":0,"data":{"token":"test-token"}}"""
+                "/userapi/v1/infosimple" -> """{"code":200,"params":{"id":"1","tenant_id":21,"phone":"13900000000"}}"""
                 SCHOOL_TERM -> """{"dqxnxq":{"XNXQDM":"2026-2027-1","XNXQMC":"Autumn","KSRQ":"2026-09-07"}}"""
                 SCHOOL_SCHEDULE -> """{"cxxszhxqkb":[{"KCMC":"Linear algebra","SKXQ":"1","SKJC":"3-4","SKZC":"1-16","JASMC":"A101"}]}"""
                 else -> throw AssertionError("Unexpected request: ${request.url}")
             }
-            val finalRequest = if (request.url.encodedPath == "/v1/cas/callback") {
-                request.newBuilder().url(request.url.newBuilder().addQueryParameter("code", "test+code &value").build()).build()
-            } else request
-            val builder = Response.Builder().request(finalRequest).protocol(Protocol.HTTP_1_1).code(200)
+            val builder = Response.Builder().request(request).protocol(Protocol.HTTP_1_1).code(200)
                 .message("OK").body(body.toResponseBody())
             if (request.url.encodedPath == "/cas/login" && request.method == "POST") {
                 val service = request.url.queryParameter("service")!!.toHttpUrl()

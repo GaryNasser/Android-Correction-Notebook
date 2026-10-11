@@ -138,7 +138,7 @@ class ProfileLogoutFlowTest {
         compose.onNodeWithText(message).assertIsDisplayed()
         assertNull(f.tokens.getYanheLoginToken())
         assertNull(f.yanhe.getStudentCredential())
-        assertEquals(before.filterKeys { it.name != "yanhe_login_key" }, f.data.data.first().asMap())
+        assertEquals(before.filterKeys { it.name != "yanhe_portal_login_key" }, f.data.data.first().asMap())
         assertEquals(aiBefore, f.settings.aiEnabled.first())
         assertEquals(listOf(f.todo), f.todos.todoItems.first())
         assertEquals(listOf(f.course), f.schedules.scheduleEvents.first())

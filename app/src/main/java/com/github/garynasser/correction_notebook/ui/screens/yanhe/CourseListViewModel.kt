@@ -8,9 +8,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.garynasser.correction_notebook.data.model.auth.AuthState
 import com.github.garynasser.correction_notebook.data.model.yanhe.Course
-import com.github.garynasser.correction_notebook.data.model.yanhe.CourseProgress
 import com.github.garynasser.correction_notebook.data.repository.AuthStateManager
-import com.github.garynasser.correction_notebook.data.repository.CourseLearningRepository
 import com.github.garynasser.correction_notebook.data.repository.VideoRepository
 import com.github.garynasser.correction_notebook.data.repository.YanheRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -32,8 +30,7 @@ sealed interface CourseUiState {
 class CourseListViewModel @Inject constructor(
     private val yanheRepository: YanheRepository,
     private val authStateManager: AuthStateManager,
-    private val videoRepository: VideoRepository,
-    private val courseLearningRepository: CourseLearningRepository
+    private val videoRepository: VideoRepository
 ) : ViewModel() {
 
     // 搜索与筛选状态
@@ -65,8 +62,6 @@ class CourseListViewModel @Inject constructor(
     // UI 状态
     var uiState: CourseUiState by mutableStateOf(CourseUiState.Loading)
         private set
-    var recentProgress by mutableStateOf<List<CourseProgress>>(emptyList())
-        private set
 
     private val publicSemesters = listOf(ALL_SEMESTERS)
 
@@ -75,13 +70,6 @@ class CourseListViewModel @Inject constructor(
             refreshMySchedule()
         } else {
             uiState = CourseUiState.Success(emptyList())
-        }
-        viewModelScope.launch {
-            courseLearningRepository.progressItems.collect { items ->
-                recentProgress = items
-                    .sortedByDescending { it.lastAccessedAt }
-                    .take(3)
-            }
         }
         viewModelScope.launch {
             combine(authStateManager.authState, yanheRepository.sessionRevision) { state, version -> state to version }

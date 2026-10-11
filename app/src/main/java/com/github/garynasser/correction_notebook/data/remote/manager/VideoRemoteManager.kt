@@ -3,6 +3,7 @@ package com.github.garynasser.correction_notebook.data.remote.manager
 import com.github.garynasser.correction_notebook.data.local.CredentialManager
 import com.github.garynasser.correction_notebook.data.local.TokenManager
 import com.github.garynasser.correction_notebook.data.model.auth.AuthState
+import com.github.garynasser.correction_notebook.data.model.common.ApiResponse
 import com.github.garynasser.correction_notebook.data.remote.api.VideoApiService
 import com.github.garynasser.correction_notebook.data.remote.cas.CasCredentialException
 import com.github.garynasser.correction_notebook.data.repository.AuthStateManager
@@ -29,7 +30,11 @@ class VideoRemoteManager @Inject constructor(
         val token = getOrRefreshToken(version) ?: return null
         return try {
             ensureSession(version)
-            block("Bearer $token").also { ensureSession(version) }
+            val result = block("Bearer $token").also { ensureSession(version) }
+            if ((result as? ApiResponse<*>)?.code in setOf(401, 403)) {
+                val refreshed = refreshRejectedToken(token, version) ?: return null
+                block("Bearer $refreshed").also { ensureSession(version) }
+            } else result
         } catch (error: HttpException) {
             ensureSession(version)
             if (error.code() != 401 && error.code() != 403) throw error
@@ -133,10 +138,11 @@ class VideoRemoteManager @Inject constructor(
         )
     }
 
-    suspend fun getCourseSessionDetail(sessionId: Int) = safeApiCall { token ->
+    suspend fun getCourseSessionDetail(sessionId: Int, courseId: Int) = safeApiCall { token ->
         videoApiService.getCourseSessionDetail(
             token = token,
-            sessionId = sessionId
+            sessionId = sessionId,
+            courseId = courseId
         )
     }
 
@@ -144,10 +150,4 @@ class VideoRemoteManager @Inject constructor(
         videoApiService.getYanheUser(token = token)
     }
 
-    suspend fun getVideoToken(id: String, expectedVersion: Long = sessionVersion) = safeApiCall(expectedVersion) { token ->
-        videoApiService.getVideoToken(
-            token = token,
-            id = id
-        )
-    }
 }

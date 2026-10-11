@@ -92,7 +92,7 @@ class CasScreenFlowTest {
         compose.onNodeWithTag("cas-code-input").performTextReplacement("123456")
         compose.onNodeWithText("验证").performClick()
         compose.waitUntil(5_000) { fixture.auth.authState.value is AuthState.Authenticated }
-        assertEquals("qa-token", runBlocking { fixture.tokens.getYanheLoginToken() })
+        assertEquals("eyJqa.payload.signature", runBlocking { fixture.tokens.getYanheLoginToken() })
         assertEquals(UserCredential("qa-student", "qa-password"), fixture.credentials.getCredentials())
         assertEquals(1, fixture.network.smsSends.get())
         assertNull(fixture.network.challenges.prompt.value)
@@ -183,7 +183,7 @@ class CasScreenFlowTest {
             assertNull(fixture.vm.errorMessage)
             assertTrue(fixture.auth.authState.value is AuthState.Authenticated)
         }
-        assertEquals("qa-token", runBlocking { fixture.tokens.getYanheLoginToken() })
+        assertEquals("eyJqa.payload.signature", runBlocking { fixture.tokens.getYanheLoginToken() })
         assertEquals(UserCredential("qa-student", "retry-password"), fixture.credentials.getCredentials())
     }
 
@@ -376,7 +376,7 @@ class CasScreenFlowTest {
                 .code(200).message("OK").body(smsBody.toResponseBody()).build()
             ssoResponseFixture(request)?.let { return@addInterceptor it }
             val body = when (request.url.encodedPath) {
-                "/v1/cas/callback" -> {
+                "/casapi/index.php" -> {
                     callbackRequests.incrementAndGet()
                     entered.countDown()
                     while (!release.await(10, TimeUnit.MILLISECONDS)) {
@@ -386,11 +386,10 @@ class CasScreenFlowTest {
                 }
                 else -> throw AssertionError("Unexpected CAS request: ${request.url}")
             }
-            val finalRequest = if (request.url.encodedPath == "/v1/cas/callback") {
-                request.newBuilder().url(request.url.newBuilder().addQueryParameter("token", "qa-token").build()).build()
-            } else request
+            val finalRequest = request
             Response.Builder().request(finalRequest).protocol(Protocol.HTTP_1_1).code(200)
-                .message("OK").body(body.toResponseBody()).build()
+                .message("OK").body(body.toResponseBody())
+                .header("Set-Cookie", "_token=eyJqa.payload.signature; Path=/; Secure; HttpOnly").build()
         }.build()
     }
 }

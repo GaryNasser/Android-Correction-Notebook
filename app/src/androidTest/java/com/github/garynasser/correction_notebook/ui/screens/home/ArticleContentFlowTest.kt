@@ -39,67 +39,28 @@ import java.util.concurrent.atomic.AtomicInteger
 class ArticleContentFlowTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test fun lightHomeFailureRemainsCompactAndRetriesWithoutDuplicateRequests() = checkHomeFailure(false)
-    @Test fun darkHomeFailureRemainsCompactAndRetriesWithoutDuplicateRequests() = checkHomeFailure(true)
+    @Test fun lightStudyDoesNotRequestRecommendations() = checkRemovedRecommendations(false)
+    @Test fun darkStudyDoesNotRequestRecommendations() = checkRemovedRecommendations(true)
 
-    private fun checkHomeFailure(dark: Boolean) = withHome { api, f ->
-        api.listFailure = httpFailure()
+    private fun checkRemovedRecommendations(dark: Boolean) = withHome { api, f ->
         renderHome(f, dark)
-        openRecommendations()
-        f.await { !f.home.uiState.value.isArticlesLoading && f.home.uiState.value.articleErrorMessage != null }
-        scrollHomeTo(hasText(SERVICE_ERROR))
-        compose.onNodeWithText(SERVICE_ERROR).assertIsDisplayed()
-        compose.onNodeWithText("HTTP 502").assertDoesNotExist()
-        compose.onNode(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite)).assertExists()
-        val message = compose.onNodeWithText("推荐内容加载失败").fetchSemanticsNode().boundsInRoot
-        val retry = compose.onNodeWithContentDescription("重试推荐").fetchSemanticsNode().boundsInRoot
-        assertTrue("Retry must be beside the message, not in a separate oversized row", retry.center.y in message.top..(message.bottom + 100f))
-        capture(if (dark) "dark-home-failure" else "light-home-failure")
-        api.listFailure = null
-        val gate = CompletableDeferred<Unit>().also { api.listGate = it }
-        compose.onNodeWithContentDescription("重试推荐").performClick()
-        f.await { api.listCalls.get() == 2 }
-        compose.onNodeWithContentDescription("正在刷新推荐").assertIsNotEnabled()
-        withContext(Dispatchers.Main) { repeat(3) { f.home.refreshArticles() } }
-        assertEquals(2, api.listCalls.get())
-        gate.complete(Unit)
-        f.await { !f.home.uiState.value.isArticlesLoading && f.home.uiState.value.articles.isNotEmpty() }
-        compose.onNodeWithText(SERVICE_ERROR).assertDoesNotExist()
-        scrollHomeTo(hasText(TITLE))
-        compose.onNodeWithText(TITLE).assertIsDisplayed()
-        assertEquals(2, api.listCalls.get())
+        compose.onNodeWithText("Study").performClick()
+        compose.onNodeWithText("学习推荐").assertDoesNotExist()
+        compose.onNodeWithContentDescription("刷新推荐").assertDoesNotExist()
+        compose.onNodeWithText("DDL").assertIsDisplayed()
+        assertEquals(0, api.listCalls.get())
         compose.onNodeWithText("BIT").performClick()
         compose.onNodeWithContentDescription("添加日程").assertExists()
     }
 
-    @Test fun cachedHomeArticlesRemainReadableAndClickableAfterARefreshFails() = withHome { api, f ->
-        var opened: String? = null
-        renderHome(f, false) { opened = it }
-        openRecommendations()
+    @Test fun cachedArticlesAreNotShownInStudy() = withHome { api, f ->
+        withContext(Dispatchers.Main) { f.home.refreshArticles() }
         f.await { f.home.uiState.value.articles.isNotEmpty() }
-        scrollHomeTo(hasText(TITLE))
-        api.listFailure = httpFailure()
-        val gate = CompletableDeferred<Unit>().also { api.listGate = it }
-        compose.onNodeWithContentDescription("刷新推荐").performClick()
-        f.await { api.listCalls.get() == 2 }
-        assertEquals(TITLE, f.home.uiState.value.articles.single().title)
-        capture("cached-home-pending")
-        scrollHomeTo(hasText(TITLE))
-        compose.onNodeWithText(TITLE).assertIsDisplayed().performClick()
-        assertEquals("first", opened)
-        gate.complete(Unit)
-        f.await { !f.home.uiState.value.isArticlesLoading && f.home.uiState.value.articleErrorMessage != null }
-        scrollHomeTo(hasText("推荐内容刷新失败"))
-        compose.onNodeWithText("推荐内容刷新失败").assertIsDisplayed()
-        scrollHomeTo(hasText(TITLE))
-        compose.onNodeWithText(TITLE).assertIsDisplayed()
-        assertEquals(TITLE, f.home.uiState.value.articles.single().title)
-        api.listGate = null
-        api.listFailure = null
-        scrollHomeTo(hasContentDescription("重试推荐"))
-        compose.onNodeWithContentDescription("重试推荐").performClick()
-        f.await { !f.home.uiState.value.isArticlesLoading && f.home.uiState.value.articleErrorMessage == null }
-        assertEquals(3, api.listCalls.get())
+        renderHome(f, false)
+        compose.onNodeWithText("Study").performClick()
+        compose.onNodeWithText("学习推荐").assertDoesNotExist()
+        compose.onNodeWithText(TITLE).assertDoesNotExist()
+        assertEquals(1, api.listCalls.get())
     }
 
     @Test fun lightDetailWithALongBusinessErrorKeepsOriginalAndRetryReachable() = checkLongDetailError(false)
@@ -177,18 +138,6 @@ class ArticleContentFlowTest {
                 Surface(Modifier.fillMaxSize().safeDrawingPadding(), content = content)
             }
         }
-    }
-
-    private fun openRecommendations() {
-        compose.onNodeWithText("Study").performClick()
-        scrollHomeTo(hasText("学习推荐"))
-    }
-
-    private fun scrollHomeTo(matcher: SemanticsMatcher) {
-        val list = compose.onNode(hasScrollAction() and SemanticsMatcher.keyIsDefined(SemanticsProperties.VerticalScrollAxisRange))
-        list.performScrollToNode(matcher)
-        // A nested article row can match its whole parent item while its text remains below the viewport.
-        if (!compose.onNode(matcher).isDisplayed()) list.performTouchInput { swipeUp() }
     }
 
     private fun withHome(test: suspend (ControlledService, HomeFormSaveFailureTest.Fixture) -> Unit) = runBlocking {

@@ -55,7 +55,12 @@ class PlayerViewModel @Inject constructor(
         }
 
         override fun onPlayerError(error: PlaybackException) {
-            val message = error.message?.takeIf { it.isNotBlank() } ?: "视频流加载失败"
+            val message = when (error.errorCode) {
+                PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT -> "视频读取超时，请重试"
+                PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED -> "无法连接视频服务器，请检查网络后重试"
+                PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS -> "视频服务器拒绝请求，请返回课程重新选择节次"
+                else -> error.message?.takeIf { it.isNotBlank() } ?: "视频流加载失败"
+            }
             playState = PlayState.Error("播放失败: $message")
         }
     }

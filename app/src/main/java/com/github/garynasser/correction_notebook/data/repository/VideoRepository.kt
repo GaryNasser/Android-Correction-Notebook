@@ -1,12 +1,11 @@
 package com.github.garynasser.correction_notebook.data.repository
 
-import android.net.Uri
 import android.util.Log
 import com.github.garynasser.correction_notebook.data.model.yanhe.Classroom
 import com.github.garynasser.correction_notebook.data.model.yanhe.Course
 import com.github.garynasser.correction_notebook.data.model.yanhe.CourseSection
 import com.github.garynasser.correction_notebook.data.remote.manager.VideoRemoteManager
-import com.github.garynasser.correction_notebook.utils.SignatureUtils
+import com.github.garynasser.correction_notebook.data.remote.api.YanhePortal
 import com.google.gson.Gson
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
@@ -15,7 +14,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 import javax.inject.Singleton
-import androidx.core.net.toUri
 
 @Singleton
 class VideoRepository @Inject constructor(
@@ -23,62 +21,56 @@ class VideoRepository @Inject constructor(
 ) {
     private val gson = Gson()
     private val cacheLock = Any()
-    private val videoTokenMutex = Mutex()
+    private val profileMutex = Mutex()
     private var cacheGeneration = 0L
-    @Volatile private var cachedVideoToken: CachedVideoToken? = null
-    @Volatile private var cachedUserBadge: CachedUserBadge? = null
+    @Volatile private var cachedProfile: CachedProfile? = null
 
-    data class YanheAuthData(
-        val authenticatedUrl: String,
-        val headers: Map<String, String>,
-    )
-
-    private data class CachedVideoToken(
-        val token: String,
-        val expiredAtSeconds: Long,
-        val sessionVersion: Long,
-        val cacheGeneration: Long
-    )
-
-    private data class CachedUserBadge(val badge: String, val sessionVersion: Long, val cacheGeneration: Long)
+    data class YanheAuthData(val authenticatedUrl: String, val headers: Map<String, String>)
+    private data class CachedProfile(val profile: JsonObject, val sessionVersion: Long, val generation: Long)
 
     fun clearSessionCache() {
         synchronized(cacheLock) {
             cacheGeneration++
-            cachedVideoToken = null
-            cachedUserBadge = null
+            cachedProfile = null
         }
     }
 
     suspend fun getYanheAuthData(originalUrl: String): YanheAuthData {
         val generation = synchronized(cacheLock) { cacheGeneration }
         val version = videoRemoteManager.sessionVersion
-        val token = getFreshVideoToken()
-        val signature = SignatureUtils.getSignature()
-
-        val md5Url = SignatureUtils.encryptURL(originalUrl)
-
-        val finalUrl = md5Url.toUri().buildUpon()
-            .appendQueryParameter("Xvideo_Token", token)
-            .appendQueryParameter("Xclient_Timestamp", signature["Xclient-Timestamp"])
-            .appendQueryParameter("Xclient_Signature", signature["Xclient-Signature"])
-            .appendQueryParameter("Platform", "yhkt_user")
-            .appendQueryParameter("Xclient_Version", "v1")
-            .build().toString()
-
-        val headers = mapOf(
-            "Origin" to "https://www.yanhekt.cn",
-            "Referer" to "https://www.yanhekt.cn/",
-            "xdomain-client" to "web_user",
-            "Xdomain-Client" to "web_user",
-            "Xclient-Version" to "v1",
-            "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-        )
-
+        val profile = profileMutex.withLock {
+            val cached = synchronized(cacheLock) {
+                ensureCacheCurrent(generation, version)
+                cachedProfile?.takeIf { it.sessionVersion == version && it.generation == generation }
+            }
+            cached?.profile ?: run {
+                val response = videoRemoteManager.getYanheUser(version) ?: throw IllegalStateException("请先登录延河课堂")
+                if (response.code != 200 && response.code != 0) {
+                    throw IllegalStateException(response.message.ifBlank { "无法获取播放授权信息" })
+                }
+                val data = response.data?.takeIf { it.isJsonObject }?.asJsonObject
+                    ?: throw IllegalStateException("延河课堂授权信息格式异常")
+                synchronized(cacheLock) {
+                    ensureCacheCurrent(generation, version)
+                    cachedProfile = CachedProfile(data, version, generation)
+                }
+                data
+            }
+        }
+        val finalUrl = YanhePortal.sign(originalUrl, profile, System.currentTimeMillis() / 1000)
         return synchronized(cacheLock) {
             ensureCacheCurrent(generation, version)
-            YanheAuthData(finalUrl, headers)
+            YanheAuthData(finalUrl, mapOf(
+                "Origin" to YanhePortal.ORIGIN,
+                "Referer" to "${YanhePortal.ORIGIN}/",
+                "User-Agent" to YanhePortal.USER_AGENT
+            ))
         }
+    }
+
+    private fun ensureCacheCurrent(generation: Long, version: Long) {
+        videoRemoteManager.ensureSession(version)
+        if (cacheGeneration != generation) throw CancellationException("视频授权缓存已变更")
     }
 
     /**
@@ -105,7 +97,7 @@ class VideoRepository @Inject constructor(
             if (result.code != 0 && result.code != 200) {
                 throw Exception(result.message.ifBlank { "延河课堂返回异常：${result.code}" })
             }
-            parseCourseResult(result.data, result.message, result.code, page).courses
+            parseCourseResult(result.data, result.message, result.code, page, pageSize).courses
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -155,11 +147,13 @@ class VideoRepository @Inject constructor(
             pageSize = pageSize
         ) ?: throw Exception("请先登录延河课堂")
 
-        if (response.code != 0 && response.code != 200) {
+        val portalSuccess = response.code == 1000 && response.data?.takeIf { it.isJsonObject }
+            ?.asJsonObject?.objectValue("result")?.get("data")?.isJsonArray == true
+        if (response.code != 0 && response.code != 200 && !portalSuccess) {
             throw Exception(response.message.ifBlank { "延河课堂返回异常：${response.code}" })
         }
 
-        return parseCourseResult(response.data, response.message, response.code, page)
+        return parseCourseResult(response.data, response.message, response.code, page, pageSize)
     }
 
     suspend fun getAllPersonalCourses(pageSize: Int = 10, maxPages: Int = 20): List<Course> {
@@ -180,7 +174,8 @@ class VideoRepository @Inject constructor(
         dataElement: JsonElement?,
         message: String,
         code: Int,
-        page: Int
+        page: Int,
+        pageSize: Int
     ): PaginatedCourseResult {
         val element = dataElement
             ?: throw Exception("延河课堂没有返回课程数据：$code")
@@ -198,7 +193,8 @@ class VideoRepository @Inject constructor(
             throw Exception(message.ifBlank { "延河课堂课程数据格式异常" })
         }
 
-        val obj = element.asJsonObject
+        val root = element.asJsonObject
+        val obj = root.objectValue("result") ?: root
         val courseContainer = obj.firstCourseListContainer("data", "courses", "list", "records")
         val coursesElement = courseContainer?.firstArrayOf("data", "courses", "list", "records")
         if (coursesElement != null) {
@@ -212,7 +208,7 @@ class VideoRepository @Inject constructor(
                     "last_page",
                     courseContainer.intValue(
                         "lastPage",
-                        calculatedLastPage(courseContainer, obj, page)
+                        calculatedLastPage(courseContainer, obj, page, pageSize)
                     )
                 )
             )
@@ -238,6 +234,7 @@ class VideoRepository @Inject constructor(
     private fun parseCourseElement(element: JsonElement): Course? {
         if (!element.isJsonObject()) return null
         val wrapper = element.asJsonObject
+        YanhePortal.course(wrapper)?.let { return it }
         val obj = wrapper.objectValue("course")
             ?: wrapper.objectValue("course_info")
             ?: wrapper.objectValue("courseInfo")
@@ -388,11 +385,11 @@ class VideoRepository @Inject constructor(
         }
     }
 
-    private fun calculatedLastPage(container: JsonObject, root: JsonObject, default: Int): Int {
+    private fun calculatedLastPage(container: JsonObject, root: JsonObject, default: Int, pageSize: Int): Int {
         val total = container.intValue("total", root.intValue("total", 0))
         val perPage = container.intValue(
             "per_page",
-            container.intValue("perPage", root.intValue("per_page", root.intValue("perPage", 0)))
+            container.intValue("perPage", root.intValue("per_page", root.intValue("perPage", pageSize)))
         )
         if (total > 0 && perPage > 0) {
             return ((total + perPage - 1) / perPage).coerceAtLeast(default)
@@ -456,11 +453,14 @@ class VideoRepository @Inject constructor(
             if (response == null) {
                 throw Exception("请先登录延河课堂")
             }
+            if (response.code == 10002) return emptyList()
             if (response.code != 0 && response.code != 200) {
                 throw Exception(response.message.ifBlank { "延河课堂返回异常：${response.code}" })
             }
 
-            parseCourseSections(response.data)
+            response.data?.takeIf { it.isJsonObject && it.asJsonObject.has("sub_list") }?.let {
+                YanhePortal.sections(it.asJsonObject, courseId)
+            } ?: parseCourseSections(response.data)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -486,14 +486,16 @@ class VideoRepository @Inject constructor(
         }
     }
 
-    suspend fun getCourseSessionDetail(sessionId: Int): CourseSection {
-        val response = videoRemoteManager.getCourseSessionDetail(sessionId)
+    suspend fun getCourseSessionDetail(sessionId: Int, courseId: Int): CourseSection {
+        val response = videoRemoteManager.getCourseSessionDetail(sessionId, courseId)
             ?: throw Exception("请先登录延河课堂")
         if (response.code != 0 && response.code != 200) {
             throw Exception(response.message.ifBlank { "延河课堂节次详情返回异常：${response.code}" })
         }
-        return parseCourseSectionElement(response.data)
+        val data = response.data?.takeIf { it.isJsonObject }?.asJsonObject
             ?: throw Exception("延河课堂没有返回节次详情")
+        return if (data.has("video_list")) YanhePortal.section(data, courseId, sessionId)
+            else parseCourseSectionElement(data) ?: throw Exception("延河课堂没有返回节次详情")
     }
 
     private fun parseCourseSectionElement(element: JsonElement?): CourseSection? {
@@ -506,71 +508,6 @@ class VideoRepository @Inject constructor(
         return runCatching { gson.fromJson(obj, CourseSection::class.java) }
             .getOrNull()
             ?.takeIf { it.id > 0 }
-    }
-
-    /**
-     * 辅助函数：获取新鲜 Token
-     */
-    suspend fun getFreshVideoToken(): String {
-        val generation = synchronized(cacheLock) { cacheGeneration }
-        val version = videoRemoteManager.sessionVersion
-        return videoTokenMutex.withLock { requestFreshVideoToken(generation, version) }
-    }
-
-    private suspend fun requestFreshVideoToken(generation: Long, version: Long): String {
-        val nowSeconds = System.currentTimeMillis() / 1000
-        synchronized(cacheLock) {
-            ensureCacheCurrent(generation, version)
-            cachedVideoToken
-                ?.takeIf { it.sessionVersion == version && it.cacheGeneration == generation &&
-                    it.token.isNotBlank() && it.expiredAtSeconds > nowSeconds + 180 }
-                ?.let { return it.token }
-        }
-
-        val badge = getYanheUserBadge(generation, version)
-        val response = videoRemoteManager.getVideoToken(id = badge, expectedVersion = version)
-            ?: throw Exception("无法获取有效的视频 Token")
-        val data = response.data ?: throw Exception("无法获取有效的视频 Token")
-        if (response.code != 0 && response.code != 200) {
-            throw Exception(response.message.ifBlank { "延河课堂视频授权失败：${response.code}" })
-        }
-        if (data.token.isBlank()) {
-            throw Exception("延河课堂视频授权缺少 Token")
-        }
-        return synchronized(cacheLock) {
-            ensureCacheCurrent(generation, version)
-            cachedVideoToken = CachedVideoToken(data.token, data.expiredAt, version, generation)
-            data.token
-        }
-    }
-
-    private suspend fun getYanheUserBadge(generation: Long, version: Long): String {
-        synchronized(cacheLock) {
-            ensureCacheCurrent(generation, version)
-            cachedUserBadge?.takeIf { it.sessionVersion == version && it.cacheGeneration == generation }
-                ?.let { return it.badge }
-        }
-        val response = videoRemoteManager.getYanheUser(expectedVersion = version)
-            ?: throw Exception("无法获取延河课堂用户信息")
-        if (response.code != 0 && response.code != 200) {
-            throw Exception(response.message.ifBlank { "延河课堂用户信息返回异常：${response.code}" })
-        }
-        val badge = response.data
-            ?.takeIf { it.isJsonObject() }
-            ?.asJsonObject
-            ?.stringValue("badge", "")
-            ?.takeIf { it.isNotBlank() }
-            ?: "0"
-        return synchronized(cacheLock) {
-            ensureCacheCurrent(generation, version)
-            cachedUserBadge = CachedUserBadge(badge, version, generation)
-            badge
-        }
-    }
-
-    private fun ensureCacheCurrent(generation: Long, version: Long) {
-        videoRemoteManager.ensureSession(version)
-        if (generation != cacheGeneration) throw CancellationException("视频授权缓存已清除")
     }
 
 }

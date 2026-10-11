@@ -1,130 +1,47 @@
 package com.github.garynasser.correction_notebook.data.remote.api
 
 import com.github.garynasser.correction_notebook.data.model.common.ApiResponse
-import com.github.garynasser.correction_notebook.data.model.yanhe.CourseSection
-import com.github.garynasser.correction_notebook.data.model.yanhe.VideoTokenResponse
 import com.google.gson.JsonElement
-import okhttp3.ResponseBody
-import retrofit2.Response
 import retrofit2.http.GET
 import retrofit2.http.Header
-import retrofit2.http.Headers
 import retrofit2.http.Query
-import retrofit2.http.Streaming
-import retrofit2.http.Url
 
 interface VideoApiService {
-    @Headers(
-        "Origin: https://www.yanhekt.cn",
-        "Referer: https://www.yanhekt.cn/",
-        "xdomain-client: web_user",
-        "Xdomain-Client: web_user",
-        "Xclient-Version: v1",
-        "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-    )
-    @GET("https://cbiz.yanhekt.cn/v2/course/list")
+    @GET("courseapi/v3/portal-home-setting/get-all-list?tenant=21&type=multi")
     suspend fun getCourseList(
         @Header("Authorization") token: String,
-        @Query("semesters[]") semester: Int?,
+        @Query("term_id") semester: Int?,
         @Query("page") page: Int,
-        @Query("page_size") pageSize: Int,
-        @Query("keyword") keyword: String?
+        @Query("per_page") pageSize: Int,
+        @Query("search") keyword: String?
     ): ApiResponse<JsonElement>
 
-
-    @Headers(
-        "Origin: https://www.yanhekt.cn",
-        "Referer: https://www.yanhekt.cn/",
-        "xdomain-client: web_user",
-        "Xdomain-Client: web_user",
-        "Xclient-Version: v1",
-        "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-    )
-    @GET("https://cbiz.yanhekt.cn/v2/course/private/list")
+    @GET("vlabpassportapi/v1/account-profile/course")
     suspend fun getPrivateCourseList(
         @Header("Authorization") token: String,
-        @Query("page") page: Int,
-        @Query("page_size") pageSize: Int,
-        @Query("user_relationship_type") type: Int = 1
+        @Query("nowpage") page: Int,
+        @Query("per-page") pageSize: Int,
+        @Query("force_mycourse") type: Int = 1
     ): ApiResponse<JsonElement>
 
-    @Headers(
-        "Origin: https://www.yanhekt.cn",
-        "Referer: https://www.yanhekt.cn/",
-        "xdomain-client: web_user",
-        "Xdomain-Client: web_user",
-        "Xclient-Version: v1",
-        "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-    )
-    @GET("https://cbiz.yanhekt.cn/v2/course/session/list")
+    @GET("courseapi/v3/multi-search/get-course-detail")
     suspend fun getCourseSession(
         @Header("Authorization") token: String,
         @Query("course_id") courseId: Int,
         @Query("with_page") withPage: Boolean? = null,
         @Query("page") page: Int? = null,
-        @Query("page_size") pageSize: Int? = null,
+        @Query("per_page") pageSize: Int? = null,
         @Query("order_type") orderType: String? = null,
         @Query("order_type_weight") orderTypeWeight: String? = null
     ): ApiResponse<JsonElement>
 
-    @Headers(
-        "Origin: https://www.yanhekt.cn",
-        "Referer: https://www.yanhekt.cn/",
-        "xdomain-client: web_user",
-        "Xdomain-Client: web_user",
-        "Xclient-Version: v1",
-        "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-    )
-    @GET("https://cbiz.yanhekt.cn/v1/course/session")
+    @GET("courseapi/v3/portal-home-setting/get-sub-info")
     suspend fun getCourseSessionDetail(
         @Header("Authorization") token: String,
-        @Query("session_id") sessionId: Int,
-        @Query("with_video") withVideo: Boolean = true
+        @Query("sub_id") sessionId: Int,
+        @Query("course_id") courseId: Int
     ): ApiResponse<JsonElement>
 
-    @Headers(
-        "Origin: https://www.yanhekt.cn",
-        "Referer: https://www.yanhekt.cn/",
-        "xdomain-client: web_user",
-        "Xdomain-Client: web_user",
-        "Xclient-Version: v1",
-        "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-    )
-    @GET("https://cbiz.yanhekt.cn/v1/user")
-    suspend fun getYanheUser(
-        @Header("Authorization") token: String
-    ): ApiResponse<JsonElement>
-
-    @Headers(
-        "Origin: https://www.yanhekt.cn",
-        "Referer: https://www.yanhekt.cn/",
-        "xdomain-client: web_user",
-        "Xdomain-Client: web_user",
-        "Xclient-Version: v1",
-        "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-    )
-    @GET("https://cbiz.yanhekt.cn/v1/auth/video/token")
-    suspend fun getVideoToken(
-        @Header("Authorization") token: String,
-        @Query("id") id: String
-    ): ApiResponse<VideoTokenResponse>
-
-    @Headers(
-        "Origin: https://www.yanhekt.cn",
-        "Referer: https://www.yanhekt.cn/",
-        "xdomain-client: web_user",
-        "Xdomain-Client: web_user",
-        "Xclient-Version: v1",
-        "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-    )
-    @GET
-    @Streaming
-    suspend fun downloadYanheFile(
-        @Url url: String,
-        @Query("Xvideo_Token") xvideoToken: String,
-        @Query("Xclient_Timestamp") xclientTimestamp: String,
-        @Query("Xclient_Signature") xclientSignature: String,
-        @Query("Platform") platform: String = "yhkt_user",
-        @Query("Xclient_Version") xclientVersion: String = "v1"
-    ): Response<ResponseBody>
+    @GET("userapi/v1/infosimple")
+    suspend fun getYanheUser(@Header("Authorization") token: String): ApiResponse<JsonElement>
 }

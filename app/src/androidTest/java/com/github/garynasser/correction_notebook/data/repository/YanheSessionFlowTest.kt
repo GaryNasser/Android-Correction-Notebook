@@ -15,13 +15,13 @@ import com.github.garynasser.correction_notebook.data.local.TokenManager
 import com.github.garynasser.correction_notebook.data.model.auth.UserCredential
 import com.github.garynasser.correction_notebook.data.model.auth.AuthState
 import com.github.garynasser.correction_notebook.data.model.common.ApiResponse
-import com.github.garynasser.correction_notebook.data.model.yanhe.VideoTokenResponse
 import com.github.garynasser.correction_notebook.data.model.yanhe.CourseSection
 import com.github.garynasser.correction_notebook.data.model.yanhe.Video
 import com.github.garynasser.correction_notebook.data.remote.api.VideoApiService
 import com.github.garynasser.correction_notebook.data.remote.cas.BitCasClient
 import com.github.garynasser.correction_notebook.data.remote.cas.ssoResponseFixture
 import com.github.garynasser.correction_notebook.data.remote.manager.VideoRemoteManager
+import com.github.garynasser.correction_notebook.data.remote.eclass.EclassRemoteDataSource
 import com.github.garynasser.correction_notebook.ui.screens.yanhe.CourseListViewModel
 import com.github.garynasser.correction_notebook.ui.screens.yanhe.CourseUiState
 import com.github.garynasser.correction_notebook.ui.screens.yanhe.VideoListViewModel
@@ -49,6 +49,49 @@ import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicBoolean
 
 class YanheSessionFlowTest {
+    @Test fun portalSuccessCode1000LoadsEveryPersonalCoursePageAndAcceptsAnEmptyList() = withFixture { f ->
+        f.api.personalResponses = mapOf(
+            1 to ApiResponse(1000, data = JsonParser.parseString("""{"result":{"total":3,"data":[{"Id":12,"Title":"Course A","TermName":"2026-2027-1"},{"Id":13,"Title":"Course B"}]}}""")),
+            2 to ApiResponse(1000, data = JsonParser.parseString("""{"result":{"total":3,"data":[{"Id":14,"Title":"Course C"}]}}"""))
+        )
+        assertEquals(listOf(12, 13, 14), f.videos.getAllPersonalCourses(pageSize = 2).map { it.id })
+        assertEquals(2, f.api.courseCalls.size)
+        f.api.personalResponses = mapOf(1 to ApiResponse(1000, data = JsonParser.parseString("""{"result":{"total":0,"data":[]}}""")))
+        assertTrue(f.videos.getPersonalCoursePage(1, 10).courses.isEmpty())
+    }
+
+    @Test fun code1000WithoutAPersonalCourseResultIsStillRejected() = withFixture { f ->
+        f.api.personalResponses = mapOf(1 to ApiResponse(1000, data = JsonParser.parseString("""{"error":"invalid response"}""")))
+        assertTrue(runCatching { f.videos.getPersonalCoursePage(1, 10) }.isFailure)
+    }
+
+    @Test fun deadlineCacheSurvivesFailedRefreshAndIsHiddenFromAnotherAccount() = withFixture { f ->
+        var fail = false
+        val network = OkHttpClient.Builder().addInterceptor { chain ->
+            val request = chain.request()
+            val body = when (request.url.encodedPath) {
+                "/api/profile" -> """{"active":true}"""
+                "/api/my-courses" -> """{"courses":[{"id":12,"name":"Course"}]}"""
+                "/api/courses/12/activities" -> """{"activities":[{"id":34,"type":"homework"}]}"""
+                "/api/activities/34" -> """{"id":34,"title":"Homework","user_submit_count":1}"""
+                "/api/courses/12/exams" -> """{"exams":[]}"""
+                else -> error("Unexpected eclass request")
+            }
+            okhttp3.Response.Builder().request(request).protocol(Protocol.HTTP_1_1).code(if (fail) 503 else 200)
+                .message("QA").body(body.toResponseBody()).build()
+        }.build()
+        try {
+            val repository = DeadlineRepository(f.writes, EclassRemoteDataSource(BitCasClient(network), network), f.yanhe)
+            val first = repository.refresh()
+            assertEquals(true, first.items.single().submitted)
+            fail = true
+            assertTrue(runCatching { repository.refresh() }.isFailure)
+            assertEquals(first, repository.cached())
+            f.yanhe.authenticateStudent(NEW).getOrThrow()
+            assertNull(repository.cached())
+        } finally { network.dispatcher.executorService.shutdownNow(); network.connectionPool.evictAll() }
+    }
+
     @Test fun aPendingLoginCannotRestoreCredentialsAfterLogout() = withFixture { f ->
         val pending = async { runCatching { f.yanhe.authenticateStudent(OLD) } }
         f.cas.awaitOld()
@@ -72,74 +115,59 @@ class YanheSessionFlowTest {
     @Test fun oldLoginCannotOverwriteANewerSuccessfulLogin() = withFixture { f ->
         val pending = async { runCatching { f.yanhe.authenticateStudent(OLD) } }
         f.cas.awaitOld()
-        assertEquals("cas-qa-new", f.yanhe.authenticateStudent(NEW).getOrThrow())
+        assertEquals("eyJcas-qa-new.payload.signature", f.yanhe.authenticateStudent(NEW).getOrThrow())
         f.cas.release.countDown()
         assertTrue(pending.await().exceptionOrNull() is CancellationException)
         assertEquals(NEW, f.credentials.getCredentials())
-        assertEquals("cas-qa-new", f.tokens.getYanheLoginToken())
+        assertEquals("eyJcas-qa-new.payload.signature", f.tokens.getYanheLoginToken())
     }
 
-    @Test fun clearingTheVideoCacheRejectsLateBadgeAndUsesANewBadgeNextTime() = withFixture { f ->
+    @Test fun clearingTheProfileCacheRejectsLateAuthorization() = withFixture { f ->
         val gate = Gate()
         f.api.userGate = gate
-        val pending = async { runCatching { f.videos.getFreshVideoToken() } }
+        val pending = async { runCatching { f.videos.getYanheAuthData(MEDIA) } }
         gate.entered.await()
         f.videos.clearSessionCache()
         f.api.userGate = null
         gate.release.complete(Unit)
         assertTrue(pending.await().exceptionOrNull() is CancellationException)
-        assertTrue(f.api.videoCalls.isEmpty())
-        assertTrue(f.videos.getFreshVideoToken().startsWith("video-session-old"))
+        assertTrue(f.videos.getYanheAuthData(MEDIA).authenticatedUrl.contains("t=session-old-"))
         assertEquals(2, f.api.userCalls.size)
     }
 
-    @Test fun clearingTheVideoCacheRejectsALateVideoToken() = withFixture { f ->
+    @Test fun changingAccountCannotReturnOrCacheAnOldProfile() = withFixture { f ->
         val gate = Gate()
-        f.api.videoGate = gate
-        val pending = async { runCatching { f.videos.getFreshVideoToken() } }
-        gate.entered.await()
-        f.videos.clearSessionCache()
-        f.api.videoGate = null
-        gate.release.complete(Unit)
-        assertTrue(pending.await().exceptionOrNull() is CancellationException)
-        f.videos.getFreshVideoToken()
-        assertEquals(2, f.api.userCalls.size)
-        assertEquals(2, f.api.videoCalls.size)
-    }
-
-    @Test fun changingAccountCannotReturnOrCacheAnOldVideoToken() = withFixture { f ->
-        val gate = Gate()
-        f.api.videoGate = gate
-        val pending = async { runCatching { f.videos.getFreshVideoToken() } }
+        f.api.userGate = gate
+        val pending = async { runCatching { f.videos.getYanheAuthData(MEDIA) } }
         gate.entered.await()
         f.yanhe.authenticateStudent(NEW).getOrThrow()
-        f.api.videoGate = null
+        f.api.userGate = null
         gate.release.complete(Unit)
         assertTrue(pending.await().exceptionOrNull() is CancellationException)
-        assertTrue(f.videos.getFreshVideoToken().startsWith("video-cas-qa-new"))
-        assertEquals("badge-cas-qa-new", f.api.videoCalls.last().second)
+        assertTrue(f.videos.getYanheAuthData(MEDIA).authenticatedUrl.contains("t=eyJcas-qa-new.payload.signature-"))
+        assertEquals(2, f.api.userCalls.size)
     }
 
     @Test fun cachedVideoAuthorizationIsNotReusedAfterReauthentication() = withFixture { f ->
-        val old = f.videos.getFreshVideoToken()
-        assertEquals(old, f.videos.getFreshVideoToken())
-        assertEquals(1, f.api.videoCalls.size)
+        f.videos.getYanheAuthData(MEDIA)
+        f.videos.getYanheAuthData(MEDIA)
+        assertEquals(1, f.api.userCalls.size)
         f.yanhe.authenticateStudent(NEW).getOrThrow()
-        assertTrue(f.videos.getFreshVideoToken().startsWith("video-cas-qa-new"))
+        assertTrue(f.videos.getYanheAuthData(MEDIA).authenticatedUrl.contains("t=eyJcas-qa-new.payload.signature-"))
         assertEquals(2, f.api.userCalls.size)
     }
 
-    @Test fun concurrentVideoAuthorizationUsesOneNetworkRequest() = withFixture { f ->
+    @Test fun concurrentVideoAuthorizationUsesOneProfileRequest() = withFixture { f ->
         val gate = Gate()
-        f.api.videoGate = gate
-        val first = async { f.videos.getFreshVideoToken() }
+        f.api.userGate = gate
+        val first = async { f.videos.getYanheAuthData(MEDIA) }
         gate.entered.await()
-        val second = async(start = CoroutineStart.UNDISPATCHED) { f.videos.getFreshVideoToken() }
-        assertEquals(1, f.api.videoCalls.size)
-        gate.release.complete(Unit)
-        assertEquals(first.await(), second.await())
+        val second = async(start = CoroutineStart.UNDISPATCHED) { f.videos.getYanheAuthData(MEDIA) }
         assertEquals(1, f.api.userCalls.size)
-        assertEquals(1, f.api.videoCalls.size)
+        gate.release.complete(Unit)
+        assertTrue(first.await().authenticatedUrl.contains("t=session-old-"))
+        assertTrue(second.await().authenticatedUrl.contains("t=session-old-"))
+        assertEquals(1, f.api.userCalls.size)
     }
 
     @Test fun oldUnauthorizedResponseCannotRetryUsingTheNewAccount() = withFixture { f ->
@@ -153,15 +181,15 @@ class YanheSessionFlowTest {
         assertTrue(pending.await().exceptionOrNull() is CancellationException)
         assertEquals(listOf("session-old"), f.api.courseCalls.toList())
         assertEquals(NEW, f.credentials.getCredentials())
-        assertEquals("cas-qa-new", f.tokens.getYanheLoginToken())
+        assertEquals("eyJcas-qa-new.payload.signature", f.tokens.getYanheLoginToken())
     }
 
     @Test fun reauthenticationReloadsPersonalCoursesEvenWhenAuthStateIsAlreadyAuthenticated() = withFixture { f ->
         val vm = f.createCourseViewModel()
         awaitCourses(vm, "session-old")
         f.yanhe.authenticateStudent(NEW).getOrThrow()
-        awaitCourses(vm, "cas-qa-new")
-        assertEquals(listOf("session-old", "cas-qa-new"), f.api.courseCalls.toList())
+        awaitCourses(vm, "eyJcas-qa-new.payload.signature")
+        assertEquals(listOf("session-old", "eyJcas-qa-new.payload.signature"), f.api.courseCalls.toList())
     }
 
     @Test fun failedLoginWritePreservesBothOldCredentialsAndToken() = withFixture { f ->
@@ -205,10 +233,10 @@ class YanheSessionFlowTest {
     }
 
     @Test fun logoutInvalidatesAWarmVideoCacheWithoutDependingOnScreenCallbacks() = withFixture { f ->
-        f.videos.getFreshVideoToken()
+        f.videos.getYanheAuthData(MEDIA)
         f.yanhe.clearYanheSession()
         assertTrue(runCatching { f.videos.getYanheAuthData("https://media.example/lesson.mp4") }.isFailure)
-        assertEquals(1, f.api.videoCalls.size)
+        assertEquals(1, f.api.userCalls.size)
     }
 
     @Test fun sessionChangeEndsPendingPlaybackLoadingAndTheNextChoiceWorks() = withFixture { f ->
@@ -224,7 +252,7 @@ class YanheSessionFlowTest {
         f.api.detailGate = null
         withContext(Dispatchers.Main) { vm.playSection(f.api.section, true) }
         withTimeout(3_000) { while (!withContext(Dispatchers.Main) { vm.playState is PlayState.Success }) delay(10) }
-        assertEquals("https://media.example/cas-qa-new.mp4", (vm.playState as PlayState.Success).url)
+        assertEquals("https://media.example/eyJcas-qa-new.payload.signature.mp4", (vm.playState as PlayState.Success).url)
     }
 
     @Test fun sessionChangeEndsVideoListLoadingAndReloadWorks() = withFixture { f ->
@@ -284,7 +312,7 @@ class YanheSessionFlowTest {
         val remote = VideoRemoteManager(api, tokens, credentials, auth, yanhe)
         val videos = VideoRepository(remote)
         suspend fun createCourseViewModel(): CourseListViewModel = withContext(Dispatchers.Main) {
-            CourseListViewModel(yanhe, auth, videos, CourseLearningRepository(writes)).also {
+            CourseListViewModel(yanhe, auth, videos).also {
                 jobs.add(it.viewModelScope.coroutineContext[Job]!!); models.put("courses", it)
             }
         }
@@ -307,29 +335,23 @@ class YanheSessionFlowTest {
         var sectionGate: Gate? = null
         var detailGate: Gate? = null
         var userGate: Gate? = null
-        var videoGate: Gate? = null
         val userCalls = CopyOnWriteArrayList<String>()
-        val videoCalls = CopyOnWriteArrayList<Pair<String, String>>()
         val courseCalls = CopyOnWriteArrayList<String>()
         val courseGates = java.util.concurrent.ConcurrentHashMap<String, Gate>()
         var rejectOldCourse = false
+        var personalResponses: Map<Int, ApiResponse<JsonElement>>? = null
         override suspend fun getYanheUser(token: String): ApiResponse<JsonElement> {
             val id = token.removePrefix("Bearer ")
             userCalls.add(id)
             userGate?.await()
-            return ApiResponse(0, data = JsonParser.parseString("{\"badge\":\"badge-$id\"}"))
-        }
-        override suspend fun getVideoToken(token: String, id: String): ApiResponse<VideoTokenResponse> {
-            val login = token.removePrefix("Bearer ")
-            videoCalls.add(login to id)
-            videoGate?.await()
-            return ApiResponse(0, data = VideoTokenResponse("video-$login-$id", System.currentTimeMillis() / 1000 + 3600))
+            return ApiResponse(200, data = JsonParser.parseString("{\"id\":\"$id\",\"tenant_id\":21,\"phone\":\"13900000000\"}"))
         }
         override suspend fun getPrivateCourseList(token: String, page: Int, pageSize: Int, type: Int): ApiResponse<JsonElement> {
             val login = token.removePrefix("Bearer ")
             courseCalls.add(login)
             courseGates[login]?.await()
             if (rejectOldCourse && login == "session-old") throw HttpException(Response.error<JsonElement>(401, "{}".toResponseBody()))
+            personalResponses?.let { return it[page] ?: error("Unexpected personal course page: $page") }
             return ApiResponse(0, data = JsonParser.parseString("[{\"id\":1,\"name_zh\":\"$login\",\"semester\":\"2026 秋季\"}]"))
         }
         override suspend fun getCourseSession(token: String, courseId: Int, withPage: Boolean?, page: Int?, pageSize: Int?,
@@ -337,7 +359,7 @@ class YanheSessionFlowTest {
             sectionGate?.await()
             return ApiResponse(0, data = Gson().toJsonTree(listOf(section)))
         }
-        override suspend fun getCourseSessionDetail(token: String, sessionId: Int, withVideo: Boolean): ApiResponse<JsonElement> {
+        override suspend fun getCourseSessionDetail(token: String, sessionId: Int, courseId: Int): ApiResponse<JsonElement> {
             detailGate?.await()
             return ApiResponse(0, data = Gson().toJsonTree(section.copy(videos = listOf(
                 Video(mainUrl = "https://media.example/${token.removePrefix("Bearer ")}.mp4")))))
@@ -378,7 +400,7 @@ class YanheSessionFlowTest {
             val request = chain.request()
             ssoResponseFixture(request)?.let { return@addInterceptor it }
             val (body, callbackToken) = when {
-                request.url.encodedPath == "/v1/cas/callback" -> {
+                request.url.encodedPath == "/casapi/index.php" && request.url.queryParameter("ticket") != null -> {
                     val id = request.url.queryParameter("ticket")!!.removePrefix("ST-")
                     if (id == OLD.studentId) {
                         entered.countDown()
@@ -386,18 +408,18 @@ class YanheSessionFlowTest {
                             if (chain.call().isCanceled()) throw IOException("Cancelled")
                         }
                     }
-                    "" to "cas-$id"
+                    "" to "eyJcas-$id.payload.signature"
                 }
                 else -> throw AssertionError("Unexpected CAS endpoint: ${request.url.encodedPath}")
             }
-            val responseRequest = if (callbackToken == null) request else request.newBuilder()
-                .url(request.url.newBuilder().addQueryParameter("token", callbackToken).build()).build()
-            okhttp3.Response.Builder().request(responseRequest).protocol(Protocol.HTTP_1_1).code(200)
-                .message("OK").body(body.toResponseBody()).build()
+            okhttp3.Response.Builder().request(request).protocol(Protocol.HTTP_1_1).code(200)
+                .message("OK").body(body.toResponseBody())
+                .header("Set-Cookie", "_token=$callbackToken; Path=/; Secure; HttpOnly").build()
         }.build()
     }
 
     companion object {
+        private const val MEDIA = "https://aita.yanhekt.cn/play/lesson.m3u8"
         private val OLD = UserCredential("qa-old", "old-password")
         private val NEW = UserCredential("qa-new", "new-password")
         private fun unusedApi(): VideoApiService = Retrofit.Builder().baseUrl("https://unused.invalid/")

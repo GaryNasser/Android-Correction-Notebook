@@ -93,41 +93,35 @@ class CasSchoolRequestFlowTest {
     }
 
     @Test
-    fun codeExchangeClosesCallbackBeforeRequestingToken() = withClient { requests ->
+    fun portalCallbackIsClosedBeforeProfileValidation() = withClient { requests ->
         var callbackClosed = false
         requests.response = { request ->
             val response = successfulResponse(request)
-            when (request.url.encodedPath) {
-                "/v1/cas/callback" -> {
+            when {
+                request.url.encodedPath == "/casapi/index.php" && request.url.queryParameter("ticket") != null -> {
                     assertEquals("ST-test", request.url.queryParameter("ticket"))
                     tracked(response) { callbackClosed = true }
                 }
-                "/v1/auth/token" -> {
-                    assertTrue("Callback body must be closed before the token exchange", callbackClosed)
-                    assertEquals("test+code &value", request.url.queryParameter("code"))
-                    assertEquals("1", request.url.queryParameter("type"))
-                    assertEquals("web_user", request.header("xdomain-client"))
-                    assertFalse(request.header("xclient-signature").isNullOrBlank())
+                request.url.encodedPath == "/userapi/v1/infosimple" -> {
+                    assertTrue("Callback body must be closed before profile validation", callbackClosed)
+                    assertEquals("Bearer eyJtest.payload.signature", request.header("Authorization"))
                     response
                 }
                 else -> response
             }
         }
-        assertEquals("test-token", BitCasClient(requests.client).getYanheToken("student", "test-password"))
-        assertEquals(5, requests.seen.size)
+        assertEquals("eyJtest.payload.signature", BitCasClient(requests.client).getYanheToken("student", "test-password"))
+        assertFalse(requests.seen.any { it.url.host == "cbiz.yanhekt.cn" })
     }
 
     @Test
-    fun directCallbackTokenDoesNotMakeAnExchangeRequest() = withClient { requests ->
+    fun portalCannotRedirectCredentialsToAnUntrustedCallback() = withClient { requests ->
         requests.response = { request ->
-            val response = successfulResponse(request)
-            if (request.url.encodedPath == "/v1/cas/callback") {
-                response.newBuilder().request(request.newBuilder()
-                    .url(request.url.newBuilder().addQueryParameter("token", "direct-token").build()).build()).build()
-            } else response
+            successfulResponse(request).newBuilder().header("Location",
+                "https://sso.bit.edu.cn/cas/login?service=https%3A%2F%2Fattacker.invalid%2Fcallback").build()
         }
-        assertEquals("direct-token", BitCasClient(requests.client).getYanheToken("student", "test-password"))
-        assertEquals(4, requests.seen.size)
+        assertTrue(runCatching { BitCasClient(requests.client).getYanheToken("student", "test-password") }.isFailure)
+        assertFalse(requests.seen.any { it.method == "POST" })
     }
 
     @Test

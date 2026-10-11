@@ -27,6 +27,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.github.garynasser.correction_notebook.data.local.CredentialManager
 import com.github.garynasser.correction_notebook.data.local.TokenManager
 import com.github.garynasser.correction_notebook.data.model.common.ApiResponse
+import com.github.garynasser.correction_notebook.data.model.yanhe.Course
 import com.github.garynasser.correction_notebook.data.remote.api.VideoApiService
 import com.github.garynasser.correction_notebook.data.remote.cas.BitCasClient
 import com.github.garynasser.correction_notebook.data.remote.manager.VideoRemoteManager
@@ -47,6 +48,51 @@ import java.util.concurrent.CopyOnWriteArrayList
 
 class CourseListFlowTest {
     @get:Rule val compose = createComposeRule()
+
+    @Test fun storedProgressDoesNotAddARecentLearningSection() = withFixture { f ->
+        val learning = CourseLearningRepository(f.preferences)
+        learning.recordWatch(1, "矩阵分析", 12, "上次观看的章节", "https://unused.invalid/lecture.mp4", 10)
+        withContext(Dispatchers.Main) { f.vm.refreshMySchedule() }
+        f.await { !f.vm.isRefreshingSchedule }
+        var selected: Pair<Int, String>? = null
+        compose.setContent {
+            CorrectionNotebookTheme { CourseListScreen(f.vm) { id, name -> selected = id to name } }
+        }
+        compose.onNodeWithText("最近学习").assertDoesNotExist()
+        compose.onNodeWithText("继续上次进度").assertDoesNotExist()
+        compose.onNodeWithText("上次观看的章节").assertDoesNotExist()
+        compose.onNodeWithText("张老师").assertIsDisplayed()
+        compose.onNodeWithText("矩阵分析").performClick()
+        compose.runOnIdle { assertEquals(1 to "矩阵分析", selected) }
+        assertEquals(12, learning.getProgressForCourse(1)?.lastSectionId)
+        saveScreenshot("text-courses")
+    }
+
+    @Test fun textOnlyCourseCardWrapsLongNamesAndMetadataAtLargeFont() {
+        val course = Course(
+            id = 7,
+            nameZh = "毛泽东思想和中国特色社会主义理论体系概论",
+            professors = listOf("张老师", "李老师"),
+            semester = "2025-2026 春季"
+        )
+        var selected: Pair<Int, String>? = null
+        compose.setContent {
+            val density = LocalDensity.current.density
+            CompositionLocalProvider(LocalDensity provides Density(density, 1.3f)) {
+                CorrectionNotebookTheme(dynamicColor = false) {
+                    Box(Modifier.size(width = 156.dp, height = 240.dp)) {
+                        CourseCard(course) { id, name -> selected = id to name }
+                    }
+                }
+            }
+        }
+        assertFullText(course.nameZh)
+        assertFullText("张老师, 李老师")
+        assertFullText(course.semester)
+        compose.onNodeWithText(course.nameZh).performClick()
+        compose.runOnIdle { assertEquals(course.id to course.nameZh, selected) }
+        saveScreenshot("long-text-card")
+    }
 
     @Test fun unsubmittedSearchNeverChangesTheKeywordOfTheNextPage() = withFixture { f ->
         f.publicCourses("矩阵")
@@ -366,7 +412,7 @@ class CourseListFlowTest {
         val store = ViewModelStore()
         lateinit var vm: CourseListViewModel
         fun create() {
-            vm = CourseListViewModel(yanhe, AuthStateManager(), videos, CourseLearningRepository(preferences))
+            vm = CourseListViewModel(yanhe, AuthStateManager(), videos)
             store.put("courses", vm)
         }
         suspend fun await(condition: () -> Boolean) = withTimeout(3_000) {

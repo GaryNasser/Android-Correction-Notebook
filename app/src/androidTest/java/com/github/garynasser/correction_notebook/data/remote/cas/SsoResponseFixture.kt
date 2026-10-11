@@ -10,6 +10,12 @@ import okhttp3.ResponseBody.Companion.toResponseBody
 internal fun ssoResponseFixture(request: Request): Response? {
     val builder = Response.Builder().request(request).protocol(Protocol.HTTP_1_1).code(200).message("OK")
     return when {
+        request.url.encodedPath == "/casapi/index.php" && request.url.queryParameter("ticket") == null -> {
+            val service = request.url.newBuilder().removeAllQueryParameters("auType").addQueryParameter("auType", "cas").build()
+            val location = "https://sso.bit.edu.cn/cas/login".toHttpUrl().newBuilder().addQueryParameter("service", service.toString()).build()
+            builder.code(302).header("Location", location.toString()).body("".toResponseBody()).build()
+        }
+        request.url.encodedPath == "/userapi/v1/infosimple" -> builder.body("""{"code":200,"params":{"id":"1","tenant_id":21,"phone":"13900000000"}}""".toResponseBody()).build()
         request.url.encodedPath == "/auth-protocol-core/login" -> {
             val service = "https://jxzxehall.bit.edu.cn/auth-protocol-core/loginSuccess?sessionToken=qa-test"
             val location = "https://sso.bit.edu.cn/cas/login".toHttpUrl().newBuilder().addQueryParameter("service", service).build()

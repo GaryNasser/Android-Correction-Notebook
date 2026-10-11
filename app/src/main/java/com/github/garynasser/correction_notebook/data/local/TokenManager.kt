@@ -27,7 +27,8 @@ class TokenManager internal constructor(
         private val ACCESS_TOKEN_KEY = stringPreferencesKey("access_token")
         private val REFRESH_TOKEN_KEY = stringPreferencesKey("refresh_token")
 
-        private val YANHE_LOGIN_TOKEN_KEY = stringPreferencesKey("yanhe_login_key")
+        private val YANHE_LOGIN_TOKEN_KEY = stringPreferencesKey("yanhe_portal_login_key")
+        private val LEGACY_YANHE_LOGIN_TOKEN_KEY = stringPreferencesKey("yanhe_login_key")
     }
 
     val accessToken: Flow<String?> = dataStore.data
@@ -76,6 +77,7 @@ class TokenManager internal constructor(
     suspend fun saveYanheLoginTokens(token: String) {
         dataStore.edit { preferences ->
             preferences[YANHE_LOGIN_TOKEN_KEY] = token
+            preferences.remove(LEGACY_YANHE_LOGIN_TOKEN_KEY)
         }
     }
 
@@ -95,6 +97,7 @@ class TokenManager internal constructor(
     suspend fun removeYanheLoginToken() {
         dataStore.edit { preferences ->
             preferences.remove(YANHE_LOGIN_TOKEN_KEY)
+            preferences.remove(LEGACY_YANHE_LOGIN_TOKEN_KEY)
         }
     }
 
