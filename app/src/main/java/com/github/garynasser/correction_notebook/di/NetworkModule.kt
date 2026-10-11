@@ -42,7 +42,6 @@ annotation class BitShareRetrofit
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
     private const val BASE_URL = "http://bit-study.sadatlab.asia/"
-    private const val GITHUB_API_BASE_URL = "https://api.github.com/"
 
     private fun createLoggingInterceptor(): HttpLoggingInterceptor {
         return HttpLoggingInterceptor().apply {
@@ -119,7 +118,7 @@ object NetworkModule {
     @Singleton
     fun provideUpdateApiService(@BasicRetrofit okHttpClient: OkHttpClient): UpdateApiService {
         return Retrofit.Builder()
-            .baseUrl(GITHUB_API_BASE_URL)
+            .baseUrl(UpdateApiService.BASE_URL)
             .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()

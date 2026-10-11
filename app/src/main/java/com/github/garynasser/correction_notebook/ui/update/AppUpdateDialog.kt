@@ -67,7 +67,7 @@ internal fun AppUpdateDialog(
                             Button(onClick = onUpdate, shape = RoundedCornerShape(8.dp)) {
                                 Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(6.dp))
-                                Text("前往更新")
+                                Text("前往官网下载")
                             }
                         }
                     }
