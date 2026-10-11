@@ -23,6 +23,32 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CasSchoolRequestFlowTest {
+    @Test fun schoolSyncRequestsChineseRegardlessOfDeviceLocale() = withClient { requests ->
+        val previousLocale = java.util.Locale.getDefault()
+        try {
+            java.util.Locale.setDefault(java.util.Locale.US)
+            requests.response = { request ->
+                val response = successfulResponse(request)
+                if (request.url.encodedPath == SCHOOL_SCHEDULE) {
+                    val title = if (request.header("Accept-Language")?.startsWith("zh-CN") == true) {
+                        "线性代数"
+                    } else "Linear algebra"
+                    response.newBuilder().body(
+                        """{"cxxszhxqkb":[{"KCM":"$title","SKXQ":1,"KSJC":3,"JSJC":4,"SKZC":"1000000000000000"}]}""".toResponseBody()
+                    ).build()
+                } else response
+            }
+            val result = SchoolScheduleRemoteDataSource(BitCasClient(requests.client), requests.client)
+                .getCurrentTermSchedule("student", "test-password")
+            assertEquals("线性代数", result.courses.single().courseName)
+            val schoolRequests = requests.seen.filter { it.url.host in setOf("jxzxehall.bit.edu.cn", "jxzxehallapp.bit.edu.cn") }
+            assertTrue(schoolRequests.isNotEmpty())
+            assertTrue(schoolRequests.all { it.header("Accept-Language") == "zh-CN,zh;q=0.9" })
+        } finally {
+            java.util.Locale.setDefault(previousLocale)
+        }
+    }
+
     @Test fun schoolCalendarCompletesNativeTermBeforeMappingBinaryWeekRows() = withClient { requests ->
         requests.response = { request ->
             when (request.url.encodedPath) {
