@@ -115,7 +115,9 @@ class VideoListViewModel @Inject constructor(
                     section
                 } else {
                     awaitYanheResource(12_000, "视频地址获取超时，请重新选择播放") {
-                        videoRepository.getCourseSessionDetail(section.id)
+                        videoRepository.getCourseSessionDetail(section.id, courseId).let {
+                            it.copy(title = it.title.ifBlank { section.title })
+                        }
                     }
                 }
                 val videoUrl = selectCourseVideoUrl(playableSection, preferScreen)

@@ -6,5 +6,6 @@ data class ApiResponse <T> (
     val code: Int,
     @SerializedName(value = "msg", alternate = ["message"])
     val message: String = "",
+    @SerializedName(value = "data", alternate = ["params"])
     val data: T?
 )

@@ -3,7 +3,7 @@ package com.github.garynasser.correction_notebook.data.remote.cas
 import android.annotation.SuppressLint
 import com.github.garynasser.correction_notebook.di.BasicRetrofit
 import com.github.garynasser.correction_notebook.data.remote.network.awaitResponse
-import com.github.garynasser.correction_notebook.utils.SignatureUtils
+import com.github.garynasser.correction_notebook.data.remote.api.YanhePortal
 import com.google.gson.JsonParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -13,7 +13,11 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.net.URI
 import java.nio.charset.StandardCharsets
-import java.util.UUID
+import java.net.CookieManager
+import java.net.CookiePolicy
+import java.net.URLDecoder
+import okhttp3.JavaNetCookieJar
+import okhttp3.Cookie
 import javax.crypto.Cipher
 import javax.crypto.spec.SecretKeySpec
 import javax.inject.Inject
@@ -31,101 +35,77 @@ class BitCasClient @Inject constructor(
     fun clearSession() = sso.clearSession()
 
     suspend fun getYanheToken(studentId: String, password: String): String = withContext(Dispatchers.IO) {
-        val st = sso.ticket(studentId, password, YANHE_CALLBACK_URL)
-        val callbackUrl = YANHE_CALLBACK_URL.toHttpUrl()
-            .newBuilder()
-            .addQueryParameter("ticket", st)
-            .build()
-
-        val request = Request.Builder()
-            .url(callbackUrl)
-            .headers(defaultHeadersBuilder().build())
-            .get()
-            .build()
-
-        val finalUrl = okHttpClient.newBuilder()
-            .followRedirects(true)
-            .followSslRedirects(true)
-            .build()
-            .newCall(request)
+        val cookies = CookieManager(null, CookiePolicy.ACCEPT_ORIGINAL_SERVER)
+        val client = okHttpClient.newBuilder().cookieJar(JavaNetCookieJar(cookies))
+            .followRedirects(false).followSslRedirects(false).build()
+        val entry = "${YanhePortal.ORIGIN}/casapi/index.php".toHttpUrl().newBuilder()
+            .addQueryParameter("r", "auth/login").addQueryParameter("tenant_code", "21")
+            .addQueryParameter("forward", "${YanhePortal.ORIGIN}/course")
+        client.newCall(Request.Builder().url(entry.addQueryParameter("auType", "").build())
+            .header("User-Agent", YanhePortal.USER_AGENT).build())
+            .awaitResponse { Unit }
+        val service = client.newCall(Request.Builder().url(entry.setQueryParameter("auType", "cas").build())
+            .header("User-Agent", YanhePortal.USER_AGENT).build())
             .awaitResponse { response ->
-                val finalUrl = response.request.url
-                val token = finalUrl.queryParameter("token")
-                val code = finalUrl.queryParameter("code")
-                if (!response.isSuccessful && token.isNullOrBlank() && code.isNullOrBlank()) {
-                    throw CasAuthException("延河课堂认证失败：${response.code}")
+                val target = response.header("Location")?.let { response.request.url.resolve(it) }
+                    ?: throw CasAuthException("延河课堂未返回统一认证入口")
+                if (target.scheme != "https" || target.port != 443 ||
+                    target.host !in setOf("sso.bit.edu.cn", "login.bit.edu.cn")) {
+                    throw CasAuthException("延河课堂统一认证入口异常")
                 }
-                finalUrl
+                target.queryParameter("service")?.toHttpUrl()
+                    ?: throw CasAuthException("延河课堂没有提供认证回调")
             }
-        finalUrl.queryParameter("token")?.takeIf { it.isNotBlank() }
-            ?: finalUrl.queryParameter("code")?.takeIf { it.isNotBlank() }?.let { exchangeCodeForToken(it) }
-            ?: throw CasAuthException("延河课堂认证成功回调中没有 token")
+        if (service.scheme != "https" || service.host != "aita.yanhekt.cn" || service.port != 443 ||
+            service.encodedPath != "/casapi/index.php" || service.queryParameter("r") != "auth/login" ||
+            service.username.isNotEmpty() || service.password.isNotEmpty()) {
+            throw CasAuthException("已阻止非延河课堂认证回调")
+        }
+        val st = sso.ticket(studentId, password, service.toString())
+        var next = service.newBuilder().addQueryParameter("ticket", st).build()
+        var finished = false
+        var callbackToken: String? = null
+        repeat(10) {
+            if (!finished) {
+                if (next.scheme != "https" || next.host != "aita.yanhekt.cn" || next.port != 443) {
+                    throw CasAuthException("延河课堂认证跳转异常")
+                }
+                client.newCall(Request.Builder().url(next).header("User-Agent", YanhePortal.USER_AGENT).build())
+                    .awaitResponse { response ->
+                        Cookie.parseAll(response.request.url, response.headers).firstOrNull { it.name == "_token" }
+                            ?.let { callbackToken = portalToken(it.value) }
+                        if (response.code in 300..399) {
+                            next = response.header("Location")?.let { next.resolve(it) }
+                                ?: throw CasAuthException("延河课堂认证跳转缺少地址")
+                        } else {
+                            if (!response.isSuccessful) throw CasAuthException("延河课堂认证失败：${response.code}")
+                            finished = true
+                        }
+                    }
+            }
+        }
+        if (!finished) throw CasAuthException("延河课堂认证跳转次数过多")
+        val token = cookies.cookieStore.cookies.filter { it.name == "_token" }
+            .firstNotNullOfOrNull { cookie ->
+                portalToken(cookie.value)
+            } ?: callbackToken ?: throw CasAuthException("新版延河课堂认证未返回登录信息")
+        client.newCall(Request.Builder().url("${YanhePortal.ORIGIN}/userapi/v1/infosimple")
+            .header("User-Agent", YanhePortal.USER_AGENT).header("Authorization", "Bearer $token").build()).awaitResponse { response ->
+                val root = runCatching { JsonParser.parseString(response.body?.string().orEmpty()).asJsonObject }.getOrNull()
+                if (!response.isSuccessful || root?.get("code")?.asInt != 200) {
+                    throw CasAuthException("新版延河课堂登录验证失败")
+                }
+            }
+        token
     }
 
     suspend fun getServiceTicketFor(studentId: String, password: String, serviceUrl: String): String = withContext(Dispatchers.IO) {
         sso.ticket(studentId, password, serviceUrl)
     }
 
-    private suspend fun exchangeCodeForToken(code: String): String {
-        val url = YANHE_AUTH_TOKEN_URL.toHttpUrl()
-            .newBuilder()
-            .addQueryParameter("code", code)
-            .addQueryParameter("type", "1")
-            .build()
-
-        val request = Request.Builder()
-            .url(url)
-            .headers(defaultYanheHeadersBuilder().build())
-            .get()
-            .build()
-
-        return okHttpClient.newCall(request).awaitResponse { response ->
-            val body = response.body?.string().orEmpty()
-            if (!response.isSuccessful) {
-                throw CasAuthException("延河课堂 token 换取失败：${response.code}")
-            }
-
-            val root = runCatching {
-                JsonParser.parseString(body).asJsonObject
-            }.getOrElse {
-                throw CasAuthException("延河课堂 token 响应格式异常")
-            }
-            val codeValue = root.get("code")?.asInt
-            if (codeValue != 0) {
-                val message = root.get("message")?.asString ?: root.get("msg")?.asString ?: "未知错误"
-                throw CasAuthException("延河课堂 token 换取失败：$message")
-            }
-
-            val dataElement = root.get("data")
-            if (dataElement == null || !dataElement.isJsonObject) {
-                throw CasAuthException("延河课堂 token 响应缺少数据")
-            }
-            val token = dataElement.asJsonObject.get("token")?.asString
-            if (token.isNullOrBlank()) {
-                throw CasAuthException("延河课堂 token 响应缺少 token")
-            }
-            token
-        }
-    }
-
-    private fun defaultHeadersBuilder() = Headers.Builder()
-        .add("User-Agent", USER_AGENT)
-        .add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-
-    private fun defaultYanheHeadersBuilder(): Headers.Builder {
-        val signature = SignatureUtils.getSignature()
-        return Headers.Builder()
-            .add("User-Agent", USER_AGENT)
-            .add("Accept", "application/json, text/plain, */*")
-            .add("Origin", "https://www.yanhekt.cn")
-            .add("Referer", "https://www.yanhekt.cn/")
-            .add("xdomain-client", "web_user")
-            .add("Xdomain-Client", "web_user")
-            .add("X-TRACE-ID", UUID.randomUUID().toString())
-            .add("xclient-timestamp", signature["Xclient-Timestamp"].orEmpty())
-            .add("xclient-signature", signature["Xclient-Signature"].orEmpty())
-            .add("xclient-version", "v1")
-            .add("Xclient-Version", "v1")
+    private fun portalToken(raw: String): String? {
+        val value = runCatching { URLDecoder.decode(raw, "UTF-8") }.getOrDefault(raw)
+        return Regex("eyJ[\\w-]+\\.[\\w-]+\\.[\\w-]+").find(value)?.value
     }
 
     fun convertToWebVpnUrl(originalUrl: String): String {
@@ -172,8 +152,6 @@ class BitCasClient @Inject constructor(
     private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
 
     companion object {
-        private const val YANHE_CALLBACK_URL = "https://cbiz.yanhekt.cn/v1/cas/callback"
-        private const val YANHE_AUTH_TOKEN_URL = "https://cbiz.yanhekt.cn/v1/auth/token"
         private const val USER_AGENT =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         private const val VPN_KEY = "wrdvpnisthebest!"

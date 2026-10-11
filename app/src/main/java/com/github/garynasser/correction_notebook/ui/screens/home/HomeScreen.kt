@@ -142,8 +142,6 @@ fun HomeScreen(
     LaunchedEffect(activeMainTab) {
         if (activeMainTab == HomeMainTab.BIT) {
             homeViewModel.setSelectedWeek(uiState.selectedDate)
-        } else if (uiState.articles.isEmpty()) {
-            homeViewModel.refreshArticles(forceRefresh = false)
         }
     }
 
@@ -330,10 +328,9 @@ fun HomeScreen(
                         }
                     },
                     onOpenCourse = onOpenCourse,
-                    onOpenFile = onOpenKnowledgeFile,
-                    onOpenArticle = onOpenArticle,
-                    onRefreshArticles = { homeViewModel.refreshArticles() }
+                    onOpenFile = onOpenKnowledgeFile
                 )
+                HomeMainTab.DDL -> DeadlinePage()
             }
         }
     }
@@ -453,7 +450,8 @@ private fun FullscreenHomeSurfaceEffect(onFullscreenModeChanged: (Boolean) -> Un
 
 private enum class HomeMainTab {
     BIT,
-    STUDY
+    STUDY,
+    DDL
 }
 
 private const val STUDY_TODO_SECTION_INDEX = 3
@@ -476,6 +474,11 @@ private fun BitStudySwitcher(
             text = "Study",
             selected = activeTab == HomeMainTab.STUDY,
             onClick = { onTabSelected(HomeMainTab.STUDY) }
+        )
+        BrandWord(
+            text = "DDL",
+            selected = activeTab == HomeMainTab.DDL,
+            onClick = { onTabSelected(HomeMainTab.DDL) }
         )
     }
 }
@@ -1480,9 +1483,7 @@ private fun StudyDashboardPage(
     onSaveAdvice: (String) -> Unit,
     onApplyAction: (AiAction) -> Unit,
     onOpenCourse: (Int, String) -> Unit,
-    onOpenFile: (String) -> Unit,
-    onOpenArticle: (Article) -> Unit,
-    onRefreshArticles: () -> Unit
+    onOpenFile: (String) -> Unit
 ) {
     val aiEnabled = LocalAiEnabled.current
     LazyColumn(
@@ -1563,15 +1564,6 @@ private fun StudyDashboardPage(
                 onOpenFile = onOpenFile
             )
         }
-        }
-        item {
-            ArticlesSection(
-                articles = uiState.articles,
-                isLoading = uiState.isArticlesLoading,
-                errorMessage = uiState.articleErrorMessage,
-                onArticleClick = onOpenArticle,
-                onRefresh = onRefreshArticles
-            )
         }
         item { Spacer(modifier = Modifier.height(24.dp)) }
     }

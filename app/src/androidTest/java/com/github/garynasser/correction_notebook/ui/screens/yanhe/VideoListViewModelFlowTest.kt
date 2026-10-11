@@ -191,7 +191,7 @@ class VideoListViewModelFlowTest {
             if (++listCalls == 1) listReturned.complete(Unit) else refreshReturned.complete(Unit)
             return ApiResponse(0, data = Gson().toJsonTree(listOf(section)))
         }
-        override suspend fun getCourseSessionDetail(token: String, sessionId: Int, withVideo: Boolean): ApiResponse<JsonElement> {
+        override suspend fun getCourseSessionDetail(token: String, sessionId: Int, courseId: Int): ApiResponse<JsonElement> {
             detailCalls++
             detailEntered.complete(Unit)
             try {
