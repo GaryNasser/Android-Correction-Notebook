@@ -1,5 +1,6 @@
 package com.github.garynasser.correction_notebook.service
 
+import android.content.Context
 import android.content.Intent
 import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
@@ -28,43 +29,34 @@ class VideoPlaybackService : MediaSessionService() {
     @Inject
     lateinit var repository: VideoRepository
 
-    // 静态缓存对象，避免 Service 重启时重复创建导致冲突
     companion object {
         private var cache: SimpleCache? = null
+
+        internal fun mediaSourceFactory(context: Context, repository: VideoRepository): DefaultMediaSourceFactory {
+            val appContext = context.applicationContext
+            val videoCache = cache ?: SimpleCache(
+                File(appContext.cacheDir, "yanhe_video_cache"),
+                LeastRecentlyUsedCacheEvictor(200L * 1024 * 1024),
+                StandaloneDatabaseProvider(appContext)
+            ).also { cache = it }
+            val http = DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true)
+            val upstream = androidx.media3.datasource.DataSource.Factory {
+                YanheDataSource(repository, http.createDataSource())
+            }
+            return DefaultMediaSourceFactory(CacheDataSource.Factory()
+                .setCache(videoCache)
+                .setUpstreamDataSourceFactory(upstream)
+                .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR))
+        }
     }
 
     @OptIn(UnstableApi::class)
     override fun onCreate() {
         super.onCreate()
 
-        // 1. 初始化缓存逻辑 (LRU 策略，不保存，只缓存 200MB)
-        if (cache == null) {
-            val cacheDir = File(cacheDir, "yanhe_video_cache")
-            val databaseProvider = StandaloneDatabaseProvider(this)
-            cache = SimpleCache(cacheDir, LeastRecentlyUsedCacheEvictor(200 * 1024 * 1024), databaseProvider)
-        }
-        val videoCache = cache ?: run {
-            stopSelf()
-            return
-        }
-
-        // 2. 构造带逆向授权逻辑的数据源
-        val httpDataSourceFactory = DefaultHttpDataSource.Factory()
-            .setAllowCrossProtocolRedirects(true)
-
-        val yanheDataSourceFactory = androidx.media3.datasource.DataSource.Factory {
-            YanheDataSource(repository, httpDataSourceFactory.createDataSource())
-        }
-
-        // 3. 将缓存和授权数据源整合
-        val cacheDataSourceFactory = CacheDataSource.Factory()
-            .setCache(videoCache)
-            .setUpstreamDataSourceFactory(yanheDataSourceFactory)
-            .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
-
         // 4. 创建播放器实例
         val createdPlayer = ExoPlayer.Builder(this)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(cacheDataSourceFactory))
+            .setMediaSourceFactory(mediaSourceFactory(this, repository))
             .build()
         player = createdPlayer
 

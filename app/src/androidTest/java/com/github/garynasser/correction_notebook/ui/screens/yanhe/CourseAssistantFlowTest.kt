@@ -59,7 +59,7 @@ class CourseAssistantFlowTest {
         val restoration = StateRestorationTester(compose)
         restoration.setContent {
             CompositionLocalProvider(LocalAiEnabled provides true) {
-                CorrectionNotebookTheme { CourseVideoListScreen(f.videos, f.assistant, { _, _, _ -> }, {}) }
+                CorrectionNotebookTheme { CourseVideoListScreen(f.videos, f.assistant, { _ -> }, {}) }
             }
         }
         compose.onAllNodesWithContentDescription("课程助手")[0].performClick()
@@ -103,7 +103,7 @@ class CourseAssistantFlowTest {
         val enabled = mutableStateOf(true)
         compose.setContent {
             CompositionLocalProvider(LocalAiEnabled provides enabled.value) {
-                CorrectionNotebookTheme { CourseVideoListScreen(f.videos, f.assistant, { _, _, _ -> }, {}) }
+                CorrectionNotebookTheme { CourseVideoListScreen(f.videos, f.assistant, { _ -> }, {}) }
             }
         }
         compose.onAllNodesWithContentDescription("课程助手")[0].performClick()
@@ -248,7 +248,7 @@ class CourseAssistantFlowTest {
             CompositionLocalProvider(LocalAiEnabled provides false, LocalDensity provides Density(density, 1.3f)) {
                 CorrectionNotebookTheme(darkTheme = dark, dynamicColor = false) {
                     Box(Modifier.size(width = 320.dp, height = 220.dp)) {
-                        CourseVideoListScreen(f.videos, f.assistant, { _, _, _ -> }, {})
+                        CourseVideoListScreen(f.videos, f.assistant, { _ -> }, {})
                     }
                 }
             }
@@ -337,7 +337,7 @@ class CourseAssistantFlowTest {
     private fun show(f: Fixture, enabled: Boolean) {
         compose.setContent {
             CompositionLocalProvider(LocalAiEnabled provides enabled) {
-                CorrectionNotebookTheme { CourseVideoListScreen(f.videos, f.assistant, { _, _, _ -> }, {}) }
+                CorrectionNotebookTheme { CourseVideoListScreen(f.videos, f.assistant, { _ -> }, {}) }
             }
         }
     }

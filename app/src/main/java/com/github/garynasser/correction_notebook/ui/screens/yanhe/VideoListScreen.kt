@@ -23,7 +23,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Camera
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.NoteAlt
@@ -67,6 +66,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.github.garynasser.correction_notebook.ui.navigation.VideoPlayer
 import com.github.garynasser.correction_notebook.data.model.yanhe.CourseSection
 import com.github.garynasser.correction_notebook.ui.components.LocalAiEnabled
 import com.github.garynasser.correction_notebook.ui.components.FreshScreen
@@ -78,7 +78,7 @@ import com.github.garynasser.correction_notebook.ui.components.FreshScreen
 fun CourseVideoListScreen(
     viewModel: VideoListViewModel = hiltViewModel(),
     assistantViewModel: CourseAssistantViewModel = hiltViewModel(),
-    onNavigateToPlayer: (String, String, String) -> Unit,
+    onNavigateToPlayer: (VideoPlayer) -> Unit,
     onBackButtonClick: () -> Unit
 ) {
     val assistantState by assistantViewModel.uiState.collectAsStateWithLifecycle()
@@ -91,7 +91,7 @@ fun CourseVideoListScreen(
     LaunchedEffect(viewModel.playState) {
         val state = viewModel.playState
         if (state is PlayState.Success) {
-            onNavigateToPlayer(state.url, state.videoTitle, state.courseName)
+            onNavigateToPlayer(VideoPlayer(state.url, state.videoTitle, state.courseName, state.screenUrl, state.primaryIsScreen, state.screenFallbackUrl))
             viewModel.resetPlayState()
         }
     }
@@ -229,12 +229,7 @@ fun CourseVideoListScreen(
                                         noteInput = ""
                                     },
                                     aiEnabled = LocalAiEnabled.current,
-                                    onCameraPlayClick = {
-                                        viewModel.playSection(video, preferScreen = false)
-                                    },
-                                    onScreenPlayClick = {
-                                        viewModel.playSection(video, preferScreen = true)
-                                    }
+                                    onPlayClick = { viewModel.playSection(video) }
                                 )
                             }
                         }
@@ -430,8 +425,7 @@ fun VideoCard(
     isUpdatingCompletion: Boolean,
     onCompletedChange: (Boolean) -> Unit,
     onAiAssistantClick: (() -> Unit)?,
-    onCameraPlayClick: () -> Unit,
-    onScreenPlayClick: () -> Unit,
+    onPlayClick: () -> Unit,
     modifier: Modifier = Modifier,
     aiEnabled: Boolean = true
 ) {
@@ -515,28 +509,15 @@ fun VideoCard(
                 }
                 }
 
-                FilledTonalIconButton(
-                    onClick = onCameraPlayClick,
-                    enabled = canClickPlay,
-                    modifier = Modifier.size(40.dp),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Camera,
-                        contentDescription = "播放摄像头视频",
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-
                 FilledIconButton(
-                    onClick = onScreenPlayClick,
+                    onClick = onPlayClick,
                     enabled = canClickPlay,
                     modifier = Modifier.size(40.dp),
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.PlayArrow,
-                        contentDescription = "播放屏幕录像",
+                        contentDescription = "播放课程视频",
                         modifier = Modifier.size(18.dp)
                     )
                 }
