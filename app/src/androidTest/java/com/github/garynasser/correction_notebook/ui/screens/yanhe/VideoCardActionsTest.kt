@@ -37,9 +37,8 @@ class VideoCardActionsTest {
     val compose = createComposeRule()
 
     @Test
-    fun removingAiAssistantLeavesBothPlaybackActionsAvailable() {
-        var cameraPlays = 0
-        var screenPlays = 0
+    fun removingAiAssistantLeavesOnePlaybackActionAvailable() {
+        var plays = 0
         compose.setContent {
             CorrectionNotebookTheme {
                 VideoCard(
@@ -49,17 +48,16 @@ class VideoCardActionsTest {
                     isUpdatingCompletion = false,
                     onCompletedChange = {},
                     onAiAssistantClick = null,
-                    onCameraPlayClick = { cameraPlays++ },
-                    onScreenPlayClick = { screenPlays++ }
+                    onPlayClick = { plays++ }
                 )
             }
         }
         compose.onNodeWithContentDescription("课程助手").assertDoesNotExist()
-        compose.onNodeWithContentDescription("播放摄像头视频").assertIsEnabled().performClick()
-        compose.onNodeWithContentDescription("播放屏幕录像").assertIsEnabled().performClick()
+        compose.onNodeWithContentDescription("播放课程视频").assertIsEnabled().performClick()
+        compose.onNodeWithContentDescription("播放摄像头视频").assertDoesNotExist()
+        compose.onNodeWithContentDescription("播放屏幕录像").assertDoesNotExist()
         compose.runOnIdle {
-            assertEquals(1, cameraPlays)
-            assertEquals(1, screenPlays)
+            assertEquals(1, plays)
         }
     }
 
@@ -83,7 +81,7 @@ class VideoCardActionsTest {
                             VideoListTopBar("线性代数", false, {}, {})
                             VideoCard(
                                 CourseSection(id = 1, title = title, weekNumber = 123, sectionBigStart = 12, sectionBigEnd = 14),
-                                true, false, false, {}, {}, {}, {}
+                                true, false, false, {}, {}, {}
                             )
                         }
                     }
@@ -100,8 +98,7 @@ class VideoCardActionsTest {
         titleLayouts.forEach { assertEquals("Title must use the surface's foreground color", titleColor, it.layoutInput.style.color) }
         compose.onNodeWithContentDescription("章节完成状态").assertIsEnabled()
         compose.onNodeWithContentDescription("课程助手").assertIsEnabled()
-        compose.onNodeWithContentDescription("播放摄像头视频").assertIsEnabled()
-        compose.onNodeWithContentDescription("播放屏幕录像").assertIsEnabled()
+        compose.onNodeWithContentDescription("播放课程视频").assertIsEnabled()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val screenshot = instrumentation.uiAutomation.takeScreenshot()
         File(instrumentation.targetContext.getExternalFilesDir(null), "qa-video-card-${if (darkTheme) "dark" else "light"}.png").outputStream().use {

@@ -119,7 +119,7 @@ class PlayerPlaybackTest {
                 player.seekTo(2000)
             }
             compose.waitUntil(5_000) { cache.getCachedBytes(segmentUrl, 0, segment.size.toLong()) == segment.size.toLong() }
-            val root = compose.onNodeWithTag("playerBounds").fetchSemanticsNode().boundsInRoot
+            val root = compose.onNodeWithTag("videoViewport").fetchSemanticsNode().boundsInRoot
             val surface = compose.onNodeWithTag("playerSurface").fetchSemanticsNode().boundsInRoot
             assertEquals(root.width, surface.width, 1f)
             assertEquals(root.height, surface.height, 1f)
@@ -163,6 +163,127 @@ class PlayerPlaybackTest {
             cache.release()
             database.close()
             cacheDirectory.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun dualViewsShareSeekingSpeedAndPauseWithoutReloadingWhenSwitchingLayout() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val bytes = instrumentation.context.assets.open("player-test.ts").use { it.readBytes() }
+        val playlist = "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:4\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:4.0,\nsegment.ts\n#EXT-X-ENDLIST\n".toByteArray()
+        val cameraUrl = "https://media.example/camera/index.m3u8"
+        val screenUrl = "https://media.example/screen/index.m3u8"
+        val payloads = mapOf(cameraUrl to playlist, screenUrl to playlist,
+            "https://media.example/camera/segment.ts" to bytes, "https://media.example/screen/segment.ts" to bytes)
+        val opened = ConcurrentLinkedQueue<String>()
+        val mode = mutableStateOf(VideoDisplayMode.BOTH)
+        lateinit var primary: ExoPlayer
+        lateinit var screen: ExoPlayer
+        lateinit var synchronization: SynchronizedVideoPlayback
+        val primaryFrames = AtomicInteger()
+        val screenFrames = AtomicInteger()
+        val errors = ConcurrentLinkedQueue<PlaybackException>()
+        var created = false
+        try {
+            compose.runOnIdle {
+                fun create(frames: AtomicInteger) = ExoPlayer.Builder(context)
+                    .setMediaSourceFactory(DefaultMediaSourceFactory(DataSource.Factory { FixtureSource(payloads, opened) }))
+                    .build().apply {
+                        addListener(object : Player.Listener {
+                            override fun onRenderedFirstFrame() { frames.incrementAndGet() }
+                            override fun onPlayerError(error: PlaybackException) { errors.add(error) }
+                        })
+                    }
+                primary = create(primaryFrames)
+                screen = create(screenFrames).apply { volume = 0f }
+                synchronization = SynchronizedVideoPlayback(primary, screen)
+                created = true
+            }
+            compose.setContent {
+                CorrectionNotebookTheme {
+                    Box(Modifier.safeDrawingPadding().width(600.dp).height(340.dp)) {
+                        PlayerScreenContent(primary, PlayState.Success(cameraUrl), "双视角回归测试", "课程录像", {}, {},
+                            screenPlayer = screen, screenPlayState = PlayState.Success(screenUrl),
+                            displayMode = mode.value, onDisplayModeChange = { mode.value = it })
+                    }
+                }
+            }
+            compose.runOnIdle {
+                primary.setMediaItem(MediaItem.Builder().setUri(cameraUrl).setMimeType(MimeTypes.APPLICATION_M3U8).build())
+                screen.setMediaItem(MediaItem.Builder().setUri(screenUrl).setMimeType(MimeTypes.APPLICATION_M3U8).build())
+                primary.prepare()
+                screen.prepare()
+                primary.play()
+            }
+            compose.waitUntil(15_000) { (primaryFrames.get() > 0 && screenFrames.get() > 0) || errors.isNotEmpty() }
+            compose.runOnIdle {
+                assertTrue(errors.toString(), errors.isEmpty())
+                primary.pause()
+                primary.seekTo(2000)
+                assertEquals(2000L, screen.currentPosition)
+                primary.setPlaybackSpeed(1.5f)
+                assertEquals(primary.playbackParameters, screen.playbackParameters)
+                assertFalse(screen.playWhenReady)
+            }
+            lateinit var primaryItem: MediaItem
+            lateinit var screenItem: MediaItem
+            compose.runOnIdle {
+                primaryItem = primary.currentMediaItem!!
+                screenItem = screen.currentMediaItem!!
+            }
+            compose.onNodeWithContentDescription("显示PPT").performClick()
+            compose.onNodeWithTag("playerSurface").assertDoesNotExist()
+            val viewport = compose.onNodeWithTag("videoViewport").fetchSemanticsNode().boundsInRoot
+            val ppt = compose.onNodeWithTag("screenSurface").fetchSemanticsNode().boundsInRoot
+            assertEquals(viewport.width, ppt.width, 1f)
+            compose.onNodeWithTag("playbackControls").assertExists()
+            compose.onNodeWithContentDescription("显示教室").performClick()
+            compose.onNodeWithTag("screenSurface").assertDoesNotExist()
+            compose.onNodeWithTag("playerSurface").assertExists()
+            compose.onNodeWithContentDescription("显示双画面").performClick()
+            val camera = compose.onNodeWithTag("playerSurface").fetchSemanticsNode().boundsInRoot
+            val slides = compose.onNodeWithTag("screenSurface").fetchSemanticsNode().boundsInRoot
+            assertTrue("PPT must be to the left of the classroom", slides.right <= camera.left)
+            assertEquals(slides.width, camera.width, 1f)
+            compose.runOnIdle {
+                assertSame(primaryItem, primary.currentMediaItem)
+                assertSame(screenItem, screen.currentMediaItem)
+                assertEquals(2000L, primary.currentPosition)
+                assertEquals(2000L, screen.currentPosition)
+                primary.seekTo(500)
+                assertEquals(500L, screen.currentPosition)
+                screen.seekTo(2000)
+                synchronization.synchronize()
+                assertEquals(500L, screen.currentPosition)
+                primary.play()
+            }
+            compose.waitUntil(5_000) {
+                var playing = false
+                compose.runOnIdle { playing = primary.isPlaying && screen.isPlaying }
+                playing
+            }
+            compose.runOnIdle {
+                synchronization.setActive(false)
+                assertFalse(screen.playWhenReady)
+                assertTrue(primary.playWhenReady)
+                synchronization.setActive(true)
+                assertEquals(primary.currentPosition, screen.currentPosition)
+                primary.pause()
+            }
+            val screenshot = instrumentation.uiAutomation.takeScreenshot()
+            File(context.getExternalFilesDir(null), "qa-player-dual.png").outputStream().use {
+                screenshot.compress(Bitmap.CompressFormat.PNG, 100, it)
+            }
+            screenshot.recycle()
+        } finally {
+            compose.runOnIdle {
+                if (created) {
+                    synchronization.release()
+                    screen.release()
+                    primary.release()
+                }
+            }
         }
     }
 

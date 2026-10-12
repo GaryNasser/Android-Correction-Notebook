@@ -33,7 +33,10 @@ sealed class PlayState {
     data class Success(
         val url: String,
         val videoTitle: String = "",
-        val courseName: String = ""
+        val courseName: String = "",
+        val screenUrl: String = "",
+        val primaryIsScreen: Boolean = false,
+        val screenFallbackUrl: String = ""
     ) : PlayState()
     data class Error(val message: String) : PlayState()
 }
@@ -106,12 +109,12 @@ class VideoListViewModel @Inject constructor(
 
     }
 
-    fun playSection(section: CourseSection, preferScreen: Boolean) {
+    fun playSection(section: CourseSection) {
         if (playJob?.isActive == true) return
         playJob = viewModelScope.launch {
             playState = PlayState.Loading
             try {
-                val playableSection = if (selectCourseVideoUrl(section, preferScreen) != null) {
+                val playableSection = if (selectCourseVideoSources(section).let { it.cameraUrl != null || it.screenUrl != null }) {
                     section
                 } else {
                     awaitYanheResource(12_000, "视频地址获取超时，请重新选择播放") {
@@ -120,12 +123,16 @@ class VideoListViewModel @Inject constructor(
                         }
                     }
                 }
-                val videoUrl = selectCourseVideoUrl(playableSection, preferScreen)
+                val sources = selectCourseVideoSources(playableSection)
+                val videoUrl = sources.cameraUrl ?: sources.screenUrl
                     ?: throw Exception("该节次没有可播放的视频")
                 playState = PlayState.Success(
                     url = videoUrl,
                     videoTitle = playableSection.displayTitle(),
-                    courseName = courseName
+                    courseName = courseName,
+                    screenUrl = sources.screenUrl?.takeIf { sources.cameraUrl != null && it != videoUrl }.orEmpty(),
+                    primaryIsScreen = sources.cameraUrl == null,
+                    screenFallbackUrl = originalScreenVideoUrl(sources.cameraUrl, sources.screenUrl).orEmpty()
                 )
                 viewModelScope.launch {
                     try {
@@ -205,13 +212,14 @@ class VideoListViewModel @Inject constructor(
     }
 }
 
-internal fun selectCourseVideoUrl(section: CourseSection, preferScreen: Boolean): String? {
-    val sourceOrder = if (preferScreen) {
-        listOf(Video::vgaUrl, Video::mainUrl, Video::room, Video::path)
-    } else {
-        listOf(Video::mainUrl, Video::vgaUrl, Video::room, Video::path)
-    }
-    return sourceOrder.firstNotNullOfOrNull { source ->
+internal data class CourseVideoSources(val cameraUrl: String?, val screenUrl: String?)
+
+internal fun selectCourseVideoSources(section: CourseSection): CourseVideoSources {
+    fun select(vararg sources: (Video) -> String): String? = sources.firstNotNullOfOrNull { source ->
         section.videos.firstNotNullOfOrNull { source(it).trim().takeIf(String::isNotEmpty) }
     }
+    return CourseVideoSources(
+        cameraUrl = select(Video::mainUrl, Video::room, Video::path),
+        screenUrl = select(Video::vgaUrl)
+    )
 }

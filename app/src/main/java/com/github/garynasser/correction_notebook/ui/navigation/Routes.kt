@@ -42,5 +42,8 @@ data class VideoList(val courseId: Int, val courseName: String = "")
 data class VideoPlayer(
     val url: String,
     val videoTitle: String = "",
-    val courseName: String = ""
+    val courseName: String = "",
+    val screenUrl: String = "",
+    val primaryIsScreen: Boolean = false,
+    val screenFallbackUrl: String = ""
 )

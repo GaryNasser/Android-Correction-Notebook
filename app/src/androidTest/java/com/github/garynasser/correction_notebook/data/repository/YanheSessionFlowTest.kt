@@ -244,13 +244,13 @@ class YanheSessionFlowTest {
         withTimeout(3_000) { while (!withContext(Dispatchers.Main) { vm.uiState is VideoUIState.Success }) delay(10) }
         val gate = Gate()
         f.api.detailGate = gate
-        withContext(Dispatchers.Main) { vm.playSection(f.api.section, true) }
+        withContext(Dispatchers.Main) { vm.playSection(f.api.section) }
         gate.entered.await()
         f.yanhe.authenticateStudent(NEW).getOrThrow()
         gate.release.complete(Unit)
         withTimeout(3_000) { while (!withContext(Dispatchers.Main) { vm.playState is PlayState.Idle }) delay(10) }
         f.api.detailGate = null
-        withContext(Dispatchers.Main) { vm.playSection(f.api.section, true) }
+        withContext(Dispatchers.Main) { vm.playSection(f.api.section) }
         withTimeout(3_000) { while (!withContext(Dispatchers.Main) { vm.playState is PlayState.Success }) delay(10) }
         assertEquals("https://media.example/eyJcas-qa-new.payload.signature.mp4", (vm.playState as PlayState.Success).url)
     }

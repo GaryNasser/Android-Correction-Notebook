@@ -40,7 +40,7 @@ class VideoListViewModelFlowTest {
     fun refreshingCancelsPendingPlaybackAndLateResponseDoesNotOpenPlayer() = withViewModel { vm, api, _ ->
         val gate = CompletableDeferred<Unit>()
         api.detailGate = gate
-        withContext(Dispatchers.Main) { vm.playSection(api.section, preferScreen = true) }
+        withContext(Dispatchers.Main) { vm.playSection(api.section) }
         api.detailEntered.await()
         withContext(Dispatchers.Main) {
             vm.getVideoList(vm.courseId)
@@ -68,11 +68,11 @@ class VideoListViewModelFlowTest {
         store.writeGate = gate
         val first = api.section.copy(videos = listOf(Video(mainUrl = "https://media.example/first.mp4")))
         val second = first.copy(id = first.id + 1, videos = listOf(Video(mainUrl = "https://media.example/second.mp4")))
-        withContext(Dispatchers.Main) { vm.playSection(first, false) }
+        withContext(Dispatchers.Main) { vm.playSection(first) }
         store.writeEntered.await()
         withContext(Dispatchers.Main) {
             vm.resetPlayState()
-            vm.playSection(second, false)
+            vm.playSection(second)
             assertEquals("https://media.example/second.mp4", (vm.playState as? PlayState.Success)?.url)
         }
         gate.complete(Unit)
@@ -83,7 +83,7 @@ class VideoListViewModelFlowTest {
         val section = api.section.copy(videos = listOf(Video(path = "https://media.example/lecture.mp4")))
         api.failDetails = true
         withContext(Dispatchers.Main) {
-            vm.playSection(section, false)
+            vm.playSection(section)
             assertEquals("https://media.example/lecture.mp4", (vm.playState as? PlayState.Success)?.url)
         }
         assertEquals(0, api.detailCalls)
@@ -93,12 +93,26 @@ class VideoListViewModelFlowTest {
     fun cancellingLookupReturnsToIdleWithoutOpeningTheLateVideo() = withViewModel { vm, api, _ ->
         val gate = CompletableDeferred<Unit>()
         api.detailGate = gate
-        withContext(Dispatchers.Main) { vm.playSection(api.section, true) }
+        withContext(Dispatchers.Main) { vm.playSection(api.section) }
         api.detailEntered.await()
         withContext(Dispatchers.Main) { vm.cancelPlayback() }
         api.detailFinished.await()
         gate.complete(Unit)
         withContext(Dispatchers.Main) { assertTrue(vm.playState is PlayState.Idle) }
+    }
+
+    @Test
+    fun onePlaybackActionCarriesBothViewsAndOriginalScreenRecovery() = withViewModel { vm, api, _ ->
+        val camera = "https://aita.yanhekt.cn/play/2/vod3/2026/09/22/123/0/Video1/Video1.m3u8"
+        val screen = "https://aita.yanhekt.cn/play/frim_files/ppt2026/missing.mp4"
+        withContext(Dispatchers.Main) {
+            vm.playSection(api.section.copy(videos = listOf(Video(mainUrl = camera, vgaUrl = screen))))
+            val playback = vm.playState as PlayState.Success
+            assertEquals(camera, playback.url)
+            assertEquals(screen, playback.screenUrl)
+            assertEquals(camera.replace("Video1", "VGA"), playback.screenFallbackUrl)
+            assertFalse(playback.primaryIsScreen)
+        }
     }
 
     @Test
