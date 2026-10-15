@@ -8,17 +8,9 @@ out/
 .kotlin/
 
 # --- IDE 配置文件 (Android Studio / IntelliJ) ---
-# 建议忽略大部分 .idea 文件夹，因为它们包含你的本地路径和窗口布局
-.idea/workspace.xml
-.idea/tasks.xml
-.idea/gradle.xml
-.idea/assetWizardSettings.xml
-.idea/dictionaries
-.idea/libraries
-.idea/caches
-.idea/modules.xml
-.idea/navEditor.xml
-.idea/deploymentTargetSelector.xml
+# 整个 .idea/ 目录都含本地路径、窗口布局与缓存，一律忽略。
+# 早先逐个列文件名（workspace.xml、gradle.xml……）会漏掉新生成的配置文件。
+.idea/
 *.iml
 *.iws
 *.ipr
